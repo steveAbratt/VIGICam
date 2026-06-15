@@ -1,5 +1,13 @@
-"""Button entities for VIGI cameras — one per PTZ preset."""
+"""Button entities for VIGI PTZ cameras — direction jog controls.
+
+Six buttons per PTZ camera: Pan Left/Right, Tilt Up/Down, Zoom In/Out.
+Each press runs ContinuousMove for BUTTON_MOVE_S seconds then stops.
+For fine-grained duration control use the vigicam.ptz service instead.
+"""
 from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -8,31 +16,55 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .entity import VIGIEntity
+from .onvif_ptz import BUTTON_MOVE_S, DEFAULT_SPEED
+
+
+@dataclass(frozen=True)
+class PTZButtonDesc:
+    key: str
+    name: str
+    icon: str
+    pan: float
+    tilt: float
+    zoom: float
+
+
+_PTZ_BUTTONS: tuple[PTZButtonDesc, ...] = (
+    PTZButtonDesc("ptz_left",      "Pan Left",    "mdi:pan-left",      -DEFAULT_SPEED, 0.0,           0.0),
+    PTZButtonDesc("ptz_right",     "Pan Right",   "mdi:pan-right",      DEFAULT_SPEED, 0.0,           0.0),
+    PTZButtonDesc("ptz_up",        "Tilt Up",     "mdi:pan-up",         0.0,           DEFAULT_SPEED, 0.0),
+    PTZButtonDesc("ptz_down",      "Tilt Down",   "mdi:pan-down",       0.0,          -DEFAULT_SPEED, 0.0),
+    PTZButtonDesc("ptz_zoom_in",   "Zoom In",     "mdi:magnify-plus",   0.0,           0.0,           DEFAULT_SPEED),
+    PTZButtonDesc("ptz_zoom_out",  "Zoom Out",    "mdi:magnify-minus",  0.0,           0.0,          -DEFAULT_SPEED),
+)
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
-    if not data["has_ptz"]:
+    if not data.get("has_ptz") or not data.get("onvif_ptz"):
         return
     async_add_entities(
-        VIGIPresetButton(data["coordinator"], data, preset)
-        for preset in data["presets"]
+        VIGIPTZButton(data["coordinator"], data, desc) for desc in _PTZ_BUTTONS
     )
 
 
-class VIGIPresetButton(VIGIEntity, ButtonEntity):
-    """Press to move PTZ camera to a named preset position."""
+class VIGIPTZButton(VIGIEntity, ButtonEntity):
+    """Press to jog the camera in a direction for BUTTON_MOVE_S seconds."""
 
-    def __init__(self, coordinator, entry_data, preset: dict) -> None:
+    def __init__(self, coordinator, entry_data, desc: PTZButtonDesc) -> None:
         super().__init__(coordinator, entry_data)
-        self._preset = preset
-        self._attr_name = f"Go to {preset['name']}"
+        self._desc = desc
+        self._attr_name = desc.name
+        self._attr_icon = desc.icon
 
     @property
     def _unique_id_suffix(self) -> str:
-        return f"preset_{self._preset['id']}"
+        return self._desc.key
 
     async def async_press(self) -> None:
-        await self._entry_data["api"].goto_preset(self._preset["id"])
+        ptz = self._entry_data["onvif_ptz"]
+        await ptz.continuous_move(self._desc.pan, self._desc.tilt, self._desc.zoom)
+        await asyncio.sleep(BUTTON_MOVE_S)
+        await ptz.stop()

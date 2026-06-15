@@ -1,0 +1,81 @@
+ptz:
+  name: PTZ Move
+  description: >
+    Start continuous camera movement in a direction. If duration is
+    specified the camera stops automatically; otherwise call vigicam.ptz_stop
+    to stop it.
+  fields:
+    entity_id:
+      name: Camera entity
+      description: The camera entity to move (e.g. camera.vigi_c540v_stream).
+      required: true
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    direction:
+      name: Direction
+      description: Movement direction.
+      required: true
+      selector:
+        select:
+          options:
+            - left
+            - right
+            - up
+            - down
+            - zoom_in
+            - zoom_out
+    speed:
+      name: Speed
+      description: Movement speed from 0.1 (slow) to 1.0 (fast). Default 0.3.
+      selector:
+        number:
+          min: 0.1
+          max: 1.0
+          step: 0.05
+    duration:
+      name: Duration (seconds)
+      description: >
+        Seconds to move before stopping automatically. If omitted the camera
+        moves until vigicam.ptz_stop is called.
+      selector:
+        number:
+          min: 0.1
+          max: 30.0
+          step: 0.1
+          unit_of_measurement: s
+
+ptz_stop:
+  name: PTZ Stop
+  description: Stop all camera movement immediately.
+  fields:
+    entity_id:
+      name: Camera entity
+      description: The camera entity to stop.
+      required: true
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+
+goto_preset:
+  name: Go to Preset
+  description: Move a PTZ camera to a named preset position.
+  fields:
+    entity_id:
+      name: Camera entity
+      description: The camera entity to move.
+      required: true
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    preset:
+      name: Preset name
+      description: >
+        Name of the preset to move to, exactly as it appears in the
+        PTZ Preset select entity (e.g. "Full Stable Yard").
+      required: true
+      selector:
+        text:
