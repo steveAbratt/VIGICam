@@ -5,6 +5,10 @@ vigicam-context.md
 secrets.yaml
 .env
 
+# Local Claude workflow files — not for the public repo
+CLAUDE.md
+rituals/
+
 # Python
 __pycache__/
 *.py[cod]
