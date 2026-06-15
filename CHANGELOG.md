@@ -14,6 +14,14 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.10] - 2026-06-15
+
+### Fixed
+- Blueprint (`camera_announce.yaml`) rejected by HA with "extra keys not allowed" — removed
+  invalid `example:` key from the `message` input (not a valid blueprint input field).
+
+---
+
 ## [0.3.9] - 2026-06-15
 
 ### Added
