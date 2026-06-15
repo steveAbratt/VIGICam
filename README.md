@@ -26,6 +26,7 @@ Entities are created dynamically — only capabilities the camera actually suppo
 - **Detection events** — real-time motion, person, vehicle, tamper, intrusion, line crossing, smart detection via ONVIF (fires within seconds, not the 30 s poll cycle)
 - **Alarm control** — enable/disable alarm, sound and light independently, set repeat count, trigger or stop manually
 - **Camera announcements** — speak any text through the camera speaker via `vigicam.speak` (TTS → format conversion → upload → play, all automatic)
+- **Play pre-recorded files** — play any audio file (WAV, MP3, OGG…) via `vigicam.play_file`; accepts HA media browser URLs, `www/` URLs, file paths, or external URLs
 - **PTZ control** — pan/tilt/zoom buttons, named presets, continuous move service
 - **Night vision** — switch between IR auto, IR always on, spotlight, colour, off
 - **Audio management** — upload custom sounds, play on demand, delete slots
@@ -70,12 +71,49 @@ data:
   message: "Person detected at the stables — {{ now().strftime('%-I:%M %p') }}"
   tts_engine: tts.cloud
   language: en-GB
+  times: 2      # optional — repeat the announcement N times
+  pause: 1.5    # optional — seconds between repeats
 ```
 
 Handles everything automatically: TTS generation → resampled to 8 kHz mono WAV
 via ffmpeg → uploaded to camera → played. Works with any configured HA TTS engine.
 
 **Limit:** Keep messages under ~10 seconds (camera hard limit: 15 s / 256 KB).
+
+---
+
+## Playing Pre-recorded Files
+
+Play any audio file through the camera speaker using `vigicam.play_file`. Accepts WAV, MP3, OGG, or any other format ffmpeg can read — the integration converts it automatically.
+
+**From the HA media browser** (upload via sidebar → Media → My media):
+
+```yaml
+service: vigicam.play_file
+data:
+  entity_id: camera.vigi_c540v_stream
+  url: http://192.168.1.73:8123/media/local/alert.wav
+  times: 2
+  pause: 1.0
+```
+
+**From a file path on the HA host:**
+
+```yaml
+url: /config/media/alert.wav
+```
+
+**From any external URL:**
+
+```yaml
+url: http://192.168.1.100:8080/sounds/alert.mp3
+```
+
+Media browser URLs (`/media/local/`) and HA www URLs (`/local/`) are automatically resolved to file paths — no token or authentication setup required. External URLs are fetched directly.
+
+**Limit:** 15 seconds / 256 KB after conversion to 8 kHz mono WAV.
+
+See **[docs/USAGE.md](docs/USAGE.md)** for full details on slots, repeat count, and combining with `vigicam.speak`.
 
 ### Blueprint
 

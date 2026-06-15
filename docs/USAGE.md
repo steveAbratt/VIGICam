@@ -15,6 +15,7 @@ For installation instructions see the [README](../README.md).
 - [Binary sensors — detection events](#binary-sensors--detection-events)
 - [Services — automation and scripting](#services)
 - [Blueprint: camera announcements](#blueprint-camera-announcements)
+- [Playing pre-recorded files](#playing-pre-recorded-files)
 - [Dashboard tips](#dashboard-tips)
 
 ---
@@ -287,6 +288,8 @@ data:
   tts_engine: tts.cloud       # your configured TTS entity
   language: en-GB             # optional — defaults to engine default
   slot: 101                   # optional — 101, 102, or 103 (default 101)
+  times: 3                    # optional — how many times to play (default 1)
+  pause: 2.0                  # optional — seconds between repeats (default 1.0)
 ```
 
 **Message templates are supported:**
@@ -298,6 +301,110 @@ message: "{{ now().strftime('%-I:%M %p') }} — person detected at the stables"
 15 seconds / 256 KB of audio. Messages that exceed this will fail with a log error —
 `vigicam.speak` will not play anything in that case. A typical spoken sentence is
 3–5 seconds.
+
+---
+
+### `vigicam.play_file` — Play a pre-recorded audio file
+
+Fetches an audio file, converts it to the camera-compatible format (8 kHz mono WAV
+via ffmpeg), uploads it to a slot, and plays it. Works with any format ffmpeg supports
+— WAV, MP3, OGG, etc.
+
+This is the service to use when you have a fixed sound clip you want to play rather
+than generated speech. Record your clip on any device, drop it into HA, and play it
+on demand from any automation.
+
+```yaml
+service: vigicam.play_file
+data:
+  entity_id: camera.vigi_c540v_stream
+  url: http://192.168.1.73:8123/media/local/alert.wav
+  slot: 102       # optional — 101, 102, or 103 (default 101)
+  times: 2        # optional — how many times to play (default 1)
+  pause: 1.5      # optional — seconds between repeats (default 1.0)
+```
+
+**Limit:** The camera hard limit is 15 seconds / 256 KB after conversion. Longer files
+will fail with a log error. A 15-second clip at 8 kHz mono 16-bit is around 240 KB.
+
+---
+
+#### Ways to specify the file
+
+**1. HA media browser (recommended for most users)**
+
+Upload your file via the HA Media section (sidebar → Media → My media → Upload) then
+reference it with the media browser URL. The integration resolves these URLs internally
+without requiring a token — you do not need to set up authentication:
+
+```yaml
+url: http://192.168.1.73:8123/media/local/alert.wav
+```
+
+Files uploaded via the media browser are stored at `/config/media/` on the HA host.
+
+**2. HA `www/` folder (publicly accessible static files)**
+
+Files placed in your HA config's `www/` folder are served at `/local/` without
+authentication. This also works directly:
+
+```yaml
+url: http://192.168.1.73:8123/local/alert.wav
+```
+
+Place the file in `/config/www/` on the HA host.
+
+**3. Absolute file path on the HA host**
+
+If you know the file's path on the machine running Home Assistant, you can reference
+it directly — useful in automations templated by a script:
+
+```yaml
+url: /config/media/alert.wav
+```
+
+Any absolute path readable by the HA process works, including `/config/www/`, addon
+media directories, or NAS mounts.
+
+**4. External URL**
+
+Any URL accessible from the HA host works — a NAS web server, a public CDN, etc.:
+
+```yaml
+url: http://192.168.1.100:8080/sounds/alert.mp3
+```
+
+---
+
+#### Choosing a slot
+
+| Slot | Recommended use |
+|------|----------------|
+| 101 | Dynamic content — `vigicam.speak` and `vigicam.play_file` both default to this. Gets overwritten each time, which is fine. |
+| 102 | Fixed sound A — upload once (or from an HA startup automation), play from slot without re-uploading. |
+| 103 | Fixed sound B — same pattern as 102. |
+
+If you use the same slot for both `speak` and `play_file`, whichever runs last wins —
+the previous upload is replaced. Use different slots if you need both at the same time.
+
+---
+
+#### Example: play a clip on person detection
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_person_detected
+      to: "on"
+  action:
+    - service: vigicam.play_file
+      data:
+        entity_id: camera.vigi_c540v_stream
+        url: http://192.168.1.73:8123/media/local/there_you_are.wav
+        times: 2
+        pause: 1.0
+```
 
 ---
 
