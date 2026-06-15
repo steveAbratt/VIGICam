@@ -1,0 +1,82 @@
+blueprint:
+  name: VIGI Camera — Announce on Trigger
+  description: >
+    When a trigger fires, play a pre-uploaded audio file through a VIGI camera's
+    speaker. Upload your audio file to the camera first using vigicam.upload_audio,
+    then reference the slot here.
+
+
+    **Slot guide:**
+
+    - Slot 101 — best for TTS/dynamic content (overwrites each time you upload).
+
+    - Slot 102 / 103 — best for fixed sounds uploaded once and kept.
+
+
+    **Upload example (Developer Tools → Services):**
+
+        service: vigicam.upload_audio
+        data:
+          entity_id: camera.your_camera
+          url: "http://your-ha-ip:8123/local/announcement.wav"
+          slot: 102
+
+
+    **TTS workflow (upload + play in one step):**
+
+        service: vigicam.upload_audio
+        data:
+          entity_id: camera.your_camera
+          url: "{{ tts_proxy_url }}"
+          slot: 101
+          play: true
+
+  domain: automation
+  input:
+    trigger_config:
+      name: Trigger
+      description: What should fire the announcement (motion, time, state change, etc.).
+      selector:
+        trigger: {}
+    camera_entity:
+      name: Camera
+      description: The VIGI camera to play audio through.
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    audio_slot:
+      name: Audio slot
+      description: >
+        Custom slot to play (101, 102, or 103). Must be uploaded to the camera first.
+        Slot 101 is the convention for TTS/dynamic content.
+        Slots 102 and 103 are for fixed sounds that you upload once.
+      default: 101
+      selector:
+        number:
+          min: 101
+          max: 103
+          step: 1
+          mode: box
+    repeat_times:
+      name: Repeat count
+      description: >
+        How many times to play the audio. Default 1 (play once). Use 2–3 for
+        announcements you want to be sure are heard. The camera plays one full
+        repetition before starting the next, with a 1-second gap between each.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 5
+          step: 1
+          mode: box
+
+trigger: !input trigger_config
+
+action:
+  - service: vigicam.play_audio
+    data:
+      entity_id: !input camera_entity
+      slot: !input audio_slot
+      times: !input repeat_times
