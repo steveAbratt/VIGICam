@@ -22,11 +22,6 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   view when tapping the card still uses the full HD stream1. Significantly reduces CPU
   load on the HA host for thumbnail requests, especially on Raspberry Pi.
 
-### Docs
-- Replaced real HA IP address with `192.168.1.x` placeholder throughout README,
-  USAGE.md, and services.yaml.
-- Replaced location-specific example text with generic alternatives.
-
 ---
 
 ## [0.3.23] - 2026-06-15
