@@ -15,6 +15,7 @@ For installation instructions see the [README](../README.md).
 - [Binary sensors — detection events](#binary-sensors--detection-events)
 - [Services — automation and scripting](#services)
 - [Blueprint: camera announcements](#blueprint-camera-announcements)
+- [Blueprint: play audio file](#blueprint-play-audio-file)
 - [Playing pre-recorded files](#playing-pre-recorded-files)
 - [Dashboard tips](#dashboard-tips)
 
@@ -554,6 +555,8 @@ After importing the blueprint:
 | **TTS engine** | Your configured TTS entity (e.g. `tts.cloud` for Nabu Casa, `tts.piper` for local Piper) |
 | **Language** | Optional language code (e.g. `en-GB`). Leave blank for engine default. |
 | **Audio slot** | Which custom slot to use (101–103). Slot 101 is fine for all TTS use — it gets overwritten each time. |
+| **Repeat count** | How many times to play the announcement. Default 1. The integration waits for the clip to finish before playing again. |
+| **Pause between repeats** | Extra gap between each play in seconds. Default 1 s. Only applies when Repeat count > 1. |
 
 4. Click **Save**, give the automation a name, and enable it.
 
@@ -572,6 +575,74 @@ camera's speaker every time motion is detected.
 > **Tip:** Add a condition to the automation (after importing the blueprint) to prevent
 > announcements at night or when you are home — use the HA automation editor to add
 > condition blocks below the blueprint's generated action.
+
+---
+
+## Blueprint: Play Audio File
+
+The integration includes a second blueprint for playing a pre-recorded audio file through
+the camera on any trigger — no TTS engine required.
+
+### Installing the blueprint
+
+**Option A — Import from GitHub (recommended):**
+
+1. In HA go to **Settings → Automations & Scenes → Blueprints**
+2. Click **Import Blueprint** (bottom right)
+3. Paste this URL:
+   ```
+   https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_play_file.yaml
+   ```
+4. Click **Preview**, then **Import Blueprint**
+
+**Option B — Manual copy:**
+
+Copy the `blueprints/` folder from the repository into your HA config directory
+(alongside `custom_components/`), then go to Developer Tools → YAML → Reload All YAML.
+
+---
+
+### Getting your audio file URL
+
+1. Upload the file via the HA sidebar → **Media** → **My media** → Upload
+2. Find the file in the media browser, click the three-dot menu → **Copy URL**
+3. The URL will look like: `http://192.168.1.73:8123/media/local/alert.wav`
+4. Paste this into the **Audio file URL** field in the blueprint
+
+Files in the HA `www/` folder (`/local/` URLs) and absolute file paths on the HA host
+also work — see [vigicam.play_file](#vigicamplay_file--play-a-pre-recorded-audio-file) for all options.
+
+---
+
+### Creating a play-file automation
+
+After importing the blueprint:
+
+1. Go to **Settings → Automations & Scenes → Blueprints**
+2. Find **VIGI Camera — Play Audio File on Trigger** and click **Create Automation**
+3. Fill in the fields:
+
+| Field | What to set |
+|-------|------------|
+| **Trigger** | Whatever should fire the playback — a motion sensor, a button press, a time pattern, etc. |
+| **Camera** | Select your VIGI camera entity |
+| **Audio file URL or path** | URL from the media browser, a `/local/` URL, or an absolute file path on the HA host |
+| **Audio slot** | Slot to upload to (101–103). Slot 101 is fine unless you need to keep a fixed sound separate from TTS. |
+| **Repeat count** | How many times to play the clip. Default 1. |
+| **Pause between repeats** | Extra gap between each play in seconds. Default 1 s. |
+
+4. Click **Save**, give the automation a name, and enable it.
+
+---
+
+### Example: play a clip on person detection
+
+Trigger: `binary_sensor.vigi_c540v_person_detected` changes to `on`
+Audio file URL: `http://192.168.1.73:8123/media/local/there_you_are.wav`
+Repeat count: `2`
+Pause: `1`
+
+This plays the clip twice every time a person is detected.
 
 ---
 
