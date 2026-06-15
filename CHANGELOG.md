@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.12] - 2026-06-15
+
+### Fixed
+- **`vigicam.speak` TTS lookup** — import `DATA_TTS_MANAGER` directly from HA so the
+  correct `hass.data` key is used regardless of which version renamed it. Added a
+  module-level `async_get_tts_audio` fallback (HA 2024.10+ public API). If all three
+  approaches fail, the error log now includes the actual TTS-related `hass.data` keys
+  present so the correct approach can be identified.
+
+---
+
 ## [0.3.11] - 2026-06-15
 
 ### Fixed
