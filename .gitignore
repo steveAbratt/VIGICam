@@ -1,0 +1,23 @@
+# Credentials and private development notes — never commit
+.credentials.json
+vigicam-context.md
+*.credentials.json
+secrets.yaml
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
