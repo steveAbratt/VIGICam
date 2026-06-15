@@ -43,7 +43,10 @@ class VIGICamera:
         self._base_url = f"https://{ip}"
         self._session: aiohttp.ClientSession | None = None
 
-        ssl_ctx = ssl.create_default_context()
+        # Cameras use self-signed certs — skip verification entirely.
+        # SSLContext() avoids the blocking load_default_certs() call that
+        # ssl.create_default_context() makes (detected by HA's loop guard).
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
         self._ssl_ctx = ssl_ctx
