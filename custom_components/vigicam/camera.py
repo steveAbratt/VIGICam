@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.components.camera import Camera, CameraEntityFeature
+from homeassistant.components.ffmpeg import get_ffmpeg_manager
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -19,7 +20,11 @@ async def async_setup_entry(
 
 
 class VIGIRTSPCamera(VIGIEntity, Camera):
-    """Live RTSP stream from the camera (HD stream1)."""
+    """Live RTSP stream from the camera (HD stream1).
+
+    Snapshots are grabbed from the RTSP stream via ffmpeg — VIGI cameras have
+    no direct HTTP snapshot endpoint on their local API.
+    """
 
     _attr_name = "Stream"
     _attr_supported_features = CameraEntityFeature.STREAM
@@ -42,6 +47,6 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        # No direct snapshot endpoint on VIGI cameras; HA will grab a frame
-        # from the RTSP stream via ffmpeg when a snapshot is requested.
-        return None
+        """Grab a single frame from the RTSP stream using ffmpeg."""
+        manager = get_ffmpeg_manager(self.hass)
+        return await manager.get_image(self._stream_url, extra_cmd="-pred 1")
