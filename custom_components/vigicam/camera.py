@@ -20,10 +20,12 @@ async def async_setup_entry(
 
 
 class VIGIRTSPCamera(VIGIEntity, Camera):
-    """Live RTSP stream from the camera (HD stream1).
+    """Live RTSP stream from the camera.
 
-    Snapshots are grabbed from the RTSP stream via ffmpeg — VIGI cameras have
-    no direct HTTP snapshot endpoint on their local API.
+    stream_source → stream1 (HD, used when the user taps to go live).
+    async_camera_image → stream2 (sub-stream, used for dashboard thumbnails
+    and history snapshots). The sub-stream is much lower bitrate so thumbnail
+    grabs are significantly lighter on the host CPU.
     """
 
     _attr_name = "Stream"
@@ -32,10 +34,9 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
     def __init__(self, coordinator: VIGICoordinator, entry_data: dict) -> None:
         VIGIEntity.__init__(self, coordinator, entry_data)
         Camera.__init__(self)
-        self._stream_url = (
-            f"rtsp://{entry_data['username']}:{entry_data['password']}"
-            f"@{entry_data['ip']}:554/stream1"
-        )
+        base = f"rtsp://{entry_data['username']}:{entry_data['password']}@{entry_data['ip']}:554"
+        self._stream_url = f"{base}/stream1"
+        self._snapshot_url = f"{base}/stream2"
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -47,6 +48,6 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        """Grab a single frame from the RTSP stream using ffmpeg."""
+        """Grab a thumbnail from the sub-stream (stream2) — lighter than the HD stream."""
         manager = get_ffmpeg_manager(self.hass)
-        return await manager.get_image(self._stream_url, extra_cmd="-pred 1")
+        return await manager.get_image(self._snapshot_url, extra_cmd="-pred 1")
