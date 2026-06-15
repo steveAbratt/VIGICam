@@ -18,6 +18,9 @@ build/
 .venv/
 venv/
 
+# Local audio files — test/scratch files, not for the repo
+audio/
+
 # macOS
 .DS_Store
 
