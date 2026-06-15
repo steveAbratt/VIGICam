@@ -79,6 +79,16 @@ _SPEAK_SCHEMA = vol.Schema({
     vol.Optional("tts_engine", default="tts.cloud"): cv.string,
     vol.Optional("language", default=""): cv.string,
     vol.Optional("slot", default=101): vol.In([101, 102, 103]),
+    vol.Optional("times", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+    vol.Optional("pause", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=30.0)),
+})
+
+_PLAY_FILE_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("url"): cv.string,
+    vol.Optional("slot", default=101): vol.In([101, 102, 103]),
+    vol.Optional("times", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+    vol.Optional("pause", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=30.0)),
 })
 
 _DIRECTION_VECTORS: dict[str, tuple[float, float, float]] = {
@@ -314,10 +324,14 @@ def _register_services(hass: HomeAssistant) -> None:
                 "Check the HA log for diagnostic keys."
             )
 
-        # Convert to 8 kHz mono 16-bit PCM via ffmpeg, outputting raw PCM (no header).
-        # Writing WAV directly to a pipe leaves an incorrect 0x7FFFFFFF size placeholder
-        # in the RIFF header (ffmpeg can't seek back on stdout), which camera firmware
-        # rejects. We build our own header with the correct size after conversion.
+        return await _audio_to_camera_wav(audio_bytes, source_label=tts_engine)
+
+    async def _audio_to_camera_wav(audio_bytes: bytes, source_label: str = "audio") -> bytes:
+        """Convert any ffmpeg-readable audio to 8 kHz mono 16-bit PCM WAV.
+
+        Outputs raw PCM from ffmpeg then builds the WAV header in Python so the size
+        fields are correct — ffmpeg cannot seek back on a pipe and would leave 0x7FFFFFFF.
+        """
         try:
             from homeassistant.components.ffmpeg import get_ffmpeg_manager
             ffmpeg_bin = get_ffmpeg_manager(hass).binary
@@ -328,7 +342,7 @@ def _register_services(hass: HomeAssistant) -> None:
             ffmpeg_bin,
             "-i", "pipe:0",
             "-ar", "8000", "-ac", "1",
-            "-f", "s16le",  # raw PCM, no header — avoids size placeholder issue
+            "-f", "s16le",
             "-loglevel", "quiet",
             "pipe:1",
             stdin=asyncio.subprocess.PIPE,
@@ -337,25 +351,22 @@ def _register_services(hass: HomeAssistant) -> None:
         )
         pcm_data, stderr = await proc.communicate(input=audio_bytes)
         if proc.returncode != 0 or not pcm_data:
-            raise VIGIError(f"ffmpeg audio conversion failed: {stderr.decode()[:200]}")
+            raise VIGIError(f"ffmpeg conversion failed for {source_label}: {stderr.decode()[:200]}")
 
-        # Build a correct WAV header with the actual data size.
         import struct
         _sr, _ch, _bits = 8000, 1, 16
-        _byte_rate = _sr * _ch * _bits // 8
-        _block_align = _ch * _bits // 8
         _data_size = len(pcm_data)
         wav_bytes = struct.pack(
             "<4sI4s4sIHHIIHH4sI",
             b"RIFF", 36 + _data_size, b"WAVE",
-            b"fmt ", 16, 1, _ch, _sr, _byte_rate, _block_align, _bits,
+            b"fmt ", 16, 1, _ch, _sr, _sr * _ch * _bits // 8, _ch * _bits // 8, _bits,
             b"data", _data_size,
         ) + pcm_data
 
         if len(wav_bytes) > 256_000:
             raise VIGIError(
                 f"Converted WAV is {len(wav_bytes) // 1024} KB — camera limit is 256 KB / 15 s. "
-                "Shorten the TTS message."
+                "Use a shorter audio clip."
             )
 
         return wav_bytes
@@ -378,9 +389,36 @@ def _register_services(hass: HomeAssistant) -> None:
             except Exception:
                 pass
             await data["api"].upload_audio(slot, "announce", wav)
-            await data["api"].play_audio(slot)
+            await data["api"].play_audio(slot, times=call.data["times"], pause=call.data["pause"])
         except Exception as exc:
             _LOGGER.error("vigicam.speak failed: %s", exc)
+
+    async def handle_play_file(call: ServiceCall) -> None:
+        data = _entry_data_for_entity(hass, call.data["entity_id"])
+        if not data:
+            _LOGGER.error("vigicam.play_file: cannot find camera for %s", call.data["entity_id"])
+            return
+        url = call.data["url"]
+        slot = call.data["slot"]
+        try:
+            if url.startswith(("http://", "https://")):
+                session = async_get_clientsession(hass)
+                async with session.get(url) as resp:
+                    resp.raise_for_status()
+                    raw_bytes = await resp.read()
+            else:
+                from pathlib import Path
+                raw_bytes = await hass.async_add_executor_job(Path(url).read_bytes)
+            wav = await _audio_to_camera_wav(raw_bytes, source_label=url)
+            _LOGGER.debug("vigicam.play_file: WAV %d B → slot %d", len(wav), slot)
+            try:
+                await data["api"].delete_audio(slot)
+            except Exception:
+                pass
+            await data["api"].upload_audio(slot, f"file_{slot}", wav)
+            await data["api"].play_audio(slot, times=call.data["times"], pause=call.data["pause"])
+        except Exception as exc:
+            _LOGGER.error("vigicam.play_file failed: %s", exc)
 
     hass.services.async_register(DOMAIN, "ptz", handle_ptz, schema=_PTZ_SCHEMA)
     hass.services.async_register(DOMAIN, "ptz_stop", handle_ptz_stop, schema=_PTZ_STOP_SCHEMA)
@@ -389,6 +427,7 @@ def _register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, "play_audio", handle_play_audio, schema=_PLAY_AUDIO_SCHEMA)
     hass.services.async_register(DOMAIN, "delete_audio", handle_delete_audio, schema=_DELETE_AUDIO_SCHEMA)
     hass.services.async_register(DOMAIN, "speak", handle_speak, schema=_SPEAK_SCHEMA)
+    hass.services.async_register(DOMAIN, "play_file", handle_play_file, schema=_PLAY_FILE_SCHEMA)
 
 
 # ── Setup / teardown ──────────────────────────────────────────────────────────

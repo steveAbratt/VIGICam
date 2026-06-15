@@ -14,6 +14,20 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.18] - 2026-06-15
+
+### Added
+- **`vigicam.play_file` service** — fetch any audio file (HTTP URL or absolute path on the
+  HA host), convert to 8 kHz mono WAV via ffmpeg, upload to a camera slot, and play it.
+  Accepts any format ffmpeg supports. Same 15 s / 256 KB limit as `vigicam.speak`.
+  Files in `/config/www/` are reachable as `http://<ha-ip>:8123/local/filename`.
+- **`times` and `pause` parameters** added to `vigicam.speak` and `vigicam.play_file` —
+  repeat the audio N times with a configurable gap. Range 1–50 (matches camera UI range).
+  Note: "Alarm Sound Repetitions" entity controls the alarm trigger button only; use
+  `times` in the service call to repeat `speak`/`play_file` announcements.
+
+---
+
 ## [0.3.17] - 2026-06-15
 
 ### Fixed
