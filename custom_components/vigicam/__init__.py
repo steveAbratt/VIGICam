@@ -330,6 +330,7 @@ def _register_services(hass: HomeAssistant) -> None:
             "-ar", "8000", "-ac", "1",
             "-f", "s16le",  # raw PCM, no header — avoids size placeholder issue
             "-loglevel", "quiet",
+            "pipe:1",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
