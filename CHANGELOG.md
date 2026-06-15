@@ -14,6 +14,19 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.13] - 2026-06-15
+
+### Fixed
+- `hass.config.version` does not exist in HA 2026.x — replaced with `homeassistant.__version__`.
+  This crash was preventing the TTS diagnostic log from printing, masking the root cause.
+- Added approach 4: entity_components lookup (HA 2025.x+ entity-based TTS architecture).
+- Added approach 5: brute-force scan of all hass.data values for any object with
+  `async_get_tts_audio`, as a last resort that works regardless of storage key.
+- Diagnostic error log now reliably prints the TTS-related `hass.data` keys so the
+  correct access method can be identified if all else fails.
+
+---
+
 ## [0.3.12] - 2026-06-15
 
 ### Fixed

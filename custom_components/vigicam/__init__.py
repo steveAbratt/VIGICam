@@ -261,18 +261,57 @@ def _register_services(hass: HomeAssistant) -> None:
             except Exception:
                 audio_bytes = None
 
+        # Approach 4: entity_components lookup (HA 2025.x+ entity-based TTS).
         if not audio_bytes:
-            # Log which hass.data keys exist so we can diagnose the right approach.
-            tts_keys = [k for k in hass.data if isinstance(k, str) and "tts" in k.lower()]
+            try:
+                _ec = hass.data.get("entity_components", {})
+                _tts_component = _ec.get("tts") if hasattr(_ec, "get") else None
+                if _tts_component and hasattr(_tts_component, "get_entity"):
+                    _tts_entity = _tts_component.get_entity(tts_engine)
+                    if _tts_entity and hasattr(_tts_entity, "async_get_tts_audio"):
+                        _lang = language or getattr(_tts_entity, "default_language", "") or ""
+                        _ext, audio_bytes = await _tts_entity.async_get_tts_audio(
+                            message, _lang, {}
+                        )
+            except Exception:
+                audio_bytes = None
+
+        # Approach 5: brute-force scan hass.data for any object with async_get_tts_audio.
+        if not audio_bytes:
+            for _val in hass.data.values():
+                if hasattr(_val, "async_get_tts_audio"):
+                    for _engine in (tts_engine, tts_engine.removeprefix("tts.")):
+                        try:
+                            _ext, audio_bytes = await _val.async_get_tts_audio(
+                                _engine, message, language=language or None, options={},
+                            )
+                            if audio_bytes:
+                                break
+                        except Exception:
+                            audio_bytes = None
+                    if audio_bytes:
+                        break
+
+        if not audio_bytes:
+            import homeassistant as _ha
+            _ha_version = getattr(_ha, "__version__", "unknown")
+            _tts_keys = []
+            try:
+                _tts_keys = [
+                    str(k) for k in hass.data
+                    if isinstance(k, str) and "tts" in k.lower()
+                ]
+            except Exception:
+                pass
             _LOGGER.error(
                 "vigicam.speak: all TTS access methods failed for '%s' on HA %s. "
                 "TTS-related hass.data keys: %s. "
                 "Please report this at https://github.com/steveAbratt/VIGICam/issues",
-                tts_engine, hass.config.version, tts_keys,
+                tts_engine, _ha_version, _tts_keys,
             )
             raise VIGIError(
-                f"Could not get TTS audio from '{tts_engine}' on HA {hass.config.version}. "
-                "Check the HA log for diagnostics."
+                f"Could not get TTS audio from '{tts_engine}' (HA {_ha_version}). "
+                "Check the HA log for diagnostic keys."
             )
 
         # Convert to 8 kHz mono 16-bit PCM WAV via ffmpeg.
