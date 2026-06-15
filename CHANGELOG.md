@@ -14,6 +14,15 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.2] - 2026-06-15
+
+### Added
+- **IP Address** diagnostic sensor — shows the camera's current IP address (from `network.wan`).
+- **Connection Type** diagnostic sensor — shows `DHCP` or `Static`, indicating whether the
+  camera is using a dynamic or fixed IP address.
+
+---
+
 ## [0.3.1] - 2026-06-15
 
 ### Added
