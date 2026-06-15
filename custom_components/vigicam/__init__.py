@@ -325,6 +325,8 @@ def _register_services(hass: HomeAssistant) -> None:
             ffmpeg_bin,
             "-i", "pipe:0",
             "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le",
+            "-map_metadata", "-1",  # strip all metadata chunks
+            "-fflags", "+bitexact",  # minimal, reproducible WAV header
             "-f", "wav", "pipe:1",
             "-loglevel", "quiet",
             stdin=asyncio.subprocess.PIPE,
@@ -355,7 +357,11 @@ def _register_services(hass: HomeAssistant) -> None:
                 call.data["message"],
                 call.data.get("language", ""),
             )
-            _LOGGER.debug("vigicam.speak: uploading %d B WAV to slot %d", len(wav), slot)
+            _LOGGER.debug("vigicam.speak: WAV size %d B, uploading to slot %d", len(wav), slot)
+            try:
+                await data["api"].delete_audio(slot)
+            except Exception:
+                pass
             await data["api"].upload_audio(slot, "announce", wav)
             await data["api"].play_audio(slot)
         except Exception as exc:
