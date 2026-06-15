@@ -326,3 +326,9 @@ class VIGICamera:
 
     async def goto_preset(self, preset_id: str) -> None:
         await self.do("preset", {"goto_preset": {"channel": 0, "id": preset_id}})
+
+    # ── Network ───────────────────────────────────────────────────────────────
+
+    async def get_network(self) -> dict:
+        resp = await self.get("network", "wan")
+        return resp.get("wan", resp)

@@ -58,6 +58,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await safe_get("microphone", self.camera.get_audio_microphone())
         await safe_get("storage", self.camera.get_storage())
         await safe_get("tamper", self.camera.get_tamper())
+        await safe_get("network", self.camera.get_network())
 
         if self.has_ptz:
             if not self.presets:
