@@ -25,11 +25,22 @@ class VIGISensorDescription(SensorEntityDescription):
 
 
 def _parse_gb(value: str | None) -> float | None:
-    """Convert camera storage strings like '116.8G' or '59.2G' to float GB."""
+    """Convert camera storage strings (116.8GB, 0B, 59.2G, etc.) to float GB."""
     if not value:
         return None
     try:
-        return float(str(value).rstrip("GgMmKk"))
+        v = str(value).strip().upper()
+        if v.endswith("GB"):
+            return float(v[:-2])
+        if v.endswith("MB"):
+            return round(float(v[:-2]) / 1024, 3)
+        if v.endswith("KB"):
+            return round(float(v[:-2]) / (1024 ** 2), 6)
+        if v.endswith("B"):
+            return round(float(v[:-1]) / (1024 ** 3), 3)
+        if v.endswith("G"):
+            return float(v[:-1])
+        return float(v)
     except ValueError:
         return None
 

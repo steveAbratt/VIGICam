@@ -264,10 +264,16 @@ class VIGICamera:
         hd = resp.get("harddisk_manage", {}).get("hd_info", [])
         # Some firmware returns a list, others a single dict
         if isinstance(hd, list):
-            return hd[0] if hd else {}
-        if isinstance(hd, dict):
-            return hd
-        return {}
+            entry = hd[0] if hd else {}
+        elif isinstance(hd, dict):
+            entry = hd
+        else:
+            return {}
+        # Camera wraps disk data one level deeper: {"hd_info_1": {actual data}}
+        # Unwrap if the expected keys aren't at the top level
+        if isinstance(entry, dict) and "status" not in entry and "disk_name" not in entry:
+            entry = next(iter(entry.values()), {})
+        return entry if isinstance(entry, dict) else {}
 
     # ── Tamper detection ──────────────────────────────────────────────────────
 

@@ -14,6 +14,19 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.2.1] - 2026-06-15
+
+### Fixed
+- SD card sensors (used %, total, free, status) all showing **unknown** — the camera
+  wraps disk data one level deeper than expected: `hd_info[0]` returns
+  `{"hd_info_1": {...}}`, not the disk dict directly. `get_storage()` now unwraps
+  that extra nesting level.
+- `_parse_gb()` failed to parse storage values — camera returns `"116.8GB"` and `"0B"`
+  but the old parser only stripped `G/M/K` suffixes, not `B`, so `float("116.8GB")`
+  raised ValueError and returned None. Now handles GB, MB, KB, B, and G suffixes.
+
+---
+
 ## [0.2.0] - 2026-06-15
 
 ### Added
