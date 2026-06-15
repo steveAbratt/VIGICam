@@ -26,7 +26,7 @@ class VIGISwitchDescription(SwitchEntityDescription):
 SWITCHES: tuple[VIGISwitchDescription, ...] = (
     VIGISwitchDescription(
         key="motion_detection",
-        name="Motion Detection",
+        name="Detection Motion",
         is_on_fn=lambda d: d.get("motion", {}).get("enabled") == "on",
         turn_on_fn=lambda api: api.set_motion_detection(True),
         turn_off_fn=lambda api: api.set_motion_detection(False),
@@ -34,7 +34,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
     ),
     VIGISwitchDescription(
         key="person_detection",
-        name="Person Detection",
+        name="Detection Person",
         is_on_fn=lambda d: d.get("motion", {}).get("people_enabled") == "on",
         turn_on_fn=lambda api: api.set_person_detection(True),
         turn_off_fn=lambda api: api.set_person_detection(False),
@@ -42,7 +42,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
     ),
     VIGISwitchDescription(
         key="vehicle_detection",
-        name="Vehicle Detection",
+        name="Detection Vehicle",
         is_on_fn=lambda d: d.get("motion", {}).get("vehicle_enabled") == "on",
         turn_on_fn=lambda api: api.set_vehicle_detection(True),
         turn_off_fn=lambda api: api.set_vehicle_detection(False),
@@ -50,7 +50,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
     ),
     VIGISwitchDescription(
         key="tamper_detection",
-        name="Tamper Detection",
+        name="Detection Tamper",
         is_on_fn=lambda d: d.get("tamper", {}).get("enabled") == "on",
         turn_on_fn=lambda api: api.set_tamper(True),
         turn_off_fn=lambda api: api.set_tamper(False),
@@ -74,7 +74,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
     ),
     VIGISwitchDescription(
         key="light_alarm",
-        name="Light Alarm",
+        name="Alarm Light",
         icon="mdi:alarm-light",
         is_on_fn=lambda d: d.get("alarm", {}).get("light_alarm_enabled") == "on",
         turn_on_fn=lambda api: api.set_light_alarm(True),
@@ -83,7 +83,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
     ),
     VIGISwitchDescription(
         key="sound_alarm",
-        name="Sound Alarm",
+        name="Alarm Sound",
         icon="mdi:alarm-bell",
         is_on_fn=lambda d: d.get("alarm", {}).get("sound_alarm_enabled") == "on",
         turn_on_fn=lambda api: api.set_sound_alarm(True),

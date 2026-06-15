@@ -27,16 +27,16 @@ Entity types are created dynamically — only entities the camera actually suppo
 ### Switches
 | Entity | Description | Cameras |
 |--------|-------------|---------|
-| Motion Detection | Enable/disable motion detection | All |
-| Person Detection | Enable/disable AI person detection | Most |
-| Vehicle Detection | Enable/disable AI vehicle detection | Most |
-| Tamper Detection | Enable/disable camera tamper alert | S245 + others |
-| Status LED | Turn the camera's status LED on/off | All |
 | Alarm | Master alarm enable/disable | All |
-| Light Alarm | Flash the spotlight when an alarm triggers | All with spotlight |
-| Sound Alarm | Play the built-in alarm tone when triggered | All with speaker |
-| Speaker Mute | Mute the camera's speaker output | All |
+| Alarm Light | Flash the spotlight when an alarm triggers | All with spotlight |
+| Alarm Sound | Play the built-in alarm tone when triggered | All with speaker |
+| Detection Motion | Enable/disable motion detection | All |
+| Detection Person | Enable/disable AI person detection | Most |
+| Detection Tamper | Enable/disable camera tamper alert | S245 + others |
+| Detection Vehicle | Enable/disable AI vehicle detection | Most |
 | Microphone Mute | Mute the camera's microphone | All |
+| Speaker Mute | Mute the camera's speaker output | All |
+| Status LED | Turn the camera's status LED on/off | All |
 
 ### Sensors
 | Entity | Description | Category |
@@ -64,6 +64,12 @@ ONVIF binary sensors update in real time via a pull-point subscription — they 
 wait for the 30-second coordinator poll. Detection zones (intrusion areas, line paths)
 are configured in the VIGI app or camera web UI, not through this integration.
 
+**Note:** Line Crossing and Smart Detection are two separate sensors for two different
+ONVIF topics. Line Crossing fires when configured line crossing zones are triggered.
+Smart Detection is a catch-all for vehicle, sound, loitering, abandoned object, and
+scene change — all five share a single ONVIF topic and cannot be separated further.
+
+
 ### Numbers
 | Entity | Range | Description |
 |--------|-------|-------------|
@@ -78,7 +84,7 @@ are configured in the VIGI app or camera web UI, not through this integration.
 | PTZ Preset *(PTZ only)* | All named presets | Move camera to a saved position |
 
 ### Buttons *(PTZ cameras only)*
-Six jog buttons: **Pan Left**, **Pan Right**, **Tilt Up**, **Tilt Down**, **Zoom In**, **Zoom Out**.
+Six jog buttons: **PTZ Pan Left**, **PTZ Pan Right**, **PTZ Tilt Up**, **PTZ Tilt Down**, **PTZ Zoom In**, **PTZ Zoom Out**.
 Each press moves the camera for 1 second then stops automatically.
 For custom duration, use the `vigicam.ptz` service instead.
 
@@ -142,27 +148,27 @@ cards:
     square: true
     cards:
       - type: button
-        entity: button.vigi_c540v_pan_left
+        entity: button.vigi_c540v_ptz_left
         show_name: false
         icon: mdi:pan-left
       - type: button
-        entity: button.vigi_c540v_tilt_up
+        entity: button.vigi_c540v_ptz_up
         show_name: false
         icon: mdi:pan-up
       - type: button
-        entity: button.vigi_c540v_pan_right
+        entity: button.vigi_c540v_ptz_right
         show_name: false
         icon: mdi:pan-right
       - type: button
-        entity: button.vigi_c540v_zoom_out
+        entity: button.vigi_c540v_ptz_zoom_out
         show_name: false
         icon: mdi:magnify-minus
       - type: button
-        entity: button.vigi_c540v_tilt_down
+        entity: button.vigi_c540v_ptz_down
         show_name: false
         icon: mdi:pan-down
       - type: button
-        entity: button.vigi_c540v_zoom_in
+        entity: button.vigi_c540v_ptz_zoom_in
         show_name: false
         icon: mdi:magnify-plus
 
