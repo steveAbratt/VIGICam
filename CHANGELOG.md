@@ -14,6 +14,15 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.25] - 2026-06-15
+
+### Fixed
+- **RTSP credentials redacted in logs** — if a snapshot grab fails, the error is now
+  logged with the password replaced by `***` so credentials cannot appear in the HA log.
+  The RTSP URL with credentials is only held in memory and never written to any log output.
+
+---
+
 ## [0.3.24] - 2026-06-15
 
 ### Performance
