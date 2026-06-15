@@ -383,13 +383,19 @@ def _register_services(hass: HomeAssistant) -> None:
                 call.data["message"],
                 call.data.get("language", ""),
             )
-            _LOGGER.debug("vigicam.speak: WAV size %d B, uploading to slot %d", len(wav), slot)
+            audio_duration = (len(wav) - 44) / (8000 * 2)  # PCM bytes → seconds
+            _LOGGER.debug("vigicam.speak: WAV %d B, %.1fs → slot %d", len(wav), audio_duration, slot)
             try:
                 await data["api"].delete_audio(slot)
             except Exception:
                 pass
             await data["api"].upload_audio(slot, "announce", wav)
-            await data["api"].play_audio(slot, times=call.data["times"], pause=call.data["pause"])
+            await data["api"].play_audio(
+                slot,
+                times=call.data["times"],
+                pause=call.data["pause"],
+                audio_duration=audio_duration,
+            )
         except Exception as exc:
             _LOGGER.error("vigicam.speak failed: %s", exc)
 
@@ -425,13 +431,19 @@ def _register_services(hass: HomeAssistant) -> None:
             else:
                 raw_bytes = await hass.async_add_executor_job(_Path(url).read_bytes)
             wav = await _audio_to_camera_wav(raw_bytes, source_label=url)
-            _LOGGER.debug("vigicam.play_file: WAV %d B → slot %d", len(wav), slot)
+            audio_duration = (len(wav) - 44) / (8000 * 2)  # PCM bytes → seconds
+            _LOGGER.debug("vigicam.play_file: WAV %d B, %.1fs → slot %d", len(wav), audio_duration, slot)
             try:
                 await data["api"].delete_audio(slot)
             except Exception:
                 pass
             await data["api"].upload_audio(slot, f"file_{slot}", wav)
-            await data["api"].play_audio(slot, times=call.data["times"], pause=call.data["pause"])
+            await data["api"].play_audio(
+                slot,
+                times=call.data["times"],
+                pause=call.data["pause"],
+                audio_duration=audio_duration,
+            )
         except Exception as exc:
             _LOGGER.error("vigicam.play_file failed: %s", exc)
 
