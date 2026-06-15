@@ -295,7 +295,7 @@ data:
 
 **Message templates are supported:**
 ```yaml
-message: "{{ now().strftime('%-I:%M %p') }} — person detected at the stables"
+message: "{{ now().strftime('%-I:%M %p') }} — person detected at the front door"
 ```
 
 **Limits:** Keep messages to around 10 seconds or less. The camera's hard limit is
@@ -319,7 +319,7 @@ on demand from any automation.
 service: vigicam.play_file
 data:
   entity_id: camera.vigi_c540v_stream
-  url: http://192.168.1.73:8123/media/local/alert.wav
+  url: http://192.168.1.x:8123/media/local/alert.wav
   slot: 102       # optional — 101, 102, or 103 (default 101)
   times: 2        # optional — how many times to play (default 1)
   pause: 1.5      # optional — seconds between repeats (default 1.0)
@@ -339,7 +339,7 @@ reference it with the media browser URL. The integration resolves these URLs int
 without requiring a token — you do not need to set up authentication:
 
 ```yaml
-url: http://192.168.1.73:8123/media/local/alert.wav
+url: http://192.168.1.x:8123/media/local/alert.wav
 ```
 
 Files uploaded via the media browser are stored at `/config/media/` on the HA host.
@@ -350,7 +350,7 @@ Files placed in your HA config's `www/` folder are served at `/local/` without
 authentication. This also works directly:
 
 ```yaml
-url: http://192.168.1.73:8123/local/alert.wav
+url: http://192.168.1.x:8123/local/alert.wav
 ```
 
 Place the file in `/config/www/` on the HA host.
@@ -402,7 +402,7 @@ automation:
     - service: vigicam.play_file
       data:
         entity_id: camera.vigi_c540v_stream
-        url: http://192.168.1.73:8123/media/local/there_you_are.wav
+        url: http://192.168.1.x:8123/media/local/there_you_are.wav
         times: 2
         pause: 1.0
 ```
@@ -565,7 +565,7 @@ After importing the blueprint:
 ### Example: motion-triggered announcement
 
 Trigger: `binary_sensor.vigi_c540v_motion` changes to `on`
-Message: `"Motion detected at the stables — {{ now().strftime('%-I:%M %p') }}"`
+Message: `"Motion detected at the front door — {{ now().strftime('%-I:%M %p') }}"`
 TTS engine: `tts.cloud`
 Language: `en-GB`
 
@@ -606,7 +606,7 @@ Copy the `blueprints/` folder from the repository into your HA config directory
 
 1. Upload the file via the HA sidebar → **Media** → **My media** → Upload
 2. Find the file in the media browser, click the three-dot menu → **Copy URL**
-3. The URL will look like: `http://192.168.1.73:8123/media/local/alert.wav`
+3. The URL will look like: `http://192.168.1.x:8123/media/local/alert.wav`
 4. Paste this into the **Audio file URL** field in the blueprint
 
 Files in the HA `www/` folder (`/local/` URLs) and absolute file paths on the HA host
@@ -638,7 +638,7 @@ After importing the blueprint:
 ### Example: play a clip on person detection
 
 Trigger: `binary_sensor.vigi_c540v_person_detected` changes to `on`
-Audio file URL: `http://192.168.1.73:8123/media/local/there_you_are.wav`
+Audio file URL: `http://192.168.1.x:8123/media/local/there_you_are.wav`
 Repeat count: `2`
 Pause: `1`
 
@@ -700,7 +700,7 @@ Quick card showing alarm status and manual trigger:
 
 ```yaml
 type: entities
-title: Stables Camera Alarm
+title: Front Door Camera Alarm
 entities:
   - entity: switch.vigi_c540v_alarm
     name: Alarm enabled

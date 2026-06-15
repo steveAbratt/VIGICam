@@ -68,7 +68,7 @@ Speak a message through the camera's speaker from any automation:
 service: vigicam.speak
 data:
   entity_id: camera.vigi_c540v_stream
-  message: "Person detected at the stables — {{ now().strftime('%-I:%M %p') }}"
+  message: "Person detected at the front door — {{ now().strftime('%-I:%M %p') }}"
   tts_engine: tts.cloud
   language: en-GB
   times: 2      # optional — repeat the announcement N times
@@ -92,7 +92,7 @@ Play any audio file through the camera speaker using `vigicam.play_file`. Accept
 service: vigicam.play_file
 data:
   entity_id: camera.vigi_c540v_stream
-  url: http://192.168.1.73:8123/media/local/alert.wav
+  url: http://192.168.1.x:8123/media/local/alert.wav
   times: 2
   pause: 1.0
 ```
