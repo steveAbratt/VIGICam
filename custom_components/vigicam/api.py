@@ -240,6 +240,52 @@ class VIGICamera:
         """Cancel a running manual alarm trigger."""
         await self.do("msg_alarm", {"manual_msg_alarm": {"action": "stop"}})
 
+    async def upload_audio(self, slot_id: int, name: str, data: bytes) -> None:
+        """Upload audio to a custom slot (101, 102, or 103).
+
+        Two-step: tell the camera to prepare a slot (get upload URL), then POST the file.
+        Supported formats: WAV mono 8 kHz ≤15 s ≤256 KB; MP3 mono ≤15 s ≤128 KB ≤64 kbps.
+        """
+        resp = await self.do("system", {
+            "upload_usr_def_audio": {
+                "id": slot_id,
+                "audio_name": name,
+                "parse_enabled": "on",
+            }
+        })
+        upload_path = urllib.parse.unquote(resp.get("url", ""))
+        if upload_path.startswith(".."):
+            upload_path = upload_path[2:]
+
+        if not self._stok:
+            await self.authenticate()
+        upload_url = f"{self._base_url}/stok={self._stok}{upload_path}"
+
+        # Detect MP3 by magic bytes; everything else treated as WAV.
+        is_mp3 = data[:3] == b"ID3" or (len(data) >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0)
+        content_type = "audio/mpeg" if is_mp3 else "audio/wav"
+        filename = f"{name}.mp3" if is_mp3 else f"{name}.wav"
+
+        form = aiohttp.FormData()
+        form.add_field("file", data, filename=filename, content_type=content_type)
+
+        session = self._get_session()
+        try:
+            async with session.post(upload_url, data=form) as response:
+                result = await response.json(content_type=None)
+        except aiohttp.ClientError as exc:
+            raise VIGIError(f"Audio upload HTTP error: {exc}") from exc
+
+        if result.get("error_code", 0) != 0:
+            raise VIGIError(
+                f"Audio upload failed (error_code={result.get('error_code')}). "
+                "Camera requires: WAV mono 8 kHz ≤15 s ≤256 KB or MP3 mono ≤15 s ≤128 KB ≤64 kbps."
+            )
+
+    async def play_audio(self, slot_id: int = 101) -> None:
+        """Play a custom audio slot (101, 102, or 103) through the camera speaker."""
+        await self.do("usr_def_audio_alarm", {"test_audio": {"id": slot_id}})
+
     # ── LED ───────────────────────────────────────────────────────────────────
 
     async def get_led(self) -> dict:

@@ -79,3 +79,70 @@ goto_preset:
       required: true
       selector:
         text:
+
+upload_audio:
+  name: Upload Audio
+  description: >
+    Upload an audio file to a custom slot on the camera. The camera plays it through
+    its speaker when the slot is triggered. Use play: true to play immediately after upload.
+    Supported formats: WAV mono 8 kHz ≤15 s ≤256 KB; MP3 mono ≤15 s ≤128 KB ≤64 kbps.
+    Typical use: generate TTS audio, upload to camera, play back on-site.
+  fields:
+    entity_id:
+      name: Camera entity
+      description: The camera to upload audio to.
+      required: true
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    url:
+      name: Audio URL
+      description: >
+        URL of the audio file to upload. Can be any URL accessible from Home Assistant,
+        including HA TTS proxy URLs (e.g. http://homeassistant.local:8123/api/tts_proxy/...).
+      required: true
+      selector:
+        text:
+    slot:
+      name: Slot
+      description: Custom audio slot on the camera (101, 102, or 103). Default 101.
+      selector:
+        number:
+          min: 101
+          max: 103
+          step: 1
+    name:
+      name: Audio name
+      description: Name stored on the camera for this audio file. Default "custom".
+      selector:
+        text:
+    play:
+      name: Play after upload
+      description: Play the audio through the camera speaker immediately after uploading.
+      selector:
+        boolean:
+
+play_audio:
+  name: Play Audio
+  description: >
+    Play a custom audio slot through the camera's speaker. Upload audio first with
+    vigicam.upload_audio. Built-in slots: 0 = Alarm Tone, 1 = Ring Tone.
+    Custom slots: 101, 102, 103 (must be uploaded first).
+  fields:
+    entity_id:
+      name: Camera entity
+      description: The camera to play audio on.
+      required: true
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    slot:
+      name: Slot
+      description: Audio slot to play. Custom slots 101–103 or built-in 0/1.
+      selector:
+        number:
+          min: 0
+          max: 103
+          step: 1

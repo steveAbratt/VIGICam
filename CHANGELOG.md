@@ -14,6 +14,26 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.7] - 2026-06-15
+
+### Added
+- **`vigicam.upload_audio` service** — uploads an audio file (via URL) to a custom slot on
+  the camera (slots 101, 102, or 103). Set `play: true` to play immediately after upload.
+  Supported formats: WAV mono 8 kHz ≤15 s ≤256 KB; MP3 mono ≤15 s ≤128 KB ≤64 kbps.
+- **`vigicam.play_audio` service** — plays any audio slot through the camera speaker.
+  Built-in: slot 0 = Alarm Tone, slot 1 = Ring Tone. Custom: slots 101–103 (uploaded first).
+
+### Notes
+- Upload is a two-step API sequence discovered from the camera's web UI JavaScript:
+  `DO system/upload_usr_def_audio` to acquire an upload URL, then multipart POST to it.
+- TTS workflow: generate TTS audio in HA → use the TTS proxy URL as `url` in
+  `vigicam.upload_audio` → camera plays the spoken message through its speaker.
+- The camera converts uploaded audio internally; download size may differ from upload size.
+- `get usr_def_audio_alarm/usr_def_audio` returns -40106 on tested firmware (listing not
+  supported), but upload and playback both work fine.
+
+---
+
 ## [0.3.6] - 2026-06-15
 
 ### Added
