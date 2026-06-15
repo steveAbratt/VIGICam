@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.16] - 2026-06-15
+
+### Fixed
+- **`vigicam.speak` upload rejected (-67306) — root cause fixed.** ffmpeg writing WAV to
+  stdout (pipe) cannot seek back to fill in the correct RIFF/data chunk sizes, leaving a
+  `0x7FFFFFFF` placeholder that the camera's strict header parser rejects. Fix: output raw
+  PCM (`-f s16le`, no header) from ffmpeg and construct the WAV header in Python with the
+  exact data size. The codec reverts to `pcm_s16le` 8 kHz mono which is confirmed to work.
+
+---
+
 ## [0.3.15] - 2026-06-15
 
 ### Fixed
