@@ -58,6 +58,21 @@ NUMBERS: tuple[VIGINumberDescription, ...] = (
         set_fn=lambda api, v: api.set_spotlight_intensity(int(v)),
         supported_fn=lambda d: "wtl_intensity_level" in d.get("image_switch", {}),
     ),
+    VIGINumberDescription(
+        key="alarm_sound_times",
+        name="Alarm Sound Repetitions",
+        native_min_value=1,
+        native_max_value=10,
+        native_step=1,
+        mode=NumberMode.BOX,
+        icon="mdi:repeat",
+        value_fn=lambda d: (
+            int(d.get("alarm", {}).get("sound_alarm_times", 1))
+            if d.get("alarm", {}).get("sound_alarm_times") is not None else None
+        ),
+        set_fn=lambda api, v: api.set_sound_alarm_times(int(v)),
+        supported_fn=lambda d: "sound_alarm_times" in d.get("alarm", {}),
+    ),
 )
 
 

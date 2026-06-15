@@ -76,6 +76,7 @@ scene change — all five share a single ONVIF topic and cannot be separated fur
 | Speaker Volume | 0–100 | Camera speaker output level |
 | Motion Sensitivity | 1–100 | Threshold for motion detection |
 | Spotlight Intensity | 1–4 | White-light spotlight brightness |
+| Alarm Sound Repetitions | 1–10 | How many times the alarm sound plays per trigger (default 5 = ~10 s loop) |
 
 ### Select
 | Entity | Options | Description |
@@ -137,6 +138,121 @@ data:
 
 This is the recommended way to move to a preset from an automation, especially when
 there are many presets. The preset name must match exactly (case-sensitive).
+
+---
+
+## Custom Audio & Camera Announcements
+
+Cameras support three custom audio slots (101, 102, 103). Upload a WAV or MP3 file
+once, then play it from automations as many times as you like.
+
+### Slot guide
+
+| Slot | Recommended use |
+|------|----------------|
+| 101 | TTS/dynamic content — overwrite each time |
+| 102 | Fixed sound A — upload once, keep forever |
+| 103 | Fixed sound B — upload once, keep forever |
+
+Overwriting an occupied slot is safe — just upload to the same slot again.
+
+### Audio format limits
+
+| Format | Max duration | Max size | Rate |
+|--------|-------------|----------|------|
+| WAV (mono PCM) | 15 s | 256 KB | 8 kHz exactly |
+| MP3 (mono) | 15 s | 128 KB | ≤ 64 kbps |
+
+### `vigicam.upload_audio` — Upload a file
+
+```yaml
+service: vigicam.upload_audio
+data:
+  entity_id: camera.vigi_c540v_stream
+  url: "http://your-ha-ip:8123/local/alert.wav"   # any URL accessible from HA
+  slot: 102
+  name: front_gate_alert   # optional label stored on camera
+  play: false              # set true to play immediately after upload
+```
+
+The camera converts and stores the file. The `url` can be:
+- A file in your HA `www/` folder: `http://ha-ip:8123/local/yourfile.wav`
+- A TTS proxy URL (see TTS workflow below)
+- Any externally accessible audio URL
+
+### `vigicam.play_audio` — Play a slot
+
+```yaml
+service: vigicam.play_audio
+data:
+  entity_id: camera.vigi_c540v_stream
+  slot: 102     # 0 = Alarm Tone, 1 = Ring Tone, 101–103 = custom
+  times: 2      # optional — repeat count (default 1)
+  pause: 1.5    # optional — seconds between repeats (default 1.0)
+```
+
+### `vigicam.delete_audio` — Free a slot
+
+```yaml
+service: vigicam.delete_audio
+data:
+  entity_id: camera.vigi_c540v_stream
+  slot: 101
+```
+
+Safe to call on an already-empty slot.
+
+### TTS announcement workflow
+
+Generate a text-to-speech clip and play it through the camera speaker:
+
+```yaml
+action:
+  # 1. Generate TTS and get audio URL (requires HA 2024.6+)
+  - action: tts.get_tts_audio
+    data:
+      engine_id: tts.cloud
+      message: "Motion detected at the front gate"
+      language: en-GB
+    response_variable: tts_result
+
+  # 2. Upload to slot 101 and play immediately
+  - service: vigicam.upload_audio
+    data:
+      entity_id: camera.vigi_c540v_stream
+      url: "{{ tts_result.url }}"
+      slot: 101
+      play: true
+```
+
+> `tts.get_tts_audio` returns `{"url": "...", "mime_type": "audio/mpeg"}`. Available in
+> HA 2024.6+. Adjust `engine_id` and `language` for your TTS provider.
+
+### Blueprint — Announce on trigger
+
+A ready-made automation blueprint is included at
+`blueprints/automation/vigicam/camera_announce.yaml`. To use it:
+
+1. Copy the `blueprints/` folder to your HA config directory (alongside `custom_components/`)
+2. In HA go to **Settings → Automations → Blueprints → Import Blueprint**
+   and paste the URL of the blueprint file from the GitHub repository
+
+The blueprint plays a pre-uploaded audio slot when a trigger fires, with a configurable
+repeat count. Conditions and additional steps can be added in the automation editor after
+importing.
+
+### Alarm loop count vs. play_audio
+
+There are two separate playback paths:
+
+| Method | Plays via | Loop count | Use for |
+|--------|-----------|-----------|---------|
+| `vigicam.play_audio` | `test_audio` API | `times` param (default 1) | Announcements, TTS |
+| Alarm Trigger button | `manual_msg_alarm` | **Alarm Sound Repetitions** entity | Security alerts |
+
+The **Alarm Trigger** button plays whatever sound type is configured under Active Defence
+in the camera web UI (Alarm Tone / Ring Tone / Custom), repeating `sound_alarm_times`
+times (now editable via the **Alarm Sound Repetitions** number entity in HA).
 
 ---
 

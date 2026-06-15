@@ -126,9 +126,12 @@ upload_audio:
 play_audio:
   name: Play Audio
   description: >
-    Play a custom audio slot through the camera's speaker. Upload audio first with
+    Play an audio slot through the camera's speaker. Upload audio first with
     vigicam.upload_audio. Built-in slots: 0 = Alarm Tone, 1 = Ring Tone.
     Custom slots: 101, 102, 103 (must be uploaded first).
+    Note: this plays once per call (test/preview behaviour). For security alarm
+    looping, use the Alarm Trigger button entity — loop count is set by the
+    Alarm Sound Repetitions number entity.
   fields:
     entity_id:
       name: Camera entity
@@ -144,5 +147,47 @@ play_audio:
       selector:
         number:
           min: 0
+          max: 103
+          step: 1
+    times:
+      name: Times
+      description: How many times to play the audio. Default 1.
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+    pause:
+      name: Pause between plays (seconds)
+      description: Seconds to wait between each repetition. Default 1.0.
+      selector:
+        number:
+          min: 0.5
+          max: 30.0
+          step: 0.5
+          unit_of_measurement: s
+
+delete_audio:
+  name: Delete Audio
+  description: >
+    Delete a custom audio slot from the camera (101, 102, or 103).
+    Safe to call on an already-empty slot. Use this to free a slot before
+    uploading new content, or to clear a slot no longer in use.
+  fields:
+    entity_id:
+      name: Camera entity
+      description: The camera to delete audio from.
+      required: true
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    slot:
+      name: Slot
+      description: Custom slot to delete (101, 102, or 103).
+      required: true
+      selector:
+        number:
+          min: 101
           max: 103
           step: 1

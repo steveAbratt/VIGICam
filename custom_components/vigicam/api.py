@@ -282,9 +282,27 @@ class VIGICamera:
                 "Camera requires: WAV mono 8 kHz ≤15 s ≤256 KB or MP3 mono ≤15 s ≤128 KB ≤64 kbps."
             )
 
-    async def play_audio(self, slot_id: int = 101) -> None:
-        """Play a custom audio slot (101, 102, or 103) through the camera speaker."""
-        await self.do("usr_def_audio_alarm", {"test_audio": {"id": slot_id}})
+    async def delete_audio(self, slot_id: int) -> None:
+        """Delete a custom audio slot (101, 102, or 103). No-op if slot is already empty."""
+        await self.do("usr_def_audio_alarm", {"delete_audio": {"id": [slot_id]}})
+
+    async def play_audio(self, slot_id: int = 101, times: int = 1, pause: float = 1.0) -> None:
+        """Play a custom audio slot through the camera speaker.
+
+        times: repeat count (default 1). Repeats with *pause* seconds between each play.
+        """
+        import asyncio
+        for i in range(max(1, times)):
+            await self.do("usr_def_audio_alarm", {"test_audio": {"id": slot_id}})
+            if i < times - 1:
+                await asyncio.sleep(pause)
+
+    async def set_sound_alarm_times(self, times: int) -> None:
+        """Set how many times the alarm sound repeats when the alarm is triggered."""
+        await self.set(
+            "msg_alarm",
+            {"chn1_msg_alarm_info": {"sound_alarm_times": str(times)}},
+        )
 
     # ── LED ───────────────────────────────────────────────────────────────────
 

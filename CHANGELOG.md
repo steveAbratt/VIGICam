@@ -14,6 +14,32 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.8] - 2026-06-15
+
+### Added
+- **`vigicam.delete_audio` service** — delete a custom audio slot (101, 102, or 103) from
+  the camera. Safe to call on an already-empty slot (camera returns success).
+- **`Alarm Sound Repetitions` number entity** — controls how many times the alarm sound
+  plays per trigger (was only configurable via the camera web UI). Range 1–10.
+  This is what controls the "10 second loop" behaviour of the Alarm Trigger button.
+- **`vigicam.play_audio` now supports `times` and `pause` parameters** — repeat the audio
+  N times with a configurable gap between plays (default 1s). Useful for announcements
+  that should be heard twice.
+- **Blueprint: VIGI Camera — Announce on Trigger** (`blueprints/automation/vigicam/camera_announce.yaml`) —
+  importable automation blueprint. Configure a trigger + camera + slot; the automation
+  plays the pre-uploaded audio when the trigger fires. Repeat count configurable.
+
+### Notes
+- Custom audio behaviour summary: `play_audio` / `test_audio` plays a slot once (or N times
+  with pause). The Alarm Trigger button uses `manual_msg_alarm` which loops the configured
+  alarm type based on `sound_alarm_times` — that is now the Alarm Sound Repetitions entity.
+  These are two separate playback paths with different use cases.
+- 3 custom slots (101–103). Listing slots is not supported on tested firmware (-40106) but
+  upload, play, and delete all work. Overwriting is safe — just re-upload to the same slot.
+- Blueprint uses `tts.speak` trigger selector requiring HA 2024.6+.
+
+---
+
 ## [0.3.7] - 2026-06-15
 
 ### Added

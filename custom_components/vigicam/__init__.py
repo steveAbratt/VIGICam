@@ -64,6 +64,13 @@ _UPLOAD_AUDIO_SCHEMA = vol.Schema({
 _PLAY_AUDIO_SCHEMA = vol.Schema({
     vol.Required("entity_id"): cv.entity_id,
     vol.Optional("slot", default=101): vol.All(vol.Coerce(int), vol.Range(min=0, max=103)),
+    vol.Optional("times", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+    vol.Optional("pause", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=30.0)),
+})
+
+_DELETE_AUDIO_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("slot"): vol.In([101, 102, 103]),
 })
 
 _DIRECTION_VECTORS: dict[str, tuple[float, float, float]] = {
@@ -162,17 +169,32 @@ def _register_services(hass: HomeAssistant) -> None:
         if not data:
             _LOGGER.error("vigicam.play_audio: cannot find camera for %s", call.data["entity_id"])
             return
-        slot = call.data["slot"]
         try:
-            await data["api"].play_audio(slot)
+            await data["api"].play_audio(
+                slot_id=call.data["slot"],
+                times=call.data["times"],
+                pause=call.data["pause"],
+            )
         except Exception as exc:
             _LOGGER.error("vigicam.play_audio failed: %s", exc)
+
+    async def handle_delete_audio(call: ServiceCall) -> None:
+        data = _entry_data_for_entity(hass, call.data["entity_id"])
+        if not data:
+            _LOGGER.error("vigicam.delete_audio: cannot find camera for %s", call.data["entity_id"])
+            return
+        try:
+            await data["api"].delete_audio(call.data["slot"])
+            _LOGGER.debug("vigicam.delete_audio: deleted slot %d", call.data["slot"])
+        except Exception as exc:
+            _LOGGER.error("vigicam.delete_audio failed: %s", exc)
 
     hass.services.async_register(DOMAIN, "ptz", handle_ptz, schema=_PTZ_SCHEMA)
     hass.services.async_register(DOMAIN, "ptz_stop", handle_ptz_stop, schema=_PTZ_STOP_SCHEMA)
     hass.services.async_register(DOMAIN, "goto_preset", handle_goto_preset, schema=_GOTO_PRESET_SCHEMA)
     hass.services.async_register(DOMAIN, "upload_audio", handle_upload_audio, schema=_UPLOAD_AUDIO_SCHEMA)
     hass.services.async_register(DOMAIN, "play_audio", handle_play_audio, schema=_PLAY_AUDIO_SCHEMA)
+    hass.services.async_register(DOMAIN, "delete_audio", handle_delete_audio, schema=_DELETE_AUDIO_SCHEMA)
 
 
 # ── Setup / teardown ──────────────────────────────────────────────────────────
