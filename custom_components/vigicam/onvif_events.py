@@ -41,23 +41,24 @@ _CREATE_ACTION = "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePul
 _PULL_ACTION = "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessages"
 _RENEW_ACTION = "http://www.onvif.org/ver10/events/wsdl/SubscriptionManager/Renew"
 
-# Maps substrings found in ONVIF topic strings → event type name used by binary sensors
+# Maps substrings found in ONVIF topic strings → event type name used by binary sensors.
+# Verified topic names from GetEventProperties on VIGI C540V + InSight S245:
+#   tns1:RuleEngine/tns1:CellMotionDetector/tns1:Motion      → IsMotion
+#   tns1:RuleEngine/tns1:TamperDetector/tns1:Tamper          → IsTamper
+#   tns1:RuleEngine/tns1:IntrusionDetector/tns1:Intrusion    → IsIntrusion
+#   tns1:RuleEngine/tns1:LineCrossDetector/tns1:LineCross    → IsLineCross
+#   tns1:RuleEngine/tns1:PeopleDetector/tns1:People          → IsPeople
+#   tns1:RuleEngine/tns1:TPSmartEventDetector/tns1:TPSmartEvent → IsTPSmartEvent
+# TPSmartEvent is a catch-all for vehicle, sound, loitering, abandoned object, scene change.
+# More specific entries must come before broader ones (first match wins).
 TOPIC_KEYWORD_MAP: dict[str, str] = {
-    "IsPeople": "person",
-    "People": "person",
-    "Person": "person",
-    "IsVehicle": "vehicle",
-    "Vehicle": "vehicle",
-    "IsTamper": "tamper",
-    "Tamper": "tamper",
-    "GlobalSceneChange": "tamper",
-    "Motion": "motion",
-    "IsLineCross": "line_cross",
-    "LineCross": "line_cross",
-    "IsRegionEntrance": "region_entrance",
-    "RegionEntrance": "region_entrance",
-    "IsIntrusion": "intrusion",
-    "Intrusion": "intrusion",
+    "TPSmartEvent": "smart_event",
+    "CellMotion":   "motion",
+    "LineCross":    "line_cross",
+    "Intrusion":    "intrusion",
+    "People":       "person",
+    "Tamper":       "tamper",
+    "Motion":       "motion",  # fallback for non-CellMotion motion topics
 }
 
 
@@ -272,8 +273,13 @@ class VIGIOnvifEvents:
             _LOGGER.debug("Unmapped ONVIF topic (add to TOPIC_KEYWORD_MAP if needed): %s", topic)
             return
 
-        value_str = str(data.get("Value", data.get("IsMotion", "true"))).lower()
-        active = value_str in ("true", "1", "yes")
+        # VIGI cameras use Is* boolean fields (IsMotion, IsTamper, IsPeople, etc.)
+        # Scan for the first Is* or Value field to determine active state.
+        active = True  # default to active if no recognisable field present
+        for key, val in data.items():
+            if key.startswith("Is") or key == "Value":
+                active = str(val).lower() in ("true", "1", "yes")
+                break
 
         async_dispatcher_send(
             self._hass,

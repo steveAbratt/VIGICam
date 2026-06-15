@@ -14,6 +14,37 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.1] - 2026-06-15
+
+### Added
+- **Intrusion** binary sensor (ONVIF `IsIntrusion`) — fires when intrusion zones are
+  triggered (configured via VIGI app or web UI)
+- **Line Crossing** binary sensor (ONVIF `IsLineCross`) — fires when line crossing rules
+  are triggered
+- **Smart Detection** binary sensor (ONVIF `IsTPSmartEvent`) — TP-Link catch-all topic
+  covering vehicle, sound, loitering, abandoned object and scene change detection; these
+  cannot be distinguished at the ONVIF level
+- **Light Alarm** switch — controls `light_alarm_enabled` in `msg_alarm` (the camera's
+  flashing light response to detection events)
+- **Sound Alarm** switch — controls `sound_alarm_enabled` in `msg_alarm`
+
+### Fixed
+- ONVIF event dispatch was checking `Value`/`IsMotion` for all event types. VIGI cameras
+  use per-topic boolean fields (`IsTamper`, `IsPeople`, `IsIntrusion`, `IsLineCross`,
+  `IsTPSmartEvent`). Dispatch now scans the data dict for any `Is*` field.
+- ONVIF topic keyword map updated with verified topic names from `GetEventProperties`
+  on both cameras; more specific matches (TPSmartEvent, CellMotion) now take priority
+  over generic ones.
+
+### Notes
+- Smart detection zone/area configuration (line crossing paths, intrusion regions, etc.)
+  is not exposed by the local JSON API (-40106). Use the VIGI app or camera web UI to
+  configure rules; this integration reports when they fire.
+- Vehicle, sound, loitering, abandoned object, scene change detection all share the
+  `IsTPSmartEvent` ONVIF topic — they cannot be separated at this level.
+
+---
+
 ## [0.3.0] - 2026-06-15
 
 ### Added

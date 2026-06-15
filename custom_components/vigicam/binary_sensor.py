@@ -51,6 +51,9 @@ BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
         supported_fn=lambda d: "loop_record_status" in d.get("storage", {}),
     ),
     # ── Event-based (ONVIF) ──────────────────────────────────────────────────
+    # Topics confirmed from GetEventProperties on both cameras.
+    # TPSmartEvent is a TP-Link catch-all covering vehicle, sound, loitering,
+    # abandoned object, scene change — indistinguishable at the ONVIF level.
     VIGIBinarySensorDescription(
         key="motion",
         name="Motion",
@@ -64,16 +67,29 @@ BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
         event_type="person",
     ),
     VIGIBinarySensorDescription(
-        key="vehicle",
-        name="Vehicle Detected",
-        icon="mdi:car",
-        event_type="vehicle",
-    ),
-    VIGIBinarySensorDescription(
         key="tamper",
         name="Tamper",
         device_class=BinarySensorDeviceClass.TAMPER,
         event_type="tamper",
+    ),
+    VIGIBinarySensorDescription(
+        key="intrusion",
+        name="Intrusion",
+        device_class=BinarySensorDeviceClass.MOTION,
+        icon="mdi:motion-sensor",
+        event_type="intrusion",
+    ),
+    VIGIBinarySensorDescription(
+        key="line_cross",
+        name="Line Crossing",
+        icon="mdi:vector-line",
+        event_type="line_cross",
+    ),
+    VIGIBinarySensorDescription(
+        key="smart_event",
+        name="Smart Detection",
+        icon="mdi:shield-search",
+        event_type="smart_event",
     ),
 )
 

@@ -220,6 +220,18 @@ class VIGICamera:
             {"chn1_msg_alarm_info": {"enabled": "on" if enabled else "off"}},
         )
 
+    async def set_light_alarm(self, enabled: bool) -> None:
+        await self.set(
+            "msg_alarm",
+            {"chn1_msg_alarm_info": {"light_alarm_enabled": "on" if enabled else "off"}},
+        )
+
+    async def set_sound_alarm(self, enabled: bool) -> None:
+        await self.set(
+            "msg_alarm",
+            {"chn1_msg_alarm_info": {"sound_alarm_enabled": "on" if enabled else "off"}},
+        )
+
     # ── LED ───────────────────────────────────────────────────────────────────
 
     async def get_led(self) -> dict:
