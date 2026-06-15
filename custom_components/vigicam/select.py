@@ -14,9 +14,16 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
-    entities: list = [VIGINightVisionSelect(data["coordinator"], data)]
+    coordinator = data["coordinator"]
+    entities: list = []
+
+    # Night vision select only if camera reports image switch data
+    if (coordinator.data or {}).get("image_switch"):
+        entities.append(VIGINightVisionSelect(coordinator, data))
+
     if data["has_ptz"]:
-        entities.append(VIGIPTZPresetSelect(data["coordinator"], data))
+        entities.append(VIGIPTZPresetSelect(coordinator, data))
+
     async_add_entities(entities)
 
 
@@ -38,9 +45,10 @@ class VIGINightVisionSelect(VIGIEntity, SelectEntity):
         return NIGHT_VISION_MODES.get(mode)
 
     async def async_select_option(self, option: str) -> None:
-        mode = next(k for k, v in NIGHT_VISION_MODES.items() if v == option)
-        await self._entry_data["api"].set_night_vision_mode(mode)
-        await self.coordinator.async_request_refresh()
+        mode = next((k for k, v in NIGHT_VISION_MODES.items() if v == option), None)
+        if mode:
+            await self._entry_data["api"].set_night_vision_mode(mode)
+            await self.coordinator.async_request_refresh()
 
 
 class VIGIPTZPresetSelect(VIGIEntity, SelectEntity):

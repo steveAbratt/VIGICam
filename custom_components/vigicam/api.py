@@ -247,8 +247,13 @@ class VIGICamera:
         resp = await self._request(
             {"method": "get", "harddisk_manage": {"table": "hd_info"}}
         )
-        disks = resp.get("harddisk_manage", {}).get("hd_info", [])
-        return disks[0] if disks else {}
+        hd = resp.get("harddisk_manage", {}).get("hd_info", [])
+        # Some firmware returns a list, others a single dict
+        if isinstance(hd, list):
+            return hd[0] if hd else {}
+        if isinstance(hd, dict):
+            return hd
+        return {}
 
     # ── Tamper detection ──────────────────────────────────────────────────────
 

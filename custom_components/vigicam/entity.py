@@ -8,6 +8,21 @@ from .const import BRAND, DOMAIN
 from .coordinator import VIGICoordinator
 
 
+def _clean_firmware(version: str | None) -> str | None:
+    """'2.2.0 Build 250904 Rel.60109n' → '2.2.0'"""
+    if not version:
+        return None
+    return version.split(" Build")[0].split(" build")[0].strip()
+
+
+def _clean_model(model: str | None) -> str | None:
+    """'VIGI C540V 1.0' → 'VIGI C540V'  (trailing ' X.Y' hardware rev)"""
+    if not model:
+        return None
+    import re
+    return re.sub(r"\s+\d+\.\d+$", "", model).strip()
+
+
 class VIGIEntity(CoordinatorEntity[VIGICoordinator]):
     """Base class for all VIGI camera entities."""
 
@@ -27,9 +42,10 @@ class VIGIEntity(CoordinatorEntity[VIGICoordinator]):
             identifiers={(DOMAIN, self._device_id)},
             name=info.get("dev_name") or info.get("alias") or self._entry_data["ip"],
             manufacturer=BRAND,
-            model=info.get("device_model"),
-            sw_version=info.get("sw_version"),
+            model=_clean_model(info.get("device_model")),
+            sw_version=_clean_firmware(info.get("sw_version")),
             hw_version=info.get("hw_version"),
+            configuration_url=f"http://{self._entry_data['ip']}",
         )
 
     @property

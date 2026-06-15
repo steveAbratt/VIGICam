@@ -19,6 +19,7 @@ from .entity import VIGIEntity
 class VIGINumberDescription(NumberEntityDescription):
     value_fn: Callable[[dict], float | None]
     set_fn: Callable[[VIGICamera, float], Any]
+    supported_fn: Callable[[dict], bool] = lambda _: True
 
 
 NUMBERS: tuple[VIGINumberDescription, ...] = (
@@ -32,6 +33,7 @@ NUMBERS: tuple[VIGINumberDescription, ...] = (
         mode=NumberMode.SLIDER,
         value_fn=lambda d: d.get("speaker", {}).get("volume"),
         set_fn=lambda api, v: api.set_speaker_volume(int(v)),
+        supported_fn=lambda d: bool(d.get("speaker")),
     ),
     VIGINumberDescription(
         key="motion_sensitivity",
@@ -43,6 +45,7 @@ NUMBERS: tuple[VIGINumberDescription, ...] = (
         mode=NumberMode.SLIDER,
         value_fn=lambda d: d.get("motion", {}).get("digital_sensitivity"),
         set_fn=lambda api, v: api.set_motion_sensitivity(int(v)),
+        supported_fn=lambda d: "digital_sensitivity" in d.get("motion", {}),
     ),
     VIGINumberDescription(
         key="spotlight_intensity",
@@ -53,6 +56,7 @@ NUMBERS: tuple[VIGINumberDescription, ...] = (
         mode=NumberMode.SLIDER,
         value_fn=lambda d: d.get("image_switch", {}).get("wtl_intensity_level"),
         set_fn=lambda api, v: api.set_spotlight_intensity(int(v)),
+        supported_fn=lambda d: "wtl_intensity_level" in d.get("image_switch", {}),
     ),
 )
 
@@ -61,8 +65,11 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data["coordinator"]
     async_add_entities(
-        VIGINumber(data["coordinator"], data, desc) for desc in NUMBERS
+        VIGINumber(coordinator, data, desc)
+        for desc in NUMBERS
+        if desc.supported_fn(coordinator.data or {})
     )
 
 

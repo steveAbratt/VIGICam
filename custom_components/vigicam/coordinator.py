@@ -43,7 +43,10 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
             try:
                 results[key] = await coro
             except VIGIError as exc:
-                _LOGGER.debug("Failed to fetch %s: %s", key, exc)
+                _LOGGER.debug("Could not fetch %s: %s", key, exc)
+                results[key] = {}
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning("Unexpected error fetching %s: %s", key, exc)
                 results[key] = {}
 
         await safe_get("device_info", self.camera.get_device_info())
