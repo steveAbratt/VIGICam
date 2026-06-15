@@ -7,9 +7,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
-from .const import DOMAIN
+from .const import CONF_VERIFY_SSL, DOMAIN
 from .coordinator import VIGICoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,17 +30,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ip = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
+    verify_ssl = entry.data.get(CONF_VERIFY_SSL, False)
 
-    camera_api = VIGICamera(ip, username, password)
+    # Use HA's session helpers — they handle SSL context creation properly
+    # without blocking the event loop.
+    if verify_ssl:
+        session = async_get_clientsession(hass)
+    else:
+        session = async_create_clientsession(hass, verify_ssl=False)
+
+    camera_api = VIGICamera(ip, username, password, session=session)
     try:
         await camera_api.authenticate()
         device_info = await camera_api.get_device_info()
         presets = await camera_api.get_presets()
     except VIGIAuthError as exc:
-        await camera_api.close()
         raise ConfigEntryAuthFailed(str(exc)) from exc
     except VIGIError as exc:
-        await camera_api.close()
         raise ConfigEntryNotReady(str(exc)) from exc
 
     has_ptz = len(presets) > 0
@@ -64,6 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        data = hass.data[DOMAIN].pop(entry.entry_id)
-        await data["api"].close()
+        # api.close() only cleans up sessions the API created itself;
+        # sessions provided by HA helpers are managed by HA.
+        await hass.data[DOMAIN].pop(entry.entry_id)["api"].close()
     return unloaded

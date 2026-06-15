@@ -35,32 +35,43 @@ class VIGIError(Exception):
 
 
 class VIGICamera:
-    def __init__(self, ip: str, username: str, password: str) -> None:
+    def __init__(
+        self,
+        ip: str,
+        username: str,
+        password: str,
+        session: aiohttp.ClientSession | None = None,
+    ) -> None:
         self._ip = ip
         self._username = username
         self._password = password
         self._stok: str | None = None
         self._base_url = f"https://{ip}"
-        self._session: aiohttp.ClientSession | None = None
-
-        # Cameras use self-signed certs — skip verification entirely.
-        # SSLContext() avoids the blocking load_default_certs() call that
-        # ssl.create_default_context() makes (detected by HA's loop guard).
-        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-        self._ssl_ctx = ssl_ctx
+        # When HA provides a session (via async_get/create_clientsession) it
+        # manages that session's lifecycle — we must not close it ourselves.
+        self._ha_session = session
+        self._own_session: aiohttp.ClientSession | None = None
 
     def _get_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            connector = aiohttp.TCPConnector(ssl=self._ssl_ctx)
-            timeout = aiohttp.ClientTimeout(total=TIMEOUT)
-            self._session = aiohttp.ClientSession(connector=connector, timeout=timeout)
-        return self._session
+        if self._ha_session is not None and not self._ha_session.closed:
+            return self._ha_session
+        # Standalone use (probe scripts, config-flow test) — own no-verify session.
+        # SSLContext() is used directly to avoid the blocking load_default_certs()
+        # call that ssl.create_default_context() triggers (HA loop guard, Python 3.14+).
+        if self._own_session is None or self._own_session.closed:
+            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+            self._own_session = aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(ssl=ssl_ctx),
+                timeout=aiohttp.ClientTimeout(total=TIMEOUT),
+            )
+        return self._own_session
 
     async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
+        # Only close the session we created ourselves; HA manages its own sessions.
+        if self._own_session and not self._own_session.closed:
+            await self._own_session.close()
 
     async def _post(self, url: str, body: dict) -> dict:
         session = self._get_session()
