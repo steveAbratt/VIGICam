@@ -14,6 +14,33 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.4] - 2026-06-15
+
+### Added
+- **ONVIF PTZ services** — three new HA services for PTZ cameras:
+  - `vigicam.ptz` — continuous move in a direction (`left/right/up/down/zoom_in/zoom_out`)
+    with configurable `speed` (0.0–1.0) and optional `duration` (auto-stops after N seconds).
+    If no duration is given, call `vigicam.ptz_stop` to stop.
+  - `vigicam.ptz_stop` — stop all camera movement immediately.
+  - `vigicam.goto_preset` — move to a named preset by name (e.g. `"Full Stable Yard"`);
+    cleaner alternative to `select.select_option` for automations with many presets.
+- **PTZ direction buttons** — six button entities per PTZ camera (Pan Left/Right, Tilt
+  Up/Down, Zoom In/Out) that each jog the camera for 1 second then stop. Useful for
+  dashboard control cards; for custom durations use the `vigicam.ptz` service.
+
+### Changed
+- Per-preset "Go to {name}" buttons removed — they never worked (bug fixed in 0.3.3)
+  and don't scale to cameras with many presets. Use the **PTZ Preset select entity** or
+  the new `vigicam.goto_preset` service for preset navigation.
+
+### Notes
+- ONVIF PTZ uses `profile_1` (mainStream). All tested VIGI firmware versions use this
+  token; it is not configurable per-camera currently.
+- Continuous move does not time out on the camera side — always call `ptz_stop` (or
+  use the `duration` parameter) to prevent runaway movement.
+
+---
+
 ## [0.3.3] - 2026-06-15
 
 ### Fixed
