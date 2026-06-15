@@ -73,6 +73,14 @@ _DELETE_AUDIO_SCHEMA = vol.Schema({
     vol.Required("slot"): vol.In([101, 102, 103]),
 })
 
+_SPEAK_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("message"): cv.string,
+    vol.Optional("tts_engine", default="tts.cloud"): cv.string,
+    vol.Optional("language", default=""): cv.string,
+    vol.Optional("slot", default=101): vol.In([101, 102, 103]),
+})
+
 _DIRECTION_VECTORS: dict[str, tuple[float, float, float]] = {
     "left":     (-1.0, 0.0, 0.0),
     "right":    ( 1.0, 0.0, 0.0),
@@ -189,12 +197,98 @@ def _register_services(hass: HomeAssistant) -> None:
         except Exception as exc:
             _LOGGER.error("vigicam.delete_audio failed: %s", exc)
 
+    async def _tts_to_camera_wav(tts_engine: str, message: str, language: str) -> bytes:
+        """Generate TTS audio and convert it to 8 kHz mono 16-bit PCM WAV.
+
+        The camera's format limit is WAV mono 8 kHz ≤15 s ≤256 KB (or MP3 ≤64 kbps ≤128 KB).
+        Converting everything to 8 kHz WAV avoids bitrate guessing and is always in-spec.
+        """
+        # Ask HA to generate TTS audio and return the URL (HA 2024.6+).
+        tts_kwargs: dict = {"engine_id": tts_engine, "message": message}
+        if language:
+            tts_kwargs["language"] = language
+        try:
+            tts_resp = await hass.services.async_call(
+                "tts",
+                "get_tts_audio",
+                tts_kwargs,
+                blocking=True,
+                return_response=True,
+            )
+        except Exception as exc:
+            raise VIGIError(
+                f"TTS generation failed — make sure '{tts_engine}' is a valid TTS entity "
+                f"and HA is 2024.6+: {exc}"
+            ) from exc
+
+        tts_url = (tts_resp or {}).get("url")
+        if not tts_url:
+            raise VIGIError(
+                f"TTS service returned no URL (response: {tts_resp}). "
+                "Check that the TTS engine is configured and working."
+            )
+
+        # Fetch the raw audio bytes.
+        session = async_get_clientsession(hass)
+        async with session.get(tts_url) as resp:
+            resp.raise_for_status()
+            audio_bytes = await resp.read()
+
+        # Convert to 8 kHz mono 16-bit PCM WAV via ffmpeg.
+        # HA declares ffmpeg as a dependency so the binary is available.
+        try:
+            from homeassistant.components.ffmpeg import get_ffmpeg_manager
+            ffmpeg_bin = get_ffmpeg_manager(hass).binary
+        except Exception:
+            ffmpeg_bin = "ffmpeg"
+
+        proc = await asyncio.create_subprocess_exec(
+            ffmpeg_bin,
+            "-i", "pipe:0",
+            "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le",
+            "-f", "wav", "pipe:1",
+            "-loglevel", "quiet",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        wav_bytes, stderr = await proc.communicate(input=audio_bytes)
+        if proc.returncode != 0 or not wav_bytes:
+            raise VIGIError(f"ffmpeg audio conversion failed: {stderr.decode()[:200]}")
+
+        if len(wav_bytes) > 256_000:
+            raise VIGIError(
+                f"Converted WAV is {len(wav_bytes)//1024} KB — camera limit is 256 KB / 15 s. "
+                "Shorten the TTS message."
+            )
+
+        return wav_bytes
+
+    async def handle_speak(call: ServiceCall) -> None:
+        data = _entry_data_for_entity(hass, call.data["entity_id"])
+        if not data:
+            _LOGGER.error("vigicam.speak: cannot find camera for %s", call.data["entity_id"])
+            return
+        slot = call.data["slot"]
+        try:
+            wav = await _tts_to_camera_wav(
+                call.data["tts_engine"],
+                call.data["message"],
+                call.data.get("language", ""),
+            )
+            _LOGGER.debug("vigicam.speak: uploading %d B WAV to slot %d", len(wav), slot)
+            await data["api"].upload_audio(slot, "announce", wav)
+            await data["api"].play_audio(slot)
+        except Exception as exc:
+            _LOGGER.error("vigicam.speak failed: %s", exc)
+
     hass.services.async_register(DOMAIN, "ptz", handle_ptz, schema=_PTZ_SCHEMA)
     hass.services.async_register(DOMAIN, "ptz_stop", handle_ptz_stop, schema=_PTZ_STOP_SCHEMA)
     hass.services.async_register(DOMAIN, "goto_preset", handle_goto_preset, schema=_GOTO_PRESET_SCHEMA)
     hass.services.async_register(DOMAIN, "upload_audio", handle_upload_audio, schema=_UPLOAD_AUDIO_SCHEMA)
     hass.services.async_register(DOMAIN, "play_audio", handle_play_audio, schema=_PLAY_AUDIO_SCHEMA)
     hass.services.async_register(DOMAIN, "delete_audio", handle_delete_audio, schema=_DELETE_AUDIO_SCHEMA)
+    hass.services.async_register(DOMAIN, "speak", handle_speak, schema=_SPEAK_SCHEMA)
 
 
 # ── Setup / teardown ──────────────────────────────────────────────────────────

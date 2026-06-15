@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .entity import VIGIEntity
+from .entity import VIGIEntity, _clean_firmware
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -97,7 +97,7 @@ SENSORS: tuple[VIGISensorDescription, ...] = (
     VIGISensorDescription(
         key="firmware",
         name="Firmware Version",
-        value_fn=lambda d: d.get("device_info", {}).get("sw_version"),
+        value_fn=lambda d: _clean_firmware(d.get("device_info", {}).get("sw_version")),
         entity_registry_enabled_default=False,
     ),
     VIGISensorDescription(

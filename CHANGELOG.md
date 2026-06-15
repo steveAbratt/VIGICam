@@ -14,6 +14,28 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.9] - 2026-06-15
+
+### Added
+- **`vigicam.speak` service** — full TTS-to-camera pipeline in one service call.
+  Accepts a text message, generates TTS audio via `tts.get_tts_audio`, converts to
+  8 kHz mono WAV via ffmpeg (guaranteeing camera compatibility regardless of TTS engine
+  output format/bitrate), uploads to the camera, and plays it. Requires HA 2024.6+.
+- **Blueprint updated** (`blueprints/automation/vigicam/camera_announce.yaml`) — now uses
+  `vigicam.speak` directly. Configure: trigger + camera + message template + TTS engine +
+  language. The message field is a template selector so trigger data can be included.
+
+### Notes
+- `vigicam.speak` uses `tts.get_tts_audio` (HA 2024.6+, `return_response=True`).
+  On older HA the service will log a clear error pointing to the version requirement.
+- ffmpeg conversion uses the binary from HA's ffmpeg manager (`ffmpeg` dependency already
+  declared in manifest). All TTS engine outputs (MP3, OGG, WAV at any rate) are resampled
+  to 8 kHz mono PCM WAV, which is always within the camera's format limits.
+- If the converted WAV exceeds 256 KB (about 15 seconds of speech at 8 kHz), the service
+  logs an error asking you to shorten the message.
+
+---
+
 ## [0.3.8] - 2026-06-15
 
 ### Added

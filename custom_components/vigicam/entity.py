@@ -1,6 +1,9 @@
 """Base entity for VIGI cameras."""
 from __future__ import annotations
 
+import re
+import urllib.parse
+
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -8,19 +11,27 @@ from .const import BRAND, DOMAIN
 from .coordinator import VIGICoordinator
 
 
-def _clean_firmware(version: str | None) -> str | None:
-    """'2.2.0 Build 250904 Rel.60109n' → '2.2.0'"""
-    if not version:
+def _decode(value: str | None) -> str | None:
+    """URL-decode a camera string field (camera returns e.g. 'InSight%20S245')."""
+    if not value:
         return None
-    return version.split(" Build")[0].split(" build")[0].strip()
+    return urllib.parse.unquote(value)
+
+
+def _clean_firmware(version: str | None) -> str | None:
+    """'3.1.1 Build 251124 Rel.50306n' → '3.1.1'"""
+    v = _decode(version)
+    if not v:
+        return None
+    return v.split(" Build")[0].split(" build")[0].strip()
 
 
 def _clean_model(model: str | None) -> str | None:
-    """'VIGI C540V 1.0' → 'VIGI C540V'  (trailing ' X.Y' hardware rev)"""
-    if not model:
+    """'VIGI C540V 1.0' → 'VIGI C540V'  (strips trailing hardware revision)"""
+    m = _decode(model)
+    if not m:
         return None
-    import re
-    return re.sub(r"\s+\d+\.\d+$", "", model).strip()
+    return re.sub(r"\s+\d+\.\d+$", "", m).strip()
 
 
 class VIGIEntity(CoordinatorEntity[VIGICoordinator]):
@@ -38,13 +49,18 @@ class VIGIEntity(CoordinatorEntity[VIGICoordinator]):
     @property
     def device_info(self) -> DeviceInfo:
         info = self._entry_data["device_info"]
+        name = (
+            _decode(info.get("dev_name"))
+            or _decode(info.get("alias"))
+            or self._entry_data["ip"]
+        )
         return DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
-            name=info.get("dev_name") or info.get("alias") or self._entry_data["ip"],
+            name=name,
             manufacturer=BRAND,
             model=_clean_model(info.get("device_model")),
             sw_version=_clean_firmware(info.get("sw_version")),
-            hw_version=info.get("hw_version"),
+            hw_version=_decode(info.get("hw_version")),
             configuration_url=f"http://{self._entry_data['ip']}",
         )
 
