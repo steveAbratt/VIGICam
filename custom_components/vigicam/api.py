@@ -286,16 +286,27 @@ class VIGICamera:
         """Delete a custom audio slot (101, 102, or 103). No-op if slot is already empty."""
         await self.do("usr_def_audio_alarm", {"delete_audio": {"id": [slot_id]}})
 
-    async def play_audio(self, slot_id: int = 101, times: int = 1, pause: float = 1.0) -> None:
+    async def play_audio(
+        self,
+        slot_id: int = 101,
+        times: int = 1,
+        pause: float = 1.0,
+        audio_duration: float | None = None,
+    ) -> None:
         """Play a custom audio slot through the camera speaker.
 
-        times: repeat count (default 1). Repeats with *pause* seconds between each play.
+        times: repeat count (default 1).
+        pause: extra gap between plays in seconds (default 1.0).
+        audio_duration: if known, sleep for audio_duration + pause between plays so
+            the clip finishes before the next trigger. Without it only pause is used,
+            which may be too short if pause < clip length.
         """
         import asyncio
+        sleep_between = (audio_duration or 0.0) + pause
         for i in range(max(1, times)):
             await self.do("usr_def_audio_alarm", {"test_audio": {"id": slot_id}})
             if i < times - 1:
-                await asyncio.sleep(pause)
+                await asyncio.sleep(sleep_between)
 
     async def set_sound_alarm_times(self, times: int) -> None:
         """Set how many times the alarm sound repeats when the alarm is triggered."""
