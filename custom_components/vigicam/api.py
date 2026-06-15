@@ -302,22 +302,20 @@ class VIGICamera:
     # ── PTZ presets ───────────────────────────────────────────────────────────
 
     async def get_presets(self) -> list[dict]:
-        """Returns [{id, name, pan, tilt, zoom}, ...] for PTZ cameras, [] otherwise."""
+        """Returns [{id, name}, ...] for PTZ cameras, [] otherwise.
+
+        API returns position_pan/position_tilt/position_zoom (not pan/tilt/zoom)
+        and URL-encodes spaces in preset names.
+        """
         try:
             resp = await self.get("preset", "preset")
             data = resp.get("preset", resp)
             ids = data.get("id", [])
             names = data.get("name", [])
-            pans = data.get("pan", [])
-            tilts = data.get("tilt", [])
-            zooms = data.get("zoom", [])
             return [
                 {
                     "id": ids[i],
-                    "name": names[i],
-                    "pan": pans[i],
-                    "tilt": tilts[i],
-                    "zoom": zooms[i],
+                    "name": urllib.parse.unquote(names[i]),
                 }
                 for i in range(len(ids))
             ]
