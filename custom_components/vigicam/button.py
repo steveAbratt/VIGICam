@@ -1,13 +1,9 @@
-"""Button entities for VIGI PTZ cameras — direction jog controls.
-
-Six buttons per PTZ camera: Pan Left/Right, Tilt Up/Down, Zoom In/Out.
-Each press runs ContinuousMove for BUTTON_MOVE_S seconds then stops.
-For fine-grained duration control use the vigicam.ptz service instead.
-"""
+"""Button entities — PTZ direction jog controls and alarm trigger/stop."""
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Callable
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -18,6 +14,8 @@ from .const import DOMAIN
 from .entity import VIGIEntity
 from .onvif_ptz import BUTTON_MOVE_S, DEFAULT_SPEED
 
+
+# ── PTZ jog buttons ───────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class PTZButtonDesc:
@@ -39,19 +37,57 @@ _PTZ_BUTTONS: tuple[PTZButtonDesc, ...] = (
 )
 
 
+# ── Alarm trigger/stop buttons ────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class AlarmButtonDesc:
+    key: str
+    name: str
+    icon: str
+    action: str  # "start" or "stop"
+    supported_fn: Callable[[dict], bool] = field(default=lambda _: True)
+
+
+_ALARM_BUTTONS: tuple[AlarmButtonDesc, ...] = (
+    AlarmButtonDesc(
+        "alarm_trigger", "Alarm Trigger", "mdi:alarm-light", "start",
+        supported_fn=lambda d: bool(d.get("alarm")),
+    ),
+    AlarmButtonDesc(
+        "alarm_stop", "Alarm Stop", "mdi:alarm-off", "stop",
+        supported_fn=lambda d: bool(d.get("alarm")),
+    ),
+)
+
+
+# ── Platform setup ────────────────────────────────────────────────────────────
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
-    if not data.get("has_ptz") or not data.get("onvif_ptz"):
-        return
-    async_add_entities(
-        VIGIPTZButton(data["coordinator"], data, desc) for desc in _PTZ_BUTTONS
+    coordinator = data["coordinator"]
+    coord_data = coordinator.data or {}
+
+    entities: list[ButtonEntity] = []
+
+    if data.get("has_ptz") and data.get("onvif_ptz"):
+        entities.extend(VIGIPTZButton(coordinator, data, desc) for desc in _PTZ_BUTTONS)
+
+    entities.extend(
+        VIGIAlarmButton(coordinator, data, desc)
+        for desc in _ALARM_BUTTONS
+        if desc.supported_fn(coord_data)
     )
 
+    if entities:
+        async_add_entities(entities)
+
+
+# ── Entity classes ────────────────────────────────────────────────────────────
 
 class VIGIPTZButton(VIGIEntity, ButtonEntity):
-    """Press to jog the camera in a direction for BUTTON_MOVE_S seconds."""
+    """Jogs the camera in one direction for BUTTON_MOVE_S seconds then stops."""
 
     def __init__(self, coordinator, entry_data, desc: PTZButtonDesc) -> None:
         super().__init__(coordinator, entry_data)
@@ -68,3 +104,24 @@ class VIGIPTZButton(VIGIEntity, ButtonEntity):
         await ptz.continuous_move(self._desc.pan, self._desc.tilt, self._desc.zoom)
         await asyncio.sleep(BUTTON_MOVE_S)
         await ptz.stop()
+
+
+class VIGIAlarmButton(VIGIEntity, ButtonEntity):
+    """Triggers or cancels the manual alarm sound (10 s countdown, camera auto-stops)."""
+
+    def __init__(self, coordinator, entry_data, desc: AlarmButtonDesc) -> None:
+        super().__init__(coordinator, entry_data)
+        self._desc = desc
+        self._attr_name = desc.name
+        self._attr_icon = desc.icon
+
+    @property
+    def _unique_id_suffix(self) -> str:
+        return self._desc.key
+
+    async def async_press(self) -> None:
+        api = self._entry_data["api"]
+        if self._desc.action == "start":
+            await api.trigger_alarm()
+        else:
+            await api.stop_alarm()

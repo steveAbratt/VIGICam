@@ -14,6 +14,25 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.5] - 2026-06-15
+
+### Added
+- **Alarm Trigger button** — press to fire the camera's configured alarm sound immediately
+  (plays for 10 seconds then auto-stops; works regardless of whether the master Alarm
+  switch is on — this is a manual test/trigger, not detection-linked).
+- **Alarm Stop button** — press to cancel an in-progress alarm trigger early.
+
+### Notes
+- Trigger uses `msg_alarm.manual_msg_alarm {action: start/stop}`, discovered in the
+  camera's web UI JavaScript source. The 10-second countdown matches the camera's
+  built-in behaviour; calling stop cancels it at any point.
+- Sound type (Alarm Tone / Ring Tone / Custom) is whatever is configured in the camera's
+  web UI under Active Defence → Sound Alarm. Changing that setting changes what plays
+  when the button is pressed.
+- Both buttons appear for any camera that reports alarm support (not PTZ-only).
+
+---
+
 ## [0.3.4] - 2026-06-15
 
 ### Added
