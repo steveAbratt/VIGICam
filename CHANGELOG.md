@@ -14,6 +14,15 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.15] - 2026-06-15
+
+### Fixed
+- **`vigicam.speak` upload rejected (-67306)** — switched ffmpeg codec from `pcm_s16le`
+  (16-bit linear PCM) to `pcm_mulaw` (G.711 μ-law). IP cameras typically use μ-law as
+  their native audio format for alert sounds; 16-bit PCM is rejected at the codec level.
+
+---
+
 ## [0.3.14] - 2026-06-15
 
 ### Fixed
