@@ -14,6 +14,21 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.2.2] - 2026-06-15
+
+### Added
+- **Loop Recording** binary sensor — shows whether loop recording is active on the SD card.
+  Read from `loop_record_status` in `harddisk_manage` response; cannot be set via the local
+  API (all write attempts return -40101). Only created if the camera reports the field.
+
+### Fixed
+- **SD Card Used %** was reporting the camera's `percent` field which is inconsistent
+  across firmware versions (camera 1 reports 0%, camera 2 reports 100%, both with full
+  disks). Now calculated from `total_space_accurate` and `free_space_accurate` (byte
+  values) for reliable results across all cameras.
+
+---
+
 ## [0.2.1] - 2026-06-15
 
 ### Fixed

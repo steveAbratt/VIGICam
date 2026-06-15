@@ -24,6 +24,26 @@ class VIGISensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict], float | str | None]
 
 
+def _parse_bytes(value: str | None) -> int | None:
+    """Convert accurate byte strings like '125403037696B' to int bytes."""
+    if not value:
+        return None
+    try:
+        v = str(value).strip().upper()
+        return int(v[:-1]) if v.endswith("B") else int(v)
+    except ValueError:
+        return None
+
+
+def _used_percent(storage: dict) -> float | None:
+    """Calculate used % from accurate byte values — the camera's percent field is unreliable."""
+    total = _parse_bytes(storage.get("total_space_accurate"))
+    free = _parse_bytes(storage.get("free_space_accurate"))
+    if total is None or free is None or total == 0:
+        return None
+    return round((total - free) / total * 100, 1)
+
+
 def _parse_gb(value: str | None) -> float | None:
     """Convert camera storage strings (116.8GB, 0B, 59.2G, etc.) to float GB."""
     if not value:
@@ -51,7 +71,7 @@ SENSORS: tuple[VIGISensorDescription, ...] = (
         name="SD Card Used",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: d.get("storage", {}).get("percent"),
+        value_fn=lambda d: _used_percent(d.get("storage", {})),
     ),
     VIGISensorDescription(
         key="sd_total",
