@@ -1,7 +1,11 @@
 """Camera platform — RTSP stream via HA's stream integration."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.camera import Camera, CameraEntityFeature
+
+_LOGGER = logging.getLogger(__name__)
 from homeassistant.components.ffmpeg import get_ffmpeg_manager
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -34,9 +38,13 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
     def __init__(self, coordinator: VIGICoordinator, entry_data: dict) -> None:
         VIGIEntity.__init__(self, coordinator, entry_data)
         Camera.__init__(self)
-        base = f"rtsp://{entry_data['username']}:{entry_data['password']}@{entry_data['ip']}:554"
-        self._stream_url = f"{base}/stream1"
-        self._snapshot_url = f"{base}/stream2"
+        ip = entry_data["ip"]
+        user = entry_data["username"]
+        password = entry_data["password"]
+        self._stream_url = f"rtsp://{user}:{password}@{ip}:554/stream1"
+        self._snapshot_url = f"rtsp://{user}:{password}@{ip}:554/stream2"
+        self._redacted_stream_url = f"rtsp://{user}:***@{ip}:554/stream1"
+        self._redacted_snapshot_url = f"rtsp://{user}:***@{ip}:554/stream2"
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -50,4 +58,9 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
     ) -> bytes | None:
         """Grab a thumbnail from the sub-stream (stream2) — lighter than the HD stream."""
         manager = get_ffmpeg_manager(self.hass)
-        return await manager.get_image(self._snapshot_url, extra_cmd="-pred 1")
+        try:
+            return await manager.get_image(self._snapshot_url, extra_cmd="-pred 1")
+        except Exception as exc:
+            safe = str(exc).replace(self._snapshot_url, self._redacted_snapshot_url)
+            _LOGGER.debug("Snapshot grab failed: %s", safe)
+            return None
