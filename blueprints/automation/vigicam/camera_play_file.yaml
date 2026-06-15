@@ -1,0 +1,109 @@
+blueprint:
+  name: VIGI Camera — Play Audio File on Trigger
+  description: >
+    When a trigger fires, play a pre-recorded audio file through a VIGI camera's speaker.
+    The file is fetched, converted to the camera-compatible format automatically, and played.
+
+
+    **Where to store your audio file:**
+
+    Upload it via the HA Media section (sidebar → Media → My media → Upload), then paste
+    the URL from the media browser into the field below. Files in the HA `www/` folder
+    (`/local/` URLs) and direct file paths also work.
+
+
+    **Getting the URL from the media browser:**
+
+    Open the file in the media browser, click the three-dot menu → Copy URL.
+    It will look like: `http://192.168.1.73:8123/media/local/alert.wav`
+
+
+    **Supported formats:** WAV, MP3, OGG, or any format ffmpeg can read. The integration
+    converts to 8 kHz mono WAV automatically.
+
+
+    **Audio length limit:** The camera accepts a maximum of 15 seconds / 256 KB of audio
+    after conversion. Longer files will fail — check the HA log for details.
+
+
+    **Requirements:**
+
+    - VIGICam integration 0.3.20+.
+
+  domain: automation
+  input:
+    trigger_config:
+      name: Trigger
+      description: What fires the audio playback. Can be any trigger type.
+      selector:
+        trigger: {}
+    camera_entity:
+      name: Camera
+      description: The VIGI camera to play the audio through.
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    media_url:
+      name: Audio file URL or path
+      description: >
+        URL or path of the audio file to play. Examples:
+
+        - Media browser URL: `http://192.168.1.73:8123/media/local/alert.wav`
+
+        - HA www folder: `http://192.168.1.73:8123/local/alert.wav`
+
+        - File path on HA host: `/media/alert.wav`
+
+        Media browser URLs are resolved automatically — no token or auth setup needed.
+      selector:
+        text: {}
+    audio_slot:
+      name: Audio slot
+      description: >
+        Camera slot to upload the file to (101, 102, or 103). The file is uploaded fresh
+        each time the trigger fires. Slot 101 is fine for most uses — it is overwritten
+        each time. Use 102 or 103 if you want to keep a fixed sound separate from TTS
+        announcements.
+      default: 101
+      selector:
+        number:
+          min: 101
+          max: 103
+          step: 1
+          mode: box
+    times:
+      name: Repeat count
+      description: >
+        How many times to play the audio clip. Default 1. The integration waits for the
+        clip to finish before playing again, so repeats are always clean.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+          mode: box
+    pause:
+      name: Pause between repeats (seconds)
+      description: >
+        Extra gap to leave between each play, in addition to the clip's own duration.
+        Default 1 second. Only applies when Repeat count is greater than 1.
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 0.5
+          unit_of_measurement: s
+
+trigger: !input trigger_config
+
+action:
+  - service: vigicam.play_file
+    data:
+      entity_id: !input camera_entity
+      url: !input media_url
+      slot: !input audio_slot
+      times: !input times
+      pause: !input pause
