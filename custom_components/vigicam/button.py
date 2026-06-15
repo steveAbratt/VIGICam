@@ -30,12 +30,12 @@ class PTZButtonDesc:
 
 
 _PTZ_BUTTONS: tuple[PTZButtonDesc, ...] = (
-    PTZButtonDesc("ptz_left",      "Pan Left",    "mdi:pan-left",      -DEFAULT_SPEED, 0.0,           0.0),
-    PTZButtonDesc("ptz_right",     "Pan Right",   "mdi:pan-right",      DEFAULT_SPEED, 0.0,           0.0),
-    PTZButtonDesc("ptz_up",        "Tilt Up",     "mdi:pan-up",         0.0,           DEFAULT_SPEED, 0.0),
-    PTZButtonDesc("ptz_down",      "Tilt Down",   "mdi:pan-down",       0.0,          -DEFAULT_SPEED, 0.0),
-    PTZButtonDesc("ptz_zoom_in",   "Zoom In",     "mdi:magnify-plus",   0.0,           0.0,           DEFAULT_SPEED),
-    PTZButtonDesc("ptz_zoom_out",  "Zoom Out",    "mdi:magnify-minus",  0.0,           0.0,          -DEFAULT_SPEED),
+    PTZButtonDesc("ptz_left",      "PTZ Pan Left",    "mdi:pan-left",      -DEFAULT_SPEED, 0.0,           0.0),
+    PTZButtonDesc("ptz_right",     "PTZ Pan Right",   "mdi:pan-right",      DEFAULT_SPEED, 0.0,           0.0),
+    PTZButtonDesc("ptz_up",        "PTZ Tilt Up",     "mdi:pan-up",         0.0,           DEFAULT_SPEED, 0.0),
+    PTZButtonDesc("ptz_down",      "PTZ Tilt Down",   "mdi:pan-down",       0.0,          -DEFAULT_SPEED, 0.0),
+    PTZButtonDesc("ptz_zoom_in",   "PTZ Zoom In",     "mdi:magnify-plus",   0.0,           0.0,           DEFAULT_SPEED),
+    PTZButtonDesc("ptz_zoom_out",  "PTZ Zoom Out",    "mdi:magnify-minus",  0.0,           0.0,          -DEFAULT_SPEED),
 )
 
 

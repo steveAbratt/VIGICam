@@ -14,6 +14,27 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.5] - 2026-06-15
+
+### Changed
+- **Entity name grouping** — related entities now sort together alphabetically in the HA
+  device view:
+  - Detection switches renamed with `Detection` prefix: `Detection Motion`, `Detection Person`,
+    `Detection Tamper`, `Detection Vehicle` (were `Motion Detection` etc.)
+  - Alarm switches renamed with `Alarm` prefix: `Alarm Light`, `Alarm Sound`
+    (were `Light Alarm`, `Sound Alarm`); `Alarm` unchanged.
+  - PTZ jog buttons renamed with `PTZ` prefix: `PTZ Pan Left`, `PTZ Pan Right`,
+    `PTZ Tilt Up`, `PTZ Tilt Down`, `PTZ Zoom In`, `PTZ Zoom Out` (were `Pan Left` etc.)
+  - Result: Controls section shows three clear clusters — Alarm (A), Detection (D), and
+    PTZ (PT) — instead of being scattered across the alphabet.
+
+### Notes
+- Display names change; existing entity IDs in the HA registry are preserved for
+  existing installations (HA stores entity IDs by `unique_id`, not by name). New
+  installations will get entity IDs matching the new names.
+
+---
+
 ## [0.3.4] - 2026-06-15
 
 ### Added
