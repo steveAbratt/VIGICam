@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.14] - 2026-06-15
+
+### Fixed
+- **`vigicam.speak` upload rejected (-67306)** — ffmpeg now passes `-map_metadata -1` and
+  `-fflags +bitexact` to produce a minimal WAV without extra metadata chunks that the camera
+  firmware rejects.
+- **Speak: delete slot before uploading** — clears the slot first to avoid rejection when the
+  camera treats an already-occupied slot as immutable.
+
+---
+
 ## [0.3.13] - 2026-06-15
 
 ### Fixed
