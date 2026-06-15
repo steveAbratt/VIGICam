@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfInformation
+from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfInformation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -99,6 +99,23 @@ SENSORS: tuple[VIGISensorDescription, ...] = (
         name="Firmware Version",
         value_fn=lambda d: d.get("device_info", {}).get("sw_version"),
         entity_registry_enabled_default=False,
+    ),
+    VIGISensorDescription(
+        key="ip_address",
+        name="IP Address",
+        icon="mdi:ip-network",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: d.get("network", {}).get("ipaddr"),
+    ),
+    VIGISensorDescription(
+        key="connection_type",
+        name="Connection Type",
+        icon="mdi:ethernet",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: {"dhcp": "DHCP", "static": "Static"}.get(
+            d.get("network", {}).get("wan_type", ""),
+            d.get("network", {}).get("wan_type"),
+        ),
     ),
 )
 
