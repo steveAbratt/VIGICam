@@ -14,6 +14,29 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.0] - 2026-06-15
+
+### Added
+- **Real-time motion/person/vehicle/tamper binary sensors** via ONVIF pull-point
+  subscription. On startup, a background task subscribes to the camera's ONVIF event
+  service and long-polls for events every 8 seconds. Events fire immediately rather than
+  waiting for the 30-second coordinator cycle.
+- Detected state auto-clears after 15 seconds if the camera does not send an explicit
+  "active=false" event.
+- Subscription auto-renews 5 minutes before the 1-hour expiry. Re-subscribes on error
+  after a 15-second backoff.
+
+### Notes
+- Auth: VIGI cameras require WS-Security PasswordDigest = SHA1(nonce + created +
+  raw_password). Using SHA1(password) first — as the `onvif-zeep-async` library does —
+  returns NotAuthorized on these cameras. No external ONVIF library needed.
+- Subscription address is returned on port 1024; pull calls go to that address, not
+  the main service URL on port 80.
+- ONVIF topic → entity mapping uses keyword matching. Unknown topics are logged at DEBUG
+  level — add to `TOPIC_KEYWORD_MAP` in `onvif_events.py` as needed.
+
+---
+
 ## [0.2.2] - 2026-06-15
 
 ### Added
