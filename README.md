@@ -83,10 +83,20 @@ scene change — all five share a single ONVIF topic and cannot be separated fur
 | Night Vision Mode | IR Auto, IR Always On, Spotlight Always On, Colour, Off | Switches IR/spotlight behaviour |
 | PTZ Preset *(PTZ only)* | All named presets | Move camera to a saved position |
 
-### Buttons *(PTZ cameras only)*
-Six jog buttons: **PTZ Pan Left**, **PTZ Pan Right**, **PTZ Tilt Up**, **PTZ Tilt Down**, **PTZ Zoom In**, **PTZ Zoom Out**.
-Each press moves the camera for 1 second then stops automatically.
-For custom duration, use the `vigicam.ptz` service instead.
+### Buttons
+
+| Entity | Cameras | Description |
+|--------|---------|-------------|
+| Alarm Trigger | All with alarm | Fire the alarm sound immediately (plays for 10 s then auto-stops) |
+| Alarm Stop | All with alarm | Cancel an in-progress alarm trigger early |
+| PTZ Pan Left | PTZ only | Jog camera left for 1 second |
+| PTZ Pan Right | PTZ only | Jog camera right for 1 second |
+| PTZ Tilt Up | PTZ only | Jog camera up for 1 second |
+| PTZ Tilt Down | PTZ only | Jog camera down for 1 second |
+| PTZ Zoom In | PTZ only | Zoom in for 1 second |
+| PTZ Zoom Out | PTZ only | Zoom out for 1 second |
+
+For custom PTZ duration, use the `vigicam.ptz` service instead.
 
 ---
 

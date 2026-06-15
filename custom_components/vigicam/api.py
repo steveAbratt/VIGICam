@@ -232,6 +232,14 @@ class VIGICamera:
             {"chn1_msg_alarm_info": {"sound_alarm_enabled": "on" if enabled else "off"}},
         )
 
+    async def trigger_alarm(self) -> None:
+        """Manually fire the alarm for 10 seconds (camera auto-stops; stop_alarm() cancels early)."""
+        await self.do("msg_alarm", {"manual_msg_alarm": {"action": "start"}})
+
+    async def stop_alarm(self) -> None:
+        """Cancel a running manual alarm trigger."""
+        await self.do("msg_alarm", {"manual_msg_alarm": {"action": "stop"}})
+
     # ── LED ───────────────────────────────────────────────────────────────────
 
     async def get_led(self) -> dict:
