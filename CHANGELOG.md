@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.11] - 2026-06-15
+
+### Fixed
+- **`vigicam.speak` not working** — `tts.get_tts_audio` action is not registered in HA 2025.x+.
+  The service now uses the internal TTS manager (`hass.data["tts_manager"]`) directly, which
+  is available in all HA 2024.6+ versions and works with any configured TTS engine (Piper,
+  Nabu Casa Cloud, etc.). `tts.get_tts_audio` is kept as a fallback for older builds.
+- **Alarm Sound Repetitions** max value corrected from 10 → 50 (matches camera web UI range).
+
+---
+
 ## [0.3.10] - 2026-06-15
 
 ### Fixed
