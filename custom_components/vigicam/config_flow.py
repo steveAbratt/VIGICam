@@ -1,6 +1,8 @@
 """Config flow for VIGI & InSight cameras."""
 from __future__ import annotations
 
+import urllib.parse
+
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
@@ -43,10 +45,29 @@ async def _test_credentials(hass, ip: str, username: str, password: str) -> tupl
     return await cam.get_device_info(), False
 
 
+def _suggested_name(info: dict, fallback: str) -> str:
+    """Return the camera's configured name, URL-decoded, falling back to IP."""
+    for key in ("dev_name", "alias"):
+        raw = info.get(key)
+        if raw:
+            decoded = urllib.parse.unquote(raw).strip()
+            if decoded:
+                return decoded
+    return fallback
+
+
 class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow to add a VIGI or InSight camera."""
 
     VERSION = 1
+
+    def __init__(self) -> None:
+        self._host: str = ""
+        self._username: str = ""
+        self._password: str = ""
+        self._verify_ssl: bool = False
+        self._device_info: dict = {}
+        self._suggested_name: str = ""
 
     async def async_step_user(self, user_input=None):
         errors: dict[str, str] = {}
@@ -68,19 +89,38 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
-                title = info.get("dev_name") or info.get("alias") or ip
-                return self.async_create_entry(
-                    title=title,
-                    data={
-                        CONF_HOST: ip,
-                        CONF_USERNAME: username,
-                        CONF_PASSWORD: password,
-                        CONF_VERIFY_SSL: verify_ssl,
-                    },
-                )
+                self._host = ip
+                self._username = username
+                self._password = password
+                self._verify_ssl = verify_ssl
+                self._device_info = info
+                self._suggested_name = _suggested_name(info, ip)
+                return await self.async_step_name()
 
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_SCHEMA,
             errors=errors,
+        )
+
+    async def async_step_name(self, user_input=None):
+        """Confirm or edit the name for this camera in Home Assistant."""
+        if user_input is not None:
+            title = user_input.get("name", "").strip() or self._suggested_name
+            return self.async_create_entry(
+                title=title,
+                data={
+                    CONF_HOST: self._host,
+                    CONF_USERNAME: self._username,
+                    CONF_PASSWORD: self._password,
+                    CONF_VERIFY_SSL: self._verify_ssl,
+                },
+            )
+
+        return self.async_show_form(
+            step_id="name",
+            data_schema=vol.Schema({
+                vol.Required("name", default=self._suggested_name): str,
+            }),
+            description_placeholders={"suggested": self._suggested_name},
         )
