@@ -14,6 +14,15 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.17] - 2026-06-15
+
+### Fixed
+- **`vigicam.speak` ffmpeg conversion failing** — `pipe:1` output path was accidentally
+  dropped when switching to `-f s16le` in 0.3.16. ffmpeg had no output destination and
+  exited with an error before producing any PCM data.
+
+---
+
 ## [0.3.16] - 2026-06-15
 
 ### Fixed
