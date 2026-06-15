@@ -404,11 +404,16 @@ def _register_services(hass: HomeAssistant) -> None:
             from pathlib import Path as _Path
             # Convert HA internal media/www URLs to file paths — these endpoints
             # require auth that the shared client session doesn't carry.
+            # On HA OS the media dir is /media/ (not /config/media/), so we use
+            # hass.config.media_dirs["local"] for the correct base path.
             if url.startswith(("http://", "https://")):
-                for _seg, _sub in (("/media/local/", "media"), ("/local/", "www")):
+                _media_base = getattr(hass.config, "media_dirs", {}).get(
+                    "local", str(_Path(hass.config.config_dir) / "media")
+                )
+                for _seg, _base in (("/media/local/", _media_base), ("/local/", str(_Path(hass.config.config_dir) / "www"))):
                     if _seg in url:
                         _rel = url.split(_seg, 1)[1].split("?")[0]
-                        url = str(_Path(hass.config.config_dir) / _sub / _rel)
+                        url = str(_Path(_base) / _rel)
                         _LOGGER.debug("vigicam.play_file: resolved to path %s", url)
                         break
 
