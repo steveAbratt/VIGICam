@@ -51,7 +51,7 @@ blueprint:
         Text to speak. Supports Jinja2 templates — reference trigger data, entity states,
         or time. Keep messages to ~10 seconds or less (camera hard limit: 15 s / 256 KB).
         A typical sentence is 3–5 seconds. Longer messages will fail — check the HA log.
-      example: "Motion detected at the front gate"
+        Example: "Motion detected at the front gate"
       selector:
         template: {}
     tts_engine:
