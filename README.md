@@ -1,33 +1,180 @@
 # VIGICam — TP-Link VIGI/InSight Camera Integration for Home Assistant
 
 A Home Assistant custom integration for TP-Link VIGI and InSight cameras, providing
-full local API access beyond basic RTSP streaming.
+full local API access beyond basic RTSP streaming — no cloud required.
 
-## Features
-
-- **RTSP live stream** — HD and SD quality, accessible in dashboards and automations
-- **Motion detection** — enable/disable, sensitivity control
-- **Person and vehicle detection** — enable/disable per camera (if supported)
-- **PTZ preset control** — one button per named preset (PTZ cameras only)
-- **Night vision mode** — IR always on, spotlight always on, auto, colour
-- **Spotlight intensity** — 1–4 levels
-- **Alarm** — enable/disable audio and light alarm
-- **Status LED** — enable/disable
-- **SD card sensors** — used %, free space, total capacity, status
-- **Speaker and microphone** — volume, mute
-- **Tamper detection** — enable/disable (if supported by camera)
-
-Entities are created dynamically based on what each camera actually supports — a fixed
-camera won't show PTZ buttons, a camera without tamper detection won't show that switch.
+---
 
 ## Tested Cameras
 
-| Model | Type |
-|-------|------|
-| VIGI C540V | Outdoor PTZ, spotlight, IR |
-| InSight S245 | Fixed outdoor, spotlight, IR, tamper detection |
+| Model | Type | Notes |
+|-------|------|-------|
+| VIGI C540V | Outdoor PTZ, 4MP, spotlight + IR | Pan/tilt/zoom, 6 presets tested |
+| InSight S245 | Fixed outdoor, 4MP, spotlight + IR | Tamper detection, loitering/scene change via ONVIF |
 
-Other VIGI and InSight cameras using the same local HTTPS API should also work.
+Other VIGI and InSight models using the same local HTTPS API should also work.
+Entity types are created dynamically — only entities the camera actually supports are registered.
+
+---
+
+## Features by Entity Type
+
+### Camera
+| Entity | Description |
+|--------|-------------|
+| Stream | Live RTSP stream (HD `stream1`), accessible in dashboards and automations |
+
+### Switches
+| Entity | Description | Cameras |
+|--------|-------------|---------|
+| Motion Detection | Enable/disable motion detection | All |
+| Person Detection | Enable/disable AI person detection | Most |
+| Vehicle Detection | Enable/disable AI vehicle detection | Most |
+| Tamper Detection | Enable/disable camera tamper alert | S245 + others |
+| Status LED | Turn the camera's status LED on/off | All |
+| Alarm | Master alarm enable/disable | All |
+| Light Alarm | Flash the spotlight when an alarm triggers | All with spotlight |
+| Sound Alarm | Play the built-in alarm tone when triggered | All with speaker |
+| Speaker Mute | Mute the camera's speaker output | All |
+| Microphone Mute | Mute the camera's microphone | All |
+
+### Sensors
+| Entity | Description | Category |
+|--------|-------------|----------|
+| SD Card Used | Storage used as a percentage | — |
+| SD Card Total | Total SD card capacity (GB) | — |
+| SD Card Free | Free SD card space (GB) | — |
+| SD Card Status | Card status string from firmware | — |
+| Firmware Version | Camera firmware version | Diagnostic (hidden by default) |
+| IP Address | Camera's current IP address | Diagnostic |
+| Connection Type | `DHCP` or `Static` | Diagnostic |
+
+### Binary Sensors
+| Entity | Trigger | Auto-clears |
+|--------|---------|-------------|
+| Loop Recording | SD card loop recording is active (polled) | — |
+| Motion | Motion detected (ONVIF real-time) | 15 s |
+| Person Detected | Person in frame (ONVIF real-time) | 15 s |
+| Tamper | Camera tampered/covered (ONVIF real-time) | 15 s |
+| Intrusion | Intrusion zone entered (ONVIF real-time) | 15 s |
+| Line Crossing | Defined line crossed (ONVIF real-time) | 15 s |
+| Smart Detection | Vehicle / sound / loitering / abandoned object / scene change (ONVIF catch-all) | 15 s |
+
+ONVIF binary sensors update in real time via a pull-point subscription — they do not
+wait for the 30-second coordinator poll. Detection zones (intrusion areas, line paths)
+are configured in the VIGI app or camera web UI, not through this integration.
+
+### Numbers
+| Entity | Range | Description |
+|--------|-------|-------------|
+| Speaker Volume | 0–100 | Camera speaker output level |
+| Motion Sensitivity | 1–100 | Threshold for motion detection |
+| Spotlight Intensity | 1–4 | White-light spotlight brightness |
+
+### Select
+| Entity | Options | Description |
+|--------|---------|-------------|
+| Night Vision Mode | IR Auto, IR Always On, Spotlight Always On, Colour, Off | Switches IR/spotlight behaviour |
+| PTZ Preset *(PTZ only)* | All named presets | Move camera to a saved position |
+
+### Buttons *(PTZ cameras only)*
+Six jog buttons: **Pan Left**, **Pan Right**, **Tilt Up**, **Tilt Down**, **Zoom In**, **Zoom Out**.
+Each press moves the camera for 1 second then stops automatically.
+For custom duration, use the `vigicam.ptz` service instead.
+
+---
+
+## PTZ Services
+
+Three services are available for PTZ cameras. Find them in **Developer Tools → Services**
+or call them from automations and scripts.
+
+### `vigicam.ptz` — Continuous move
+
+```yaml
+service: vigicam.ptz
+data:
+  entity_id: camera.vigi_c540v_stream
+  direction: right          # left / right / up / down / zoom_in / zoom_out
+  speed: 0.4                # 0.1–1.0 (default 0.3)
+  duration: 3               # seconds before auto-stop (optional)
+```
+
+If `duration` is omitted the camera moves until `vigicam.ptz_stop` is called.
+
+### `vigicam.ptz_stop` — Stop movement
+
+```yaml
+service: vigicam.ptz_stop
+data:
+  entity_id: camera.vigi_c540v_stream
+```
+
+### `vigicam.goto_preset` — Go to a named preset
+
+```yaml
+service: vigicam.goto_preset
+data:
+  entity_id: camera.vigi_c540v_stream
+  preset: "Full Stable Yard"    # exactly as shown in the PTZ Preset select entity
+```
+
+This is the recommended way to move to a preset from an automation, especially when
+there are many presets. The preset name must match exactly (case-sensitive).
+
+---
+
+## PTZ Dashboard Controls
+
+HA's camera card shows the live stream but doesn't overlay PTZ controls.
+The cleanest approach is a vertical stack combining the camera stream with a direction
+pad below it. Copy this YAML into a Manual card in your dashboard editor:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: camera
+    entity: camera.vigi_c540v_stream
+    live_view: true
+
+  - type: grid
+    columns: 3
+    square: true
+    cards:
+      - type: button
+        entity: button.vigi_c540v_pan_left
+        show_name: false
+        icon: mdi:pan-left
+      - type: button
+        entity: button.vigi_c540v_tilt_up
+        show_name: false
+        icon: mdi:pan-up
+      - type: button
+        entity: button.vigi_c540v_pan_right
+        show_name: false
+        icon: mdi:pan-right
+      - type: button
+        entity: button.vigi_c540v_zoom_out
+        show_name: false
+        icon: mdi:magnify-minus
+      - type: button
+        entity: button.vigi_c540v_tilt_down
+        show_name: false
+        icon: mdi:pan-down
+      - type: button
+        entity: button.vigi_c540v_zoom_in
+        show_name: false
+        icon: mdi:magnify-plus
+
+  - type: entity
+    entity: select.vigi_c540v_ptz_preset
+    name: Go to preset
+```
+
+> Replace `vigi_c540v` with your camera's entity slug. To find it: open the device page
+> in HA, click any button entity, and copy the entity ID prefix.
+
+---
 
 ## Installation via HACS
 
@@ -48,6 +195,8 @@ Copy the `custom_components/vigicam/` folder into your HA config directory:
 
 Restart Home Assistant after copying.
 
+---
+
 ## Adding a Camera
 
 1. Go to **Settings → Devices & Services**
@@ -57,70 +206,58 @@ Restart Home Assistant after copying.
    - **IP Address** — the camera's local IP (find it in your router or the VIGI app)
    - **Username** — `admin` (default)
    - **Password** — set during camera setup in the VIGI app
-5. Click **Submit** — the integration validates the credentials before saving
+5. Click **Submit** — the integration validates credentials before saving
 
-Repeat for each camera. Each camera appears as a separate device.
+Repeat for each camera. Each camera is a separate device with its own entity set.
 
-## Viewing the Live Stream
-
-After adding a camera, add a **Camera card** to any dashboard:
-
-1. Open a dashboard → **Edit** → **+ Add Card**
-2. Choose **Camera**
-3. Select your camera entity (e.g. `camera.vigi_c540v_stream`)
-
-The stream is also available in automations and scripts via the `camera` entity.
-
-> The camera web interface is linked directly from the device info page —
-> click **Visit** on the device card to open the camera's local admin UI.
+---
 
 ## SD Card
 
-Both sensors reporting total/free space and used percentage require the camera to have
-a functioning SD card. If the card is full (100% used with loop recording active),
-values will still be reported correctly. If no card is fitted, these sensors will be
-unavailable.
+Storage sensors require a functioning SD card. Used %, total, and free values are
+calculated from the camera's accurate byte fields rather than its `percent` field,
+which is inconsistent across firmware versions.
 
-## Detection Events
+If loop recording is active and the card is full, the **SD Card Used** sensor will
+correctly report ~100% and **Loop Recording** will be `On`.
 
-The switches control whether each detection type is active on the camera. Real-time
-detection events (motion triggered, person appeared, vehicle detected) require ONVIF
-event support — this is planned for a future release. For now, use the VIGI app or
-HA's built-in ONVIF integration alongside this one for event notifications.
+---
+
+## ONVIF Events
+
+Real-time detection binary sensors use an ONVIF pull-point subscription that starts
+automatically when the integration loads. The subscription renews every hour and
+reconnects automatically after errors.
+
+Detection zone configuration (intrusion areas, line crossing paths) is done in the
+**VIGI app** or the camera's **web UI** — this integration reports when they fire
+but cannot configure the zones themselves.
+
+**Smart Detection** covers multiple event types that cannot be separated at the ONVIF
+level: vehicle, sound, loitering, abandoned object, and scene change all trigger the
+same `IsTPSmartEvent` topic.
+
+---
 
 ## Dependencies
 
 `pycryptodome` is installed automatically by Home Assistant from the manifest.
-No other dependencies are required.
-
-## Development / Probing
-
-```bash
-pip3 install pycryptodome
-python3 probe/probe_vigi.py <camera-ip> admin <password>
-```
+No other Python dependencies are required.
 
 ---
 
 ## Attribution & Acknowledgements
 
-This integration was built independently but draws on the groundwork laid by others
-in the TP-Link camera and Home Assistant communities:
+- **[JurajNyiri/HomeAssistant-Tapo-Control](https://github.com/JurajNyiri/HomeAssistant-Tapo-Control)** (MIT)
+  — entity architecture, coordinator pattern, and platform structure inspiration.
+  VIGI cameras are not supported upstream by policy, which motivated this integration.
 
-- **[JurajNyiri/HomeAssistant-Tapo-Control](https://github.com/JurajNyiri/HomeAssistant-Tapo-Control)**
-  (MIT License) — the gold standard TP-Link camera integration for Home Assistant.
-  The entity architecture, coordinator pattern, and platform structure of this project
-  were inspired by this work. VIGI cameras are not supported upstream (by policy, not
-  technical incompatibility), which motivated this separate integration.
-
-- **[JurajNyiri/pytapo](https://github.com/JurajNyiri/pytapo)**
-  (MIT License) — Python library for the Tapo local API. The authentication flow in
-  `api.py` is based on the protocol documented and implemented in pytapo. VIGI cameras
-  differ slightly (stok token location in the login response), which is handled here.
+- **[JurajNyiri/pytapo](https://github.com/JurajNyiri/pytapo)** (MIT)
+  — authentication flow reference. VIGI cameras differ slightly (stok token at top level).
 
 - **[yetanothercarbot/vigi_camera_lighting](https://github.com/yetanothercarbot/vigi_camera_lighting)**
   — useful reference for VIGI spotlight/night-vision endpoint behaviour.
 
 - The **Home Assistant** developer community for integration architecture patterns.
 
-This project is MIT licensed. See [LICENSE](LICENSE).
+MIT licensed. See [LICENSE](LICENSE).
