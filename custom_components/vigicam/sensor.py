@@ -117,6 +117,14 @@ SENSORS: tuple[VIGISensorDescription, ...] = (
             d.get("network", {}).get("wan_type"),
         ),
     ),
+    VIGISensorDescription(
+        key="mac_address",
+        name="MAC Address",
+        icon="mdi:identifier",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda d: d.get("device_info", {}).get("mac"),
+    ),
 )
 
 

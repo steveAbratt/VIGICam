@@ -9,6 +9,13 @@
           "username": "Username",
           "password": "Password"
         }
+      },
+      "name": {
+        "title": "Name this camera",
+        "description": "The name pulled from the camera is shown below. You can change it to anything you like — this is how it will appear in Home Assistant.",
+        "data": {
+          "name": "Camera name"
+        }
       }
     },
     "error": {
