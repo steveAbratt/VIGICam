@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession, asy
 from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import CONF_VERIFY_SSL, DOMAIN
 from .coordinator import VIGICoordinator
+from .onvif_events import VIGIOnvifEvents
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,25 +54,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = VIGICoordinator(hass, camera_api, has_ptz=has_ptz)
     await coordinator.async_config_entry_first_refresh()
 
+    onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
+
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "api": camera_api,
         "coordinator": coordinator,
+        "onvif_events": onvif_events,
         "device_info": device_info,
         "has_ptz": has_ptz,
         "presets": presets,
         "ip": ip,
         "username": username,
         "password": password,
+        "entry_id": entry.entry_id,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await onvif_events.async_start()
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        # api.close() only cleans up sessions the API created itself;
-        # sessions provided by HA helpers are managed by HA.
-        await hass.data[DOMAIN].pop(entry.entry_id)["api"].close()
+        data = hass.data[DOMAIN].pop(entry.entry_id)
+        await data["onvif_events"].async_stop()
+        await data["api"].close()
     return unloaded

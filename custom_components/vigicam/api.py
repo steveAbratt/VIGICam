@@ -220,6 +220,18 @@ class VIGICamera:
             {"chn1_msg_alarm_info": {"enabled": "on" if enabled else "off"}},
         )
 
+    async def set_light_alarm(self, enabled: bool) -> None:
+        await self.set(
+            "msg_alarm",
+            {"chn1_msg_alarm_info": {"light_alarm_enabled": "on" if enabled else "off"}},
+        )
+
+    async def set_sound_alarm(self, enabled: bool) -> None:
+        await self.set(
+            "msg_alarm",
+            {"chn1_msg_alarm_info": {"sound_alarm_enabled": "on" if enabled else "off"}},
+        )
+
     # ── LED ───────────────────────────────────────────────────────────────────
 
     async def get_led(self) -> dict:
@@ -264,10 +276,16 @@ class VIGICamera:
         hd = resp.get("harddisk_manage", {}).get("hd_info", [])
         # Some firmware returns a list, others a single dict
         if isinstance(hd, list):
-            return hd[0] if hd else {}
-        if isinstance(hd, dict):
-            return hd
-        return {}
+            entry = hd[0] if hd else {}
+        elif isinstance(hd, dict):
+            entry = hd
+        else:
+            return {}
+        # Camera wraps disk data one level deeper: {"hd_info_1": {actual data}}
+        # Unwrap if the expected keys aren't at the top level
+        if isinstance(entry, dict) and "status" not in entry and "disk_name" not in entry:
+            entry = next(iter(entry.values()), {})
+        return entry if isinstance(entry, dict) else {}
 
     # ── Tamper detection ──────────────────────────────────────────────────────
 
