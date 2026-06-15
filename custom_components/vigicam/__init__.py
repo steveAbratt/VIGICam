@@ -324,9 +324,9 @@ def _register_services(hass: HomeAssistant) -> None:
         proc = await asyncio.create_subprocess_exec(
             ffmpeg_bin,
             "-i", "pipe:0",
-            "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le",
-            "-map_metadata", "-1",  # strip all metadata chunks
-            "-fflags", "+bitexact",  # minimal, reproducible WAV header
+            "-ar", "8000", "-ac", "1", "-acodec", "pcm_mulaw",
+            "-map_metadata", "-1",
+            "-fflags", "+bitexact",
             "-f", "wav", "pipe:1",
             "-loglevel", "quiet",
             stdin=asyncio.subprocess.PIPE,
