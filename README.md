@@ -69,6 +69,7 @@ ONVIF topics. Line Crossing fires when configured line crossing zones are trigge
 Smart Detection is a catch-all for vehicle, sound, loitering, abandoned object, and
 scene change — all five share a single ONVIF topic and cannot be separated further.
 
+
 ### Numbers
 | Entity | Range | Description |
 |--------|-------|-------------|
