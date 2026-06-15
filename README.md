@@ -113,6 +113,17 @@ Media browser URLs (`/media/local/`) and HA www URLs (`/local/`) are automatical
 
 **Limit:** 15 seconds / 256 KB after conversion to 8 kHz mono WAV.
 
+### Blueprint
+
+A ready-made blueprint for this too — upload your file to the media browser, paste the URL, done:
+
+1. **Settings → Automations → Blueprints → Import Blueprint**
+2. Paste:
+   ```
+   https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_play_file.yaml
+   ```
+3. Click **Create Automation** — fill in trigger, camera, audio URL, repeat count. Done.
+
 See **[docs/USAGE.md](docs/USAGE.md)** for full details on slots, repeat count, and combining with `vigicam.speak`.
 
 ### Blueprint
@@ -124,7 +135,7 @@ A ready-made automation blueprint turns this into a simple form:
    ```
    https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_announce.yaml
    ```
-3. Click **Create Automation** — fill in trigger, camera, message, TTS engine. Done.
+3. Click **Create Automation** — fill in trigger, camera, message, TTS engine, repeat count. Done.
 
 ---
 
