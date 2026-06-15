@@ -202,44 +202,51 @@ data:
 
 Safe to call on an already-empty slot.
 
-### TTS announcement workflow
+### `vigicam.speak` — TTS announcement (one service call)
 
-Generate a text-to-speech clip and play it through the camera speaker:
+The simplest way to speak a message through the camera. Handles the full pipeline
+automatically: generate TTS → convert to camera-compatible format → upload → play.
 
 ```yaml
-action:
-  # 1. Generate TTS and get audio URL (requires HA 2024.6+)
-  - action: tts.get_tts_audio
-    data:
-      engine_id: tts.cloud
-      message: "Motion detected at the front gate"
-      language: en-GB
-    response_variable: tts_result
-
-  # 2. Upload to slot 101 and play immediately
-  - service: vigicam.upload_audio
-    data:
-      entity_id: camera.vigi_c540v_stream
-      url: "{{ tts_result.url }}"
-      slot: 101
-      play: true
+service: vigicam.speak
+data:
+  entity_id: camera.vigi_c540v_stream
+  message: "Motion detected at the front gate"
+  tts_engine: tts.cloud        # any configured HA TTS entity
+  language: en-GB              # optional — defaults to engine default
+  slot: 101                    # optional — which slot to use (default 101)
 ```
 
-> `tts.get_tts_audio` returns `{"url": "...", "mime_type": "audio/mpeg"}`. Available in
-> HA 2024.6+. Adjust `engine_id` and `language` for your TTS provider.
+The message supports Jinja2 templates:
+```yaml
+message: "{{ now().strftime('%-I:%M %p') }} — person detected at the stables"
+```
 
-### Blueprint — Announce on trigger
+**Requirements:** HA 2024.6+ (for `tts.get_tts_audio` response support).
 
-A ready-made automation blueprint is included at
-`blueprints/automation/vigicam/camera_announce.yaml`. To use it:
+The format conversion is handled automatically — ffmpeg resamples all TTS engine
+outputs (MP3, OGG, WAV at any bitrate) to 8 kHz mono WAV, which always fits the
+camera's format constraints. Slot 101 is overwritten each call; use 102/103 only
+if you need TTS and a static sound simultaneously.
 
-1. Copy the `blueprints/` folder to your HA config directory (alongside `custom_components/`)
-2. In HA go to **Settings → Automations → Blueprints → Import Blueprint**
-   and paste the URL of the blueprint file from the GitHub repository
+### Blueprint — Speak on trigger
 
-The blueprint plays a pre-uploaded audio slot when a trigger fires, with a configurable
-repeat count. Conditions and additional steps can be added in the automation editor after
-importing.
+A ready-made automation blueprint at `blueprints/automation/vigicam/camera_announce.yaml`
+wraps `vigicam.speak`. To install it:
+
+**Option A — Import from GitHub (easiest):**
+In HA go to **Settings → Automations → Blueprints → Import Blueprint** and paste:
+```
+https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_announce.yaml
+```
+
+**Option B — Manual copy:**
+Copy the `blueprints/` folder to your HA config directory (alongside `custom_components/`),
+then reload blueprints from **Developer Tools → YAML → Reload All YAML**.
+
+After importing: pick your trigger (motion sensor, time pattern, state change, anything),
+pick a camera, write your message (template or static), pick a TTS engine. Done — the
+automation handles everything else.
 
 ### Alarm loop count vs. play_audio
 

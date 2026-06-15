@@ -80,6 +80,49 @@ goto_preset:
       selector:
         text:
 
+speak:
+  name: Speak
+  description: >
+    Generate a TTS announcement and play it through the camera speaker in one step.
+    Handles the full pipeline: TTS generation → convert to camera-compatible WAV
+    (8 kHz mono via ffmpeg) → upload to slot → play.
+    Requires HA 2024.6+ for tts.get_tts_audio response support.
+  fields:
+    entity_id:
+      name: Camera entity
+      description: The camera to speak through.
+      required: true
+      selector:
+        entity:
+          domain: camera
+          integration: vigicam
+    message:
+      name: Message
+      description: Text to speak. Supports Jinja2 templates.
+      required: true
+      example: "Motion detected at the front gate"
+      selector:
+        text: {}
+    tts_engine:
+      name: TTS engine
+      description: TTS entity to use (e.g. tts.cloud, tts.piper). Default tts.cloud.
+      selector:
+        entity:
+          domain: tts
+    language:
+      name: Language (optional)
+      description: Language code (e.g. en-GB). Defaults to engine default.
+      selector:
+        text: {}
+    slot:
+      name: Audio slot
+      description: Custom slot to upload to (101, 102, or 103). Default 101.
+      selector:
+        number:
+          min: 101
+          max: 103
+          step: 1
+
 upload_audio:
   name: Upload Audio
   description: >

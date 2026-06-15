@@ -1,56 +1,75 @@
 blueprint:
-  name: VIGI Camera — Announce on Trigger
+  name: VIGI Camera — Speak on Trigger
   description: >
-    When a trigger fires, play a pre-uploaded audio file through a VIGI camera's
-    speaker. Upload your audio file to the camera first using vigicam.upload_audio,
-    then reference the slot here.
+    When a trigger fires, generate a TTS announcement and play it through a VIGI camera's
+    speaker. The full pipeline — TTS generation, format conversion, upload, and playback —
+    is handled automatically by the vigicam.speak service.
 
 
-    **Slot guide:**
-
-    - Slot 101 — best for TTS/dynamic content (overwrites each time you upload).
-
-    - Slot 102 / 103 — best for fixed sounds uploaded once and kept.
+    The message supports templates so you can include dynamic data from the trigger
+    (e.g. sensor values, entity states, trigger details).
 
 
-    **Upload example (Developer Tools → Services):**
+    **Requirements:**
 
-        service: vigicam.upload_audio
-        data:
-          entity_id: camera.your_camera
-          url: "http://your-ha-ip:8123/local/announcement.wav"
-          slot: 102
+    - A configured TTS engine (e.g. Nabu Casa Cloud TTS, Piper local TTS).
+
+    - HA 2024.6+ (for tts.get_tts_audio response support).
+
+    - VIGICam integration 0.3.9+.
 
 
-    **TTS workflow (upload + play in one step):**
+    **Example messages:**
 
-        service: vigicam.upload_audio
-        data:
-          entity_id: camera.your_camera
-          url: "{{ tts_proxy_url }}"
-          slot: 101
-          play: true
+    - Static: `"Motion detected at the front gate"`
+
+    - Dynamic: `"{{ now().strftime('%-I:%M %p') }} — person detected at stables"`
 
   domain: automation
   input:
     trigger_config:
       name: Trigger
-      description: What should fire the announcement (motion, time, state change, etc.).
+      description: What fires the announcement. Can be any trigger type.
       selector:
         trigger: {}
     camera_entity:
       name: Camera
-      description: The VIGI camera to play audio through.
+      description: The VIGI camera to speak through.
       selector:
         entity:
           domain: camera
           integration: vigicam
+    message:
+      name: Announcement message
+      description: >
+        Text to speak. Supports Jinja2 templates — reference trigger data, entity
+        states, or time. Keep under ~12 seconds of speech to stay within camera limits.
+      example: "Motion detected at the front gate"
+      selector:
+        template: {}
+    tts_engine:
+      name: TTS engine
+      description: >
+        Which TTS engine to use. Select the entity (e.g. tts.cloud for Nabu Casa,
+        tts.piper for local Piper). Must be configured and working in HA.
+      default: tts.cloud
+      selector:
+        entity:
+          domain: tts
+    language:
+      name: Language (optional)
+      description: >
+        Language code for the TTS engine (e.g. en-GB, en-US, fr-FR). Leave blank
+        to use the engine's default language.
+      default: ""
+      selector:
+        text: {}
     audio_slot:
       name: Audio slot
       description: >
-        Custom slot to play (101, 102, or 103). Must be uploaded to the camera first.
-        Slot 101 is the convention for TTS/dynamic content.
-        Slots 102 and 103 are for fixed sounds that you upload once.
+        Camera slot to use for TTS audio (101, 102, or 103). Slot 101 is overwritten
+        each time — this is the convention for dynamic/TTS content. Use 102 or 103
+        only if you need TTS and a static sound simultaneously.
       default: 101
       selector:
         number:
@@ -58,25 +77,14 @@ blueprint:
           max: 103
           step: 1
           mode: box
-    repeat_times:
-      name: Repeat count
-      description: >
-        How many times to play the audio. Default 1 (play once). Use 2–3 for
-        announcements you want to be sure are heard. The camera plays one full
-        repetition before starting the next, with a 1-second gap between each.
-      default: 1
-      selector:
-        number:
-          min: 1
-          max: 5
-          step: 1
-          mode: box
 
 trigger: !input trigger_config
 
 action:
-  - service: vigicam.play_audio
+  - service: vigicam.speak
     data:
       entity_id: !input camera_entity
+      message: !input message
+      tts_engine: !input tts_engine
+      language: !input language
       slot: !input audio_slot
-      times: !input repeat_times
