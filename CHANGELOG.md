@@ -14,6 +14,21 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.3] - 2026-06-15
+
+### Fixed
+- **PTZ preset buttons and select never created** — `get_presets()` read field names
+  `pan/tilt/zoom` but the camera API returns `position_pan/position_tilt/position_zoom`.
+  The IndexError was swallowed by the except clause, so `get_presets()` always returned
+  `[]`, causing `has_ptz = False` at startup. Preset buttons and the PTZ Preset select
+  entity were therefore never registered for any camera. Now only reads `id` and `name`
+  (neither buttons nor select use the position values).
+- **Preset names shown URL-encoded** — camera returns `"Zoomed%20Stable%20View"`;
+  now decoded with `urllib.parse.unquote()` so entity names and select options show
+  the correct human-readable name.
+
+---
+
 ## [0.3.2] - 2026-06-15
 
 ### Added
