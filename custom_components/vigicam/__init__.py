@@ -205,30 +205,45 @@ def _register_services(hass: HomeAssistant) -> None:
         """
         audio_bytes: bytes | None = None
 
-        # Primary path: access the TTS manager directly from hass.data.
-        # HA 2024.6+ stores it under "tts_manager"; older versions under "tts".
-        # This avoids the tts.get_tts_audio service which was removed in HA 2025.x+.
-        for _key in ("tts_manager", "tts"):
-            _mgr = hass.data.get(_key)
-            if _mgr is not None and hasattr(_mgr, "async_get_tts_audio"):
-                # Try with full entity_id first (HA 2024.6+), then platform name.
-                for _engine in (tts_engine, tts_engine.removeprefix("tts.")):
-                    try:
-                        _ext, audio_bytes = await _mgr.async_get_tts_audio(
-                            _engine,
-                            message,
-                            language=language or None,
-                            options={},
-                        )
-                        if audio_bytes:
-                            break
-                    except Exception:
-                        audio_bytes = None
-                if audio_bytes:
-                    break
+        # Approach 1: import DATA_TTS_MANAGER from HA so we always use the right key,
+        # regardless of which HA version renamed it.
+        try:
+            from homeassistant.components.tts import DATA_TTS_MANAGER as _TTS_KEY  # type: ignore[attr-defined]
+            _mgr = hass.data.get(_TTS_KEY)
+        except ImportError:
+            _mgr = None
 
-        if audio_bytes is None:
-            # Fallback: tts.get_tts_audio service (available in some HA builds).
+        # Approach 1b: fall back to known key strings if the import didn't work.
+        if _mgr is None:
+            for _key in ("tts_manager", "tts"):
+                _mgr = hass.data.get(_key)
+                if _mgr is not None and hasattr(_mgr, "async_get_tts_audio"):
+                    break
+                _mgr = None
+
+        if _mgr is not None and hasattr(_mgr, "async_get_tts_audio"):
+            for _engine in (tts_engine, tts_engine.removeprefix("tts.")):
+                try:
+                    _ext, audio_bytes = await _mgr.async_get_tts_audio(
+                        _engine, message, language=language or None, options={},
+                    )
+                    if audio_bytes:
+                        break
+                except Exception:
+                    audio_bytes = None
+
+        # Approach 2: module-level async_get_tts_audio (HA 2024.10+ public API).
+        if not audio_bytes:
+            try:
+                from homeassistant.components.tts import async_get_tts_audio as _tts_fn  # type: ignore[attr-defined]
+                _ext, audio_bytes = await _tts_fn(
+                    hass, tts_engine, message, language=language or None,
+                )
+            except (ImportError, Exception):
+                audio_bytes = None
+
+        # Approach 3: tts.get_tts_audio service (available in some HA builds).
+        if not audio_bytes:
             tts_kwargs: dict = {"engine_id": tts_engine, "message": message}
             if language:
                 tts_kwargs["language"] = language
@@ -238,28 +253,26 @@ def _register_services(hass: HomeAssistant) -> None:
                     blocking=True, return_response=True,
                 )
                 tts_url = (tts_resp or {}).get("url")
-                if not tts_url:
-                    raise VIGIError(
-                        f"TTS service returned no URL (response: {tts_resp}). "
-                        "Check that the TTS engine is configured and working."
-                    )
-                session = async_get_clientsession(hass)
-                async with session.get(tts_url) as resp:
-                    resp.raise_for_status()
-                    audio_bytes = await resp.read()
-            except VIGIError:
-                raise
-            except Exception as exc:
-                raise VIGIError(
-                    f"TTS generation failed for '{tts_engine}'. "
-                    "The internal TTS manager was not accessible and tts.get_tts_audio "
-                    f"is not available in this HA version. Error: {exc}"
-                ) from exc
+                if tts_url:
+                    session = async_get_clientsession(hass)
+                    async with session.get(tts_url) as resp:
+                        resp.raise_for_status()
+                        audio_bytes = await resp.read()
+            except Exception:
+                audio_bytes = None
 
         if not audio_bytes:
+            # Log which hass.data keys exist so we can diagnose the right approach.
+            tts_keys = [k for k in hass.data if isinstance(k, str) and "tts" in k.lower()]
+            _LOGGER.error(
+                "vigicam.speak: all TTS access methods failed for '%s' on HA %s. "
+                "TTS-related hass.data keys: %s. "
+                "Please report this at https://github.com/steveAbratt/VIGICam/issues",
+                tts_engine, hass.config.version, tts_keys,
+            )
             raise VIGIError(
-                f"TTS engine '{tts_engine}' returned empty audio. "
-                "Check that the TTS engine is installed, configured, and working."
+                f"Could not get TTS audio from '{tts_engine}' on HA {hass.config.version}. "
+                "Check the HA log for diagnostics."
             )
 
         # Convert to 8 kHz mono 16-bit PCM WAV via ffmpeg.
