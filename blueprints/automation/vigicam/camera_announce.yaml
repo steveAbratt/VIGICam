@@ -19,6 +19,12 @@ blueprint:
     - VIGICam integration 0.3.9+.
 
 
+    **Audio length limit:** The camera accepts a maximum of 15 seconds / 256 KB of audio.
+    Keep messages to around 10 seconds or less to be safe. A typical spoken sentence is
+    3–5 seconds. Messages that exceed the limit will fail silently (check the HA log for
+    details).
+
+
     **Example messages:**
 
     - Static: `"Motion detected at the front gate"`
@@ -42,8 +48,9 @@ blueprint:
     message:
       name: Announcement message
       description: >
-        Text to speak. Supports Jinja2 templates — reference trigger data, entity
-        states, or time. Keep under ~12 seconds of speech to stay within camera limits.
+        Text to speak. Supports Jinja2 templates — reference trigger data, entity states,
+        or time. Keep messages to ~10 seconds or less (camera hard limit: 15 s / 256 KB).
+        A typical sentence is 3–5 seconds. Longer messages will fail — check the HA log.
       example: "Motion detected at the front gate"
       selector:
         template: {}

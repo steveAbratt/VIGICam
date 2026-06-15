@@ -98,7 +98,10 @@ speak:
           integration: vigicam
     message:
       name: Message
-      description: Text to speak. Supports Jinja2 templates.
+      description: >
+        Text to speak. Supports Jinja2 templates. Keep under ~10 seconds of speech —
+        the camera's hard limit is 15 seconds / 256 KB. A typical sentence is 3–5 seconds.
+        Messages that exceed the limit will fail (check the HA log for details).
       required: true
       example: "Motion detected at the front gate"
       selector:
