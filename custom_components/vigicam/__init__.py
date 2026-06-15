@@ -314,7 +314,10 @@ def _register_services(hass: HomeAssistant) -> None:
                 "Check the HA log for diagnostic keys."
             )
 
-        # Convert to 8 kHz mono 16-bit PCM WAV via ffmpeg.
+        # Convert to 8 kHz mono 16-bit PCM via ffmpeg, outputting raw PCM (no header).
+        # Writing WAV directly to a pipe leaves an incorrect 0x7FFFFFFF size placeholder
+        # in the RIFF header (ffmpeg can't seek back on stdout), which camera firmware
+        # rejects. We build our own header with the correct size after conversion.
         try:
             from homeassistant.components.ffmpeg import get_ffmpeg_manager
             ffmpeg_bin = get_ffmpeg_manager(hass).binary
@@ -324,18 +327,29 @@ def _register_services(hass: HomeAssistant) -> None:
         proc = await asyncio.create_subprocess_exec(
             ffmpeg_bin,
             "-i", "pipe:0",
-            "-ar", "8000", "-ac", "1", "-acodec", "pcm_mulaw",
-            "-map_metadata", "-1",
-            "-fflags", "+bitexact",
-            "-f", "wav", "pipe:1",
+            "-ar", "8000", "-ac", "1",
+            "-f", "s16le",  # raw PCM, no header — avoids size placeholder issue
             "-loglevel", "quiet",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        wav_bytes, stderr = await proc.communicate(input=audio_bytes)
-        if proc.returncode != 0 or not wav_bytes:
+        pcm_data, stderr = await proc.communicate(input=audio_bytes)
+        if proc.returncode != 0 or not pcm_data:
             raise VIGIError(f"ffmpeg audio conversion failed: {stderr.decode()[:200]}")
+
+        # Build a correct WAV header with the actual data size.
+        import struct
+        _sr, _ch, _bits = 8000, 1, 16
+        _byte_rate = _sr * _ch * _bits // 8
+        _block_align = _ch * _bits // 8
+        _data_size = len(pcm_data)
+        wav_bytes = struct.pack(
+            "<4sI4s4sIHHIIHH4sI",
+            b"RIFF", 36 + _data_size, b"WAVE",
+            b"fmt ", 16, 1, _ch, _sr, _byte_rate, _block_align, _bits,
+            b"data", _data_size,
+        ) + pcm_data
 
         if len(wav_bytes) > 256_000:
             raise VIGIError(
