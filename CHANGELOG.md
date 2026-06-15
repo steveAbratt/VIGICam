@@ -14,6 +14,85 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.24] - 2026-06-15
+
+### Performance
+- **Sub-stream thumbnails** — dashboard card previews and history snapshots now grab a
+  frame from `stream2` (sub-stream, low bitrate) instead of `stream1` (HD). The live
+  view when tapping the card still uses the full HD stream1. Significantly reduces CPU
+  load on the HA host for thumbnail requests, especially on Raspberry Pi.
+
+### Docs
+- Replaced real HA IP address with `192.168.1.x` placeholder throughout README,
+  USAGE.md, and services.yaml.
+- Replaced location-specific example text with generic alternatives.
+
+---
+
+## [0.3.23] - 2026-06-15
+
+### Added
+- **`times` and `pause` inputs in the announce blueprint** (`camera_announce.yaml`) —
+  Repeat count (default 1, max 50) and Pause between repeats (default 1 s) added to
+  the VIGI Camera — Speak on Trigger blueprint.
+- **New blueprint: VIGI Camera — Play Audio File on Trigger** (`camera_play_file.yaml`) —
+  trigger-based automation to play a pre-recorded file from the HA media browser, a
+  `www/` URL, a file path, or an external URL. Includes slot, repeat count, and pause
+  inputs with guidance on getting the media browser URL.
+
+---
+
+## [0.3.22] - 2026-06-15
+
+### Added
+- **Device name suggestion during setup** — config flow now has a second step after
+  credentials are validated. The camera's configured name (`dev_name` / `alias`,
+  URL-decoded) is pre-filled so users can confirm or change it before the entry is
+  created. Existing entries are unaffected.
+- **MAC Address diagnostic sensor** — shows the camera's MAC address. Hidden by default;
+  enable from entity settings. No extra API calls — pulled from the existing `device_info`
+  poll.
+
+---
+
+## [0.3.21] - 2026-06-15
+
+### Fixed
+- **`times` parameter ignored in `play_file` and `speak`** — `play_audio` was sleeping
+  only `pause` seconds (default 1 s) between plays. If the clip was longer than `pause`,
+  the next `test_audio` fired while the camera was still playing, and the camera dropped
+  it. Fix: `play_audio` now accepts `audio_duration` (calculated from WAV size) and sleeps
+  for `audio_duration + pause` between plays, ensuring the clip always finishes first.
+  `vigicam.play_audio` (existing slot, unknown duration) falls back to `pause`-only.
+
+---
+
+## [0.3.20] - 2026-06-15
+
+### Fixed
+- **`vigicam.play_file` "No such file" on HA OS** — HA OS mounts the media directory at
+  `/media/` (a separate partition), not `/config/media/`. Path resolution now uses
+  `hass.config.media_dirs.get("local")` which returns the correct base path per
+  installation type. Fallback to `config_dir/media/` for Container/Core/Supervised.
+
+---
+
+## [0.3.19] - 2026-06-15
+
+### Fixed
+- **`vigicam.play_file` 401 Unauthorized on HA media browser URLs** — HA's `/media/local/`
+  endpoint requires authentication that the shared aiohttp session does not carry. URLs
+  matching `/media/local/` or `/local/` are now automatically resolved to their equivalent
+  file paths on the HA host before fetching, avoiding the auth requirement entirely.
+  External URLs are unaffected.
+
+### Added
+- **HACS brand icon** — added `custom_components/vigicam/brand/icon.png` (wall-mounted
+  CCTV camera). HA 2026.3+ changed icon delivery for custom integrations to a `brand/`
+  subdirectory inside the integration folder.
+
+---
+
 ## [0.3.18] - 2026-06-15
 
 ### Added
