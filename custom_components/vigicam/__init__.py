@@ -401,14 +401,24 @@ def _register_services(hass: HomeAssistant) -> None:
         url = call.data["url"]
         slot = call.data["slot"]
         try:
+            from pathlib import Path as _Path
+            # Convert HA internal media/www URLs to file paths — these endpoints
+            # require auth that the shared client session doesn't carry.
+            if url.startswith(("http://", "https://")):
+                for _seg, _sub in (("/media/local/", "media"), ("/local/", "www")):
+                    if _seg in url:
+                        _rel = url.split(_seg, 1)[1].split("?")[0]
+                        url = str(_Path(hass.config.config_dir) / _sub / _rel)
+                        _LOGGER.debug("vigicam.play_file: resolved to path %s", url)
+                        break
+
             if url.startswith(("http://", "https://")):
                 session = async_get_clientsession(hass)
                 async with session.get(url) as resp:
                     resp.raise_for_status()
                     raw_bytes = await resp.read()
             else:
-                from pathlib import Path
-                raw_bytes = await hass.async_add_executor_job(Path(url).read_bytes)
+                raw_bytes = await hass.async_add_executor_job(_Path(url).read_bytes)
             wav = await _audio_to_camera_wav(raw_bytes, source_label=url)
             _LOGGER.debug("vigicam.play_file: WAV %d B → slot %d", len(wav), slot)
             try:
