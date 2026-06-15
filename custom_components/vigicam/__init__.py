@@ -203,39 +203,66 @@ def _register_services(hass: HomeAssistant) -> None:
         The camera's format limit is WAV mono 8 kHz ≤15 s ≤256 KB (or MP3 ≤64 kbps ≤128 KB).
         Converting everything to 8 kHz WAV avoids bitrate guessing and is always in-spec.
         """
-        # Ask HA to generate TTS audio and return the URL (HA 2024.6+).
-        tts_kwargs: dict = {"engine_id": tts_engine, "message": message}
-        if language:
-            tts_kwargs["language"] = language
-        try:
-            tts_resp = await hass.services.async_call(
-                "tts",
-                "get_tts_audio",
-                tts_kwargs,
-                blocking=True,
-                return_response=True,
-            )
-        except Exception as exc:
-            raise VIGIError(
-                f"TTS generation failed — make sure '{tts_engine}' is a valid TTS entity "
-                f"and HA is 2024.6+: {exc}"
-            ) from exc
+        audio_bytes: bytes | None = None
 
-        tts_url = (tts_resp or {}).get("url")
-        if not tts_url:
-            raise VIGIError(
-                f"TTS service returned no URL (response: {tts_resp}). "
-                "Check that the TTS engine is configured and working."
-            )
+        # Primary path: access the TTS manager directly from hass.data.
+        # HA 2024.6+ stores it under "tts_manager"; older versions under "tts".
+        # This avoids the tts.get_tts_audio service which was removed in HA 2025.x+.
+        for _key in ("tts_manager", "tts"):
+            _mgr = hass.data.get(_key)
+            if _mgr is not None and hasattr(_mgr, "async_get_tts_audio"):
+                # Try with full entity_id first (HA 2024.6+), then platform name.
+                for _engine in (tts_engine, tts_engine.removeprefix("tts.")):
+                    try:
+                        _ext, audio_bytes = await _mgr.async_get_tts_audio(
+                            _engine,
+                            message,
+                            language=language or None,
+                            options={},
+                        )
+                        if audio_bytes:
+                            break
+                    except Exception:
+                        audio_bytes = None
+                if audio_bytes:
+                    break
 
-        # Fetch the raw audio bytes.
-        session = async_get_clientsession(hass)
-        async with session.get(tts_url) as resp:
-            resp.raise_for_status()
-            audio_bytes = await resp.read()
+        if audio_bytes is None:
+            # Fallback: tts.get_tts_audio service (available in some HA builds).
+            tts_kwargs: dict = {"engine_id": tts_engine, "message": message}
+            if language:
+                tts_kwargs["language"] = language
+            try:
+                tts_resp = await hass.services.async_call(
+                    "tts", "get_tts_audio", tts_kwargs,
+                    blocking=True, return_response=True,
+                )
+                tts_url = (tts_resp or {}).get("url")
+                if not tts_url:
+                    raise VIGIError(
+                        f"TTS service returned no URL (response: {tts_resp}). "
+                        "Check that the TTS engine is configured and working."
+                    )
+                session = async_get_clientsession(hass)
+                async with session.get(tts_url) as resp:
+                    resp.raise_for_status()
+                    audio_bytes = await resp.read()
+            except VIGIError:
+                raise
+            except Exception as exc:
+                raise VIGIError(
+                    f"TTS generation failed for '{tts_engine}'. "
+                    "The internal TTS manager was not accessible and tts.get_tts_audio "
+                    f"is not available in this HA version. Error: {exc}"
+                ) from exc
+
+        if not audio_bytes:
+            raise VIGIError(
+                f"TTS engine '{tts_engine}' returned empty audio. "
+                "Check that the TTS engine is installed, configured, and working."
+            )
 
         # Convert to 8 kHz mono 16-bit PCM WAV via ffmpeg.
-        # HA declares ffmpeg as a dependency so the binary is available.
         try:
             from homeassistant.components.ffmpeg import get_ffmpeg_manager
             ffmpeg_bin = get_ffmpeg_manager(hass).binary
@@ -258,7 +285,7 @@ def _register_services(hass: HomeAssistant) -> None:
 
         if len(wav_bytes) > 256_000:
             raise VIGIError(
-                f"Converted WAV is {len(wav_bytes)//1024} KB — camera limit is 256 KB / 15 s. "
+                f"Converted WAV is {len(wav_bytes) // 1024} KB — camera limit is 256 KB / 15 s. "
                 "Shorten the TTS message."
             )
 
