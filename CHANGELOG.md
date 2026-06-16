@@ -14,6 +14,20 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.3.26] - 2026-06-16
+
+### Fixed
+- **Smart Detection and Line Crossing sensors showed "Off" / "On"** instead of "Clear" /
+  "Detected". Added `device_class=BinarySensorDeviceClass.MOTION` to both — consistent
+  with Motion, Person, Tamper, and Intrusion which already had the correct device class.
+
+### Docs
+- Added a note to Smart Detection in USAGE.md clarifying that vehicle detection fires
+  this sensor (not a separate entity) — the Detection Vehicle switch only enables the
+  feature on camera; the ONVIF event topic is shared across all smart detection types.
+
+---
+
 ## [0.3.25] - 2026-06-15
 
 ### Fixed

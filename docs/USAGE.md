@@ -260,6 +260,11 @@ abandoned objects, and scene change events. These five types all share a single 
 event topic (`IsTPSmartEvent`) on VIGI cameras and cannot be separated at the ONVIF
 level. If you need to distinguish them, check the VIGI app's event log.
 
+> **Vehicle detection:** if you have vehicle detection enabled on the camera, it fires
+> this sensor — there is no separate Vehicle Detected sensor. The **Detection Vehicle**
+> switch only enables or disables the feature on the camera; the event always arrives
+> as Smart Detection in HA.
+
 ### Loop Recording
 
 Indicates whether the camera's SD card loop recording is active. This is polled (not

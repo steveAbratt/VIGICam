@@ -82,12 +82,14 @@ BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
     VIGIBinarySensorDescription(
         key="line_cross",
         name="Line Crossing",
+        device_class=BinarySensorDeviceClass.MOTION,
         icon="mdi:vector-line",
         event_type="line_cross",
     ),
     VIGIBinarySensorDescription(
         key="smart_event",
         name="Smart Detection",
+        device_class=BinarySensorDeviceClass.MOTION,
         icon="mdi:shield-search",
         event_type="smart_event",
     ),
