@@ -408,6 +408,49 @@ class VIGICamera:
     async def goto_preset(self, preset_id: str) -> None:
         await self.do("preset", {"goto_preset": {"channel": 0, "id": preset_id}})
 
+    # ── Smart Frames ──────────────────────────────────────────────────────────
+
+    async def get_smart_frames(self, days_back: int = 1, max_items: int = 5) -> list[dict]:
+        """Return the most recent Smart Frame entries from the SD card, newest first.
+
+        Each dict: file_id, start_time (unix str), event_type, size.
+        Returns [] if Smart Frame capture is disabled or no SD card is present.
+
+        Uses get_media_list (not get_picture_list) because get_picture_list returns
+        items oldest-first by page and there is no way to request the last page without
+        knowing the total count first. get_media_list returns all items for the time
+        window in a single call.
+        """
+        import time as _time
+        now = int(_time.time())
+        try:
+            r = await self._request({"method": "do", "system": {"get_user_id": None}})
+            user_id = r.get("system", {}).get("user_id", 1)
+            r2 = await self._request({"method": "do", "media": {"get_media_list": {
+                "channel": [0], "media_type": [2], "all_event": 1,
+                "user_id": user_id,
+                "start_time": str(now - days_back * 86400), "end_time": str(now),
+                "event_type": [1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 16, 18, 26, 27, 28, 34],
+            }}})
+        except VIGIError:
+            return []
+        m = r2.get("media", {})
+        fids = m.get("file_id", [])
+        starts = m.get("start_time", [])
+        if not fids:
+            return []
+        entries = [
+            {
+                "file_id": fids[i],
+                "start_time": starts[i],
+                "event_type": m.get("event_type", [0] * len(fids))[i],
+                "size": m.get("size", [0] * len(fids))[i],
+            }
+            for i in range(len(fids))
+        ]
+        entries.sort(key=lambda x: int(x["start_time"]), reverse=True)
+        return entries[:max_items]
+
     # ── Network ───────────────────────────────────────────────────────────────
 
     async def get_network(self) -> dict:
