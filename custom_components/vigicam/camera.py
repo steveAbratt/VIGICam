@@ -1,11 +1,10 @@
 """Camera platform — RTSP stream via HA's stream integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from homeassistant.components.camera import Camera, CameraEntityFeature
-
-_LOGGER = logging.getLogger(__name__)
 from homeassistant.components.ffmpeg import get_ffmpeg_manager
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -14,6 +13,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import VIGICoordinator
 from .entity import VIGIEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -26,10 +27,8 @@ async def async_setup_entry(
 class VIGIRTSPCamera(VIGIEntity, Camera):
     """Live RTSP stream from the camera.
 
-    stream_source → stream1 (HD, used when the user taps to go live).
-    async_camera_image → stream2 (sub-stream, used for dashboard thumbnails
-    and history snapshots). The sub-stream is much lower bitrate so thumbnail
-    grabs are significantly lighter on the host CPU.
+    stream_source  → stream1 (HD main stream, used for live view).
+    async_camera_image → stream2 (sub-stream, lower bitrate dashboard thumbnails).
     """
 
     _attr_name = "Stream"
@@ -43,7 +42,6 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
         password = entry_data["password"]
         self._stream_url = f"rtsp://{user}:{password}@{ip}:554/stream1"
         self._snapshot_url = f"rtsp://{user}:{password}@{ip}:554/stream2"
-        self._redacted_stream_url = f"rtsp://{user}:***@{ip}:554/stream1"
         self._redacted_snapshot_url = f"rtsp://{user}:***@{ip}:554/stream2"
 
     @property
@@ -56,10 +54,21 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        """Grab a thumbnail from the sub-stream (stream2) — lighter than the HD stream."""
-        manager = get_ffmpeg_manager(self.hass)
+        ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
         try:
-            return await manager.get_image(self._snapshot_url, extra_cmd="-pred 1")
+            proc = await asyncio.create_subprocess_exec(
+                ffmpeg_bin,
+                "-rtsp_transport", "tcp",
+                "-i", self._snapshot_url,
+                "-frames:v", "1",
+                "-f", "image2", "-vcodec", "mjpeg",
+                "pipe:1",
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+            return stdout if proc.returncode == 0 and stdout else None
         except Exception as exc:
             safe = str(exc).replace(self._snapshot_url, self._redacted_snapshot_url)
             _LOGGER.debug("Snapshot grab failed: %s", safe)
