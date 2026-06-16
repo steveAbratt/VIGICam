@@ -14,6 +14,16 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0b2] - 2026-06-16
+
+### Fixed
+- Camera dashboard thumbnail was broken — `FFmpegManager.get_image` no longer exists in current HA versions. Replaced with `asyncio.create_subprocess_exec` (same pattern as Smart Frame downloads). Restores stream2 for low-bitrate dashboard thumbnails; stream1 remains the live view source.
+
+### Added
+- Documented the Last Detection image entity requirements in `docs/USAGE.md` (Smart Frame capture must be enabled; SD card must be formatted for image storage).
+
+---
+
 ## [0.4.0b1] - 2026-06-16
 
 ### Added

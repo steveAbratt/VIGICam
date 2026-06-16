@@ -13,6 +13,7 @@ For installation instructions see the [README](../README.md).
 - [Select entities](#select-entities)
 - [Sensors & diagnostics](#sensors--diagnostics)
 - [Binary sensors — detection events](#binary-sensors--detection-events)
+- [Image entities — last detection snapshot](#image-entities--last-detection-snapshot)
 - [Services — automation and scripting](#services)
 - [Blueprint: camera announcements](#blueprint-camera-announcements)
 - [Blueprint: play audio file](#blueprint-play-audio-file)
@@ -270,6 +271,47 @@ level. If you need to distinguish them, check the VIGI app's event log.
 Indicates whether the camera's SD card loop recording is active. This is polled (not
 real-time) — it updates on the 30-second coordinator cycle. Provided for monitoring
 purposes only; loop recording cannot be enabled/disabled via the local API.
+
+---
+
+## Image Entities — Last Detection Snapshot
+
+### Last Detection
+
+Shows the most recent AI-cropped detection image from the camera. The image is a
+close-up of the detected subject (person, vehicle, etc.) rather than the full frame —
+the camera's onboard AI crops to the region of interest before saving.
+
+The entity updates automatically each time a detection event fires. It uses the same
+real-time ONVIF subscription as the binary sensors, so it refreshes within seconds of
+a detection, not on the 30-second poll cycle.
+
+**Attributes available on the entity:**
+
+| Attribute | Example | Description |
+|---|---|---|
+| `detection_type` | `motion`, `smart_event` | ONVIF event type that triggered the grab |
+| `smart_frame_label` | `Person`, `Smart Detection` | AI label from the camera's metadata |
+| `file_id` | `00010000000260` | Internal SD card file ID of the image |
+
+You can use these attributes in automations and dashboard cards. For example, in a
+template sensor or conditional card to show the label alongside the image.
+
+#### Requirements — this entity will stay `unknown` without both of these:
+
+1. **Smart Frame capture enabled** — in the camera's web UI or VIGI app go to
+   **Event → Smart Frame** (also called Smart Capture) and turn it on. This tells the
+   camera to save AI-cropped images to the SD card when detections occur.
+
+2. **SD card formatted for image capture** — the SD card must be formatted with the
+   image capture partition enabled. In the camera web UI go to **Storage → Format** and
+   choose the format option that includes image storage. If the SD card has only been
+   used for video recording, it may need to be reformatted to allocate space for Smart
+   Frames.
+
+> If Smart Frame capture is not configured, the entity remains `unknown` indefinitely.
+> No error is raised — the integration simply finds no images to display. The binary
+> detection sensors continue to work regardless of whether Smart Frame is enabled.
 
 ---
 
