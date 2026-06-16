@@ -29,6 +29,7 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.BUTTON,
     Platform.NUMBER,
+    Platform.IMAGE,
 ]
 
 # ── Service schemas ────────────────────────────────────────────────────────────

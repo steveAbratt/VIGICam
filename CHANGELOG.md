@@ -14,6 +14,22 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0b1] - 2026-06-16
+
+### Added
+- **Last Detection image entity** (`image.<camera>_last_detection`) — downloads the most
+  recent AI-cropped Smart Frame from the camera's SD card via WebSocket
+  (`wss://<ip>:8443/stream`) each time an ONVIF detection event fires. Shows the detected
+  object as cropped by the camera's on-device AI, not a raw stream grab.
+  Exposes `detection_type` (ONVIF trigger: `"person"`, `"smart_detection"`, etc.) and
+  `smart_frame_label` (`"Person"`, `"Smart Detection"`, etc.) as state attributes.
+  Requires Smart Frame capture enabled in camera settings (Event → Smart Frame) and an
+  SD card inserted; image is unchanged if either is unavailable.
+- Added `docs/camera_api_research.md` — local API research notes covering the JSON API,
+  ONVIF, RTSP replay, Smart Frame WebSocket protocol, and SD recording behaviour.
+
+---
+
 ## [0.3.26] - 2026-06-16
 
 ### Fixed
