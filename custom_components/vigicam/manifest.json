@@ -1,7 +1,7 @@
 {
   "domain": "vigicam",
   "name": "VIGI & InSight Cameras",
-  "version": "0.5.0b3",
+  "version": "0.5.0b4",
   "documentation": "https://github.com/stevebratt/VIGICam",
   "issue_tracker": "https://github.com/stevebratt/VIGICam/issues",
   "codeowners": ["@stevebratt"],

@@ -305,7 +305,7 @@ New file: `custom_components/vigicam/openapi_events.py`
   "NVR Connection" diagnostic sensor if the camera exposes useful data
 - All powered from existing coordinator poll (no new polling)
 
-### Phase 4 — PTZ absolute position + preset management  `[TODO]`
+### Phase 4 — PTZ absolute position + preset management  `[DONE v0.5.0b4]`
 - Modify `services.py`: add `ptz_move_to`, `ptz_save_preset`, `ptz_delete_preset`
 - These call OpenAPI directly (not coordinator-polled)
 - Require `has_ptz` + `has_openapi`

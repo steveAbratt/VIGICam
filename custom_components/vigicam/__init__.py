@@ -94,6 +94,24 @@ _PLAY_FILE_SCHEMA = vol.Schema({
     vol.Optional("pause", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=30.0)),
 })
 
+_PTZ_MOVE_TO_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("pan"): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
+    vol.Required("tilt"): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
+    vol.Optional("zoom", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
+})
+
+_PTZ_SAVE_PRESET_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("name"): cv.string,
+    vol.Optional("id"): vol.All(vol.Coerce(int), vol.Range(min=1, max=8)),
+})
+
+_PTZ_DELETE_PRESET_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("name"): cv.string,
+})
+
 _DIRECTION_VECTORS: dict[str, tuple[float, float, float]] = {
     "left":     (-1.0, 0.0, 0.0),
     "right":    ( 1.0, 0.0, 0.0),
@@ -113,6 +131,20 @@ def _entry_data_for_entity(hass: HomeAssistant, entity_id: str) -> dict | None:
     if entry and entry.config_entry_id:
         return hass.data[DOMAIN].get(entry.config_entry_id)
     return None
+
+
+async def _openapi_get_presets(openapi) -> list[dict]:
+    """Return [{id, name}, ...] from OpenAPI getPresetPoint."""
+    import urllib.parse as _up
+    result = await openapi.call("getPresetPoint")
+    if result.get("errCode") != 0:
+        return []
+    ids = result.get("id", [])
+    names = result.get("name", [])
+    return [
+        {"id": str(ids[i]), "name": _up.unquote(str(names[i]))}
+        for i in range(min(len(ids), len(names)))
+    ]
 
 
 # ── Service handlers ──────────────────────────────────────────────────────────
@@ -450,9 +482,76 @@ def _register_services(hass: HomeAssistant) -> None:
         except Exception as exc:
             _LOGGER.error("vigicam.play_file failed: %s", exc)
 
+    async def handle_ptz_move_to(call: ServiceCall) -> None:
+        data = _entry_data_for_entity(hass, call.data["entity_id"])
+        if not data or not data.get("has_ptz") or not data.get("openapi"):
+            _LOGGER.error(
+                "vigicam.ptz_move_to: requires PTZ + OpenAPI for %s",
+                call.data["entity_id"],
+            )
+            return
+        try:
+            await data["openapi"].call("motorMove", {
+                "x_coord": call.data["pan"],
+                "y_coord": call.data["tilt"],
+                "z_coord": call.data["zoom"],
+            })
+        except Exception as exc:
+            _LOGGER.error("vigicam.ptz_move_to failed: %s", exc)
+
+    async def handle_ptz_save_preset(call: ServiceCall) -> None:
+        data = _entry_data_for_entity(hass, call.data["entity_id"])
+        if not data or not data.get("has_ptz") or not data.get("openapi"):
+            _LOGGER.error(
+                "vigicam.ptz_save_preset: requires PTZ + OpenAPI for %s",
+                call.data["entity_id"],
+            )
+            return
+        openapi = data["openapi"]
+        name = call.data["name"]
+        preset_id = call.data.get("id")
+        try:
+            if preset_id is None:
+                existing = await _openapi_get_presets(openapi)
+                used_ids = {int(p["id"]) for p in existing if p["id"].isdigit()}
+                preset_id = next((i for i in range(1, 9) if i not in used_ids), 1)
+            await openapi.call("setPresetPoint", {"id": str(preset_id), "name": name})
+            data["coordinator"].presets = []  # invalidate cache; select refreshes on next poll
+            _LOGGER.debug("vigicam.ptz_save_preset: saved '%s' as id %d", name, preset_id)
+        except Exception as exc:
+            _LOGGER.error("vigicam.ptz_save_preset failed: %s", exc)
+
+    async def handle_ptz_delete_preset(call: ServiceCall) -> None:
+        data = _entry_data_for_entity(hass, call.data["entity_id"])
+        if not data or not data.get("has_ptz") or not data.get("openapi"):
+            _LOGGER.error(
+                "vigicam.ptz_delete_preset: requires PTZ + OpenAPI for %s",
+                call.data["entity_id"],
+            )
+            return
+        openapi = data["openapi"]
+        name = call.data["name"]
+        try:
+            presets = await _openapi_get_presets(openapi)
+            preset = next((p for p in presets if p["name"] == name), None)
+            if not preset:
+                _LOGGER.error(
+                    "vigicam.ptz_delete_preset: preset '%s' not found (available: %s)",
+                    name, [p["name"] for p in presets],
+                )
+                return
+            await openapi.call("removePresetPoint", {"id": preset["id"]})
+            data["coordinator"].presets = []
+            _LOGGER.debug("vigicam.ptz_delete_preset: deleted preset '%s'", name)
+        except Exception as exc:
+            _LOGGER.error("vigicam.ptz_delete_preset failed: %s", exc)
+
     hass.services.async_register(DOMAIN, "ptz", handle_ptz, schema=_PTZ_SCHEMA)
     hass.services.async_register(DOMAIN, "ptz_stop", handle_ptz_stop, schema=_PTZ_STOP_SCHEMA)
     hass.services.async_register(DOMAIN, "goto_preset", handle_goto_preset, schema=_GOTO_PRESET_SCHEMA)
+    hass.services.async_register(DOMAIN, "ptz_move_to", handle_ptz_move_to, schema=_PTZ_MOVE_TO_SCHEMA)
+    hass.services.async_register(DOMAIN, "ptz_save_preset", handle_ptz_save_preset, schema=_PTZ_SAVE_PRESET_SCHEMA)
+    hass.services.async_register(DOMAIN, "ptz_delete_preset", handle_ptz_delete_preset, schema=_PTZ_DELETE_PRESET_SCHEMA)
     hass.services.async_register(DOMAIN, "upload_audio", handle_upload_audio, schema=_UPLOAD_AUDIO_SCHEMA)
     hass.services.async_register(DOMAIN, "play_audio", handle_play_audio, schema=_PLAY_AUDIO_SCHEMA)
     hass.services.async_register(DOMAIN, "delete_audio", handle_delete_audio, schema=_DELETE_AUDIO_SCHEMA)
