@@ -592,18 +592,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     has_ptz = len(presets) > 0
     onvif_ptz = VIGIOnvifPtz(ip, username, password) if has_ptz else None
 
-    coordinator = VIGICoordinator(hass, camera_api, has_ptz=has_ptz)
-    await coordinator.async_config_entry_first_refresh()
-
-    # Determine SD card presence from first-refresh storage data.
-    has_sd_card = _detect_sd_card(coordinator.data.get("storage", {}))
-    coordinator.has_sd_card = has_sd_card
-
-    # Probe OpenAPI — non-fatal; integration works fully without it.
+    # Probe OpenAPI before the first coordinator refresh so smart-detection
+    # switch state is available when platform entities are created.
     has_openapi = await try_openapi(ip, username, password)
     openapi: VIGIOpenAPI | None = VIGIOpenAPI(ip, username, password) if has_openapi else None
-    coordinator.has_openapi = has_openapi
-    coordinator.openapi = openapi
     if not has_openapi:
         _LOGGER.info(
             "VIGICam: OpenAPI not available on %s. "
@@ -611,6 +603,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "Vehicle Detection, Audio Anomaly, and other split detection sensors.",
             ip,
         )
+
+    coordinator = VIGICoordinator(
+        hass, camera_api,
+        has_ptz=has_ptz,
+        has_openapi=has_openapi,
+        openapi=openapi,
+    )
+    await coordinator.async_config_entry_first_refresh()
+
+    # Determine SD card presence from first-refresh storage data.
+    has_sd_card = _detect_sd_card(coordinator.data.get("storage", {}))
+    coordinator.has_sd_card = has_sd_card
 
     onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
     openapi_events = (
