@@ -23,15 +23,16 @@ Entities are created dynamically — only capabilities the camera actually suppo
 ## Features
 
 - **Live stream** — RTSP HD stream in dashboards and automations
-- **Detection events** — real-time motion, person, vehicle, tamper, intrusion, line crossing, smart detection via ONVIF (fires within seconds, not the 30 s poll cycle)
+- **Detection events** — real-time motion, person, tamper, intrusion, line crossing, smart detection via ONVIF (fires within seconds, not the 30 s poll cycle)
+- **Split detection sensors** — individual binary sensors for vehicle, audio anomaly, loitering, scene change, object left/taken, area entry, area exit *(requires [OpenAPI](#openapi--extended-detection--sensors))*
 - **Alarm control** — enable/disable alarm, sound and light independently, set repeat count, trigger or stop manually
 - **Camera announcements** — speak any text through the camera speaker via `vigicam.speak` (TTS → format conversion → upload → play, all automatic)
 - **Play pre-recorded files** — play any audio file (WAV, MP3, OGG…) via `vigicam.play_file`; accepts HA media browser URLs, `www/` URLs, file paths, or external URLs
-- **PTZ control** — pan/tilt/zoom buttons, named presets, continuous move service
+- **PTZ control** — pan/tilt/zoom buttons, named presets, continuous move, absolute positioning, save/delete presets *(absolute position and preset management require [OpenAPI](#openapi--extended-detection--sensors))*
 - **Night vision** — switch between IR auto, IR always on, spotlight, colour, off
 - **Audio management** — upload custom sounds, play on demand, delete slots
-- **Storage monitoring** — SD card used %, free space, total capacity, status, loop recording state
-- **Diagnostics** — firmware version, IP address, connection type
+- **Storage monitoring** — SD card used %, free space, total capacity, status, loop recording state; recording duration, oldest recording, capacity remaining *(extended sensors require [OpenAPI](#openapi--extended-detection--sensors))*
+- **Diagnostics** — firmware version, IP address, connection type, uptime *(uptime requires [OpenAPI](#openapi--extended-detection--sensors))*
 
 ---
 
@@ -60,6 +61,20 @@ Repeat for each camera. Each appears as a separate HA device.
 
 ---
 
+## OpenAPI — extended detection & sensors
+
+Several features require the camera's local OpenAPI (HTTPS port 20443) to be enabled:
+
+1. Open the camera's web UI (`http://<camera-ip>`) and log in
+2. Go to **Settings → Network → OpenAPI** and enable it
+3. Reload the integration — the additional entities appear automatically
+
+**What it unlocks:** Vehicle / Audio Anomaly / Loitering / Scene Change / Object Left or Taken / Area Entry / Area Exit binary sensors, SD card recording duration and capacity sensors, Uptime diagnostic, and the `vigicam.ptz_move_to` / `vigicam.ptz_save_preset` / `vigicam.ptz_delete_preset` services.
+
+> Requires firmware 2.1.x or later. If the OpenAPI menu is missing, update the camera firmware via the VIGI app or camera web UI.
+
+---
+
 ## Camera Announcements (TTS)
 
 Speak a message through the camera's speaker from any automation:
@@ -79,6 +94,17 @@ Handles everything automatically: TTS generation → resampled to 8 kHz mono WAV
 via ffmpeg → uploaded to camera → played. Works with any configured HA TTS engine.
 
 **Limit:** Keep messages under ~10 seconds (camera hard limit: 15 s / 256 KB).
+
+### Blueprint
+
+A ready-made automation blueprint turns this into a simple form:
+
+1. **Settings → Automations → Blueprints → Import Blueprint**
+2. Paste:
+   ```
+   https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_announce.yaml
+   ```
+3. Click **Create Automation** — fill in trigger, camera, message, TTS engine, repeat count. Done.
 
 ---
 
@@ -103,12 +129,6 @@ data:
 url: /config/media/alert.wav
 ```
 
-**From any external URL:**
-
-```yaml
-url: http://192.168.1.100:8080/sounds/alert.mp3
-```
-
 Media browser URLs (`/media/local/`) and HA www URLs (`/local/`) are automatically resolved to file paths — no token or authentication setup required. External URLs are fetched directly.
 
 **Limit:** 15 seconds / 256 KB after conversion to 8 kHz mono WAV.
@@ -123,19 +143,6 @@ A ready-made blueprint for this too — upload your file to the media browser, p
    https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_play_file.yaml
    ```
 3. Click **Create Automation** — fill in trigger, camera, audio URL, repeat count. Done.
-
-See **[docs/USAGE.md](docs/USAGE.md)** for full details on slots, repeat count, and combining with `vigicam.speak`.
-
-### Blueprint
-
-A ready-made automation blueprint turns this into a simple form:
-
-1. **Settings → Automations → Blueprints → Import Blueprint**
-2. Paste:
-   ```
-   https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_announce.yaml
-   ```
-3. Click **Create Automation** — fill in trigger, camera, message, TTS engine, repeat count. Done.
 
 ---
 
@@ -157,12 +164,37 @@ data:
   preset: "Full Stable Yard"   # name exactly as it appears in the PTZ Preset select entity
 ```
 
+The following services require [OpenAPI enabled](#openapi--extended-detection--sensors):
+
+```yaml
+service: vigicam.ptz_move_to      # move to an absolute pan/tilt/zoom position
+data:
+  entity_id: camera.vigi_c540v_stream
+  pan: 120.0
+  tilt: -10.0
+  zoom: 1.0
+```
+
+```yaml
+service: vigicam.ptz_save_preset  # save current position as a named preset
+data:
+  entity_id: camera.vigi_c540v_stream
+  name: "Entrance View"
+```
+
+```yaml
+service: vigicam.ptz_delete_preset
+data:
+  entity_id: camera.vigi_c540v_stream
+  name: "Old Position"
+```
+
 ---
 
 ## Full Documentation
 
 For a plain-language explanation of every entity, button, switch, sensor, and service
-— including what they actually do and when to use them — see:
+— including what they actually do, automation examples, and dashboard tips — see:
 
 **[docs/USAGE.md](docs/USAGE.md)**
 
