@@ -276,47 +276,54 @@ purposes only; loop recording cannot be enabled/disabled via the local API.
 
 ## Image Entities — Last Detection Snapshot
 
-> **Model support:** Smart Frame image capture is not available on all VIGI / InSight models.
-> The VIGI C540V, for example, does not support split SD card storage and this entity will
-> not appear for those cameras. The integration detects support automatically at startup —
-> if the entity is missing, your camera model does not support Smart Frame capture.
-
 ### Last Detection
 
-Shows the most recent AI-cropped detection image from the camera. The image is a
-close-up of the detected subject (person, vehicle, etc.) rather than the full frame —
-the camera's onboard AI crops to the region of interest before saving.
+Shows a snapshot from the most recent detection event. The entity appears on all cameras
+and updates automatically each time any detection fires — intrusion, line crossing,
+motion, person detected, or smart detection. It uses the same real-time ONVIF
+subscription as the binary sensors, so it refreshes within seconds of a detection,
+not on the 30-second poll cycle.
 
-The entity updates automatically each time a detection event fires. It uses the same
-real-time ONVIF subscription as the binary sensors, so it refreshes within seconds of
-a detection, not on the 30-second poll cycle.
+#### How the image is captured
+
+The integration detects at startup whether your camera supports Smart Frame capture and
+uses the best available method:
+
+**Smart Frame (AI-cropped image)** — used when the camera supports it (most VIGI cameras
+with an SD card formatted for split storage). The image is an AI-cropped close-up of the
+detected subject (person, vehicle, etc.) rather than the full frame. The camera saves this
+to the SD card; the integration downloads it ~3 seconds after the event.
+
+**RTSP snapshot (full-frame still)** — used as a fallback on cameras that do not support
+Smart Frame (e.g. VIGI C540V). When a detection event fires, the integration grabs a
+single frame from the live RTSP stream ~2 seconds after the event. The image is the full
+camera frame at the moment of capture.
+
+The `source` attribute on the entity tells you which method was used.
 
 **Attributes available on the entity:**
 
 | Attribute | Example | Description |
 |---|---|---|
 | `detection_type` | `motion`, `smart_event` | ONVIF event type that triggered the grab |
-| `smart_frame_label` | `Person`, `Smart Detection` | AI label from the camera's metadata |
-| `file_id` | `00010000000260` | Internal SD card file ID of the image |
+| `source` | `smart_frame`, `rtsp_snapshot` | Which capture method was used |
+| `smart_frame_label` | `Person`, `Smart Detection` | AI label (Smart Frame only) |
+| `file_id` | `00010000000260` | Internal SD card file ID (Smart Frame only) |
 
-You can use these attributes in automations and dashboard cards. For example, in a
-template sensor or conditional card to show the label alongside the image.
+#### Requirements for Smart Frame capture
 
-#### Requirements — this entity will stay `unknown` without both of these:
+Smart Frame images require both of the following to be configured on the camera:
 
 1. **Smart Frame capture enabled** — in the camera's web UI or VIGI app go to
-   **Event → Smart Frame** (also called Smart Capture) and turn it on. This tells the
-   camera to save AI-cropped images to the SD card when detections occur.
+   **Event → Smart Frame** (also called Smart Capture) and turn it on.
 
-2. **SD card formatted for image capture** — the SD card must be formatted with the
-   image capture partition enabled. In the camera web UI go to **Storage → Format** and
-   choose the format option that includes image storage. If the SD card has only been
-   used for video recording, it may need to be reformatted to allocate space for Smart
-   Frames.
+2. **SD card formatted for image capture** — go to **Storage → Format** and choose the
+   format option that includes image storage. If the card has only been used for video
+   recording it may need to be reformatted.
 
-> If Smart Frame capture is not configured, the entity remains `unknown` indefinitely.
-> No error is raised — the integration simply finds no images to display. The binary
-> detection sensors continue to work regardless of whether Smart Frame is enabled.
+> If Smart Frame capture is not configured, the integration falls back to RTSP snapshot
+> automatically — the entity will still populate, just with a full-frame still instead of
+> an AI-cropped image.
 
 ---
 

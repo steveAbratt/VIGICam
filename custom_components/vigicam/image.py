@@ -1,15 +1,13 @@
-"""Image entity — last Smart Frame detection image.
+"""Image entity — last detection snapshot.
 
-Downloads the most recent AI-cropped Smart Frame from the camera via WebSocket
-each time an ONVIF detection event fires, and caches it as an HA ImageEntity.
+On cameras with Smart Frame capture enabled (and SD card formatted for image
+storage), downloads the AI-cropped Smart Frame via WebSocket on each detection
+event.
 
-Smart Frame capture must be enabled in the camera (Event → Smart Frame) and an
-SD card must be present. If neither is available the entity will never populate,
-which is logged at debug level.
+On cameras without Smart Frame support (e.g. VIGI C540V), falls back to
+grabbing a still from the live RTSP stream when any detection event fires.
 
 The grab runs in the background so it does not block the event dispatcher.
-A 3-second delay is applied after the event fires to allow the camera time to
-write the captured frame to the SD card before we try to fetch it.
 Only one concurrent grab per camera is allowed.
 """
 from __future__ import annotations
@@ -32,23 +30,19 @@ from .smart_frame import fetch_latest_smart_frame
 
 _LOGGER = logging.getLogger(__name__)
 
-_POST_EVENT_DELAY = 3.0
+_POST_EVENT_DELAY_SF = 3.0    # seconds to wait for Smart Frame SD card write
+_POST_EVENT_DELAY_RTSP = 2.0  # seconds to wait for subject to enter RTSP frame
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
-    if not data.get("has_smart_frames"):
-        _LOGGER.debug(
-            "Smart Frame not supported on this camera — Last Detection image entity not registered"
-        )
-        return
     async_add_entities([VIGILastDetectionImage(data["coordinator"], data)])
 
 
 class VIGILastDetectionImage(VIGIEntity, ImageEntity):
-    """AI-cropped Smart Frame captured at the moment of detection."""
+    """Last detection snapshot — Smart Frame if supported, RTSP fallback otherwise."""
 
     _attr_name = "Last Detection"
     _attr_icon = "mdi:image-search"
@@ -61,6 +55,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._grabbing = False
         self._unsub_dispatcher: object = None
         self._attr_extra_state_attributes: dict = {}
+        self._has_smart_frames: bool = entry_data.get("has_smart_frames", False)
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -93,41 +88,88 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
 
     async def _grab_frame(self, event_type: str) -> None:
         try:
-            await asyncio.sleep(_POST_EVENT_DELAY)
-            try:
-                ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
-            except Exception:
-                ffmpeg_bin = "ffmpeg"
-
-            result = await fetch_latest_smart_frame(
-                ip=self._entry_data["ip"],
-                username=self._entry_data["username"],
-                password=self._entry_data["password"],
-                camera=self._entry_data["api"],
-                ffmpeg_bin=ffmpeg_bin,
-            )
-            if result:
-                self._cached_image = result["jpeg"]
-                self._image_last_updated = datetime.now(timezone.utc)
-                self._attr_extra_state_attributes = {
-                    "detection_type": event_type,
-                    "smart_frame_label": result["label"],
-                    "file_id": result["file_id"],
-                }
-                self.async_write_ha_state()
-                _LOGGER.debug(
-                    "Smart Frame updated: %s / %s (%d bytes)",
-                    event_type, result["label"], len(result["jpeg"]),
-                )
+            if self._has_smart_frames:
+                await self._grab_smart_frame(event_type)
             else:
-                _LOGGER.debug(
-                    "No Smart Frame for %s event — Smart Frame capture enabled in camera settings?",
-                    event_type,
-                )
+                await self._grab_rtsp_snapshot(event_type)
         except Exception as exc:
-            _LOGGER.debug("Smart Frame fetch failed: %s", exc)
+            _LOGGER.debug("Detection image grab failed: %s", exc)
         finally:
             self._grabbing = False
+
+    async def _grab_smart_frame(self, event_type: str) -> None:
+        await asyncio.sleep(_POST_EVENT_DELAY_SF)
+        try:
+            ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
+        except Exception:
+            ffmpeg_bin = "ffmpeg"
+        result = await fetch_latest_smart_frame(
+            ip=self._entry_data["ip"],
+            username=self._entry_data["username"],
+            password=self._entry_data["password"],
+            camera=self._entry_data["api"],
+            ffmpeg_bin=ffmpeg_bin,
+        )
+        if result:
+            self._cached_image = result["jpeg"]
+            self._image_last_updated = datetime.now(timezone.utc)
+            self._attr_extra_state_attributes = {
+                "detection_type": event_type,
+                "smart_frame_label": result["label"],
+                "file_id": result["file_id"],
+                "source": "smart_frame",
+            }
+            self.async_write_ha_state()
+            _LOGGER.debug(
+                "Smart Frame updated: %s / %s (%d bytes)",
+                event_type, result["label"], len(result["jpeg"]),
+            )
+        else:
+            _LOGGER.debug(
+                "No Smart Frame for %s event — Smart Frame capture enabled in camera settings?",
+                event_type,
+            )
+
+    async def _grab_rtsp_snapshot(self, event_type: str) -> None:
+        await asyncio.sleep(_POST_EVENT_DELAY_RTSP)
+        try:
+            ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
+        except Exception:
+            ffmpeg_bin = "ffmpeg"
+        ip = self._entry_data["ip"]
+        user = self._entry_data["username"]
+        pw = self._entry_data["password"]
+        stream_url = f"rtsp://{user}:{pw}@{ip}:554/stream1"
+        redacted = f"rtsp://{user}:***@{ip}:554/stream1"
+        proc = await asyncio.create_subprocess_exec(
+            ffmpeg_bin,
+            "-rtsp_transport", "tcp",
+            "-i", stream_url,
+            "-frames:v", "1",
+            "-f", "image2", "-vcodec", "mjpeg",
+            "pipe:1",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+        if stdout and proc.returncode == 0:
+            self._cached_image = stdout
+            self._image_last_updated = datetime.now(timezone.utc)
+            self._attr_extra_state_attributes = {
+                "detection_type": event_type,
+                "source": "rtsp_snapshot",
+            }
+            self.async_write_ha_state()
+            _LOGGER.debug(
+                "RTSP snapshot captured for %s (%d bytes)", event_type, len(stdout)
+            )
+        else:
+            _LOGGER.debug(
+                "RTSP snapshot returned no data for %s — stream accessible?", event_type
+            )
+            safe_url = stream_url.replace(pw, "***")
+            _LOGGER.debug("RTSP snapshot URL was: %s", safe_url)
 
     async def async_image(self) -> bytes | None:
         return self._cached_image
