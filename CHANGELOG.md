@@ -14,6 +14,24 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b4] - 2026-06-17
+
+### Added
+- **`vigicam.ptz_move_to`** service — move the camera to an absolute pan/tilt/zoom
+  position (pan and tilt: -1.0 to 1.0, zoom: -1.0 to 1.0). Requires PTZ camera + OpenAPI.
+- **`vigicam.ptz_save_preset`** service — save the camera's current position as a named
+  preset (slot 1–8). If no slot `id` is given, the first unused slot is chosen automatically.
+  Requires PTZ camera + OpenAPI.
+- **`vigicam.ptz_delete_preset`** service — delete a preset by name.
+  Requires PTZ camera + OpenAPI.
+- PTZ Preset select entity refreshes automatically after save/delete (on next 30s poll).
+
+### Notes
+- The camera does not expose a current position API — no position sensor is possible.
+  Use presets to track meaningful positions via the PTZ Preset select entity.
+
+---
+
 ## [0.5.0b3] - 2026-06-17
 
 ### Added
