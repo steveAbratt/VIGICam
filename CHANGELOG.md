@@ -14,6 +14,24 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b5] - 2026-06-17
+
+### Fixed
+- OpenAPI SD card sensors (Recording Duration, Oldest Recording, Record Capacity
+  Remaining, Video Space Free) and Uptime sensor all reported "unknown" — the
+  coordinator was storing the full raw API response instead of unwrapping the
+  inner `result` dict. Sensors now report correct values.
+- With loop recording enabled and the video partition full, Record Capacity
+  Remaining and Video Space Free correctly report `0`.
+
+### Changed
+- **USAGE.md** fully updated for v0.5.0: new "OpenAPI — unlocking additional
+  sensors" setup section, automation examples for every binary sensor (all ONVIF
+  and all 7 OpenAPI sensors), examples for every service, SD card sensor
+  descriptions updated with NVR note and loop-recording behaviour.
+
+---
+
 ## [0.5.0b4] - 2026-06-17
 
 ### Added

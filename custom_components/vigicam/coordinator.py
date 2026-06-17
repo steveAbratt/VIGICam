@@ -89,7 +89,8 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.has_openapi and self.openapi:
             async def safe_openapi(key: str, method: str) -> None:
                 try:
-                    results[key] = await self.openapi.call(method)
+                    raw = await self.openapi.call(method)
+                    results[key] = raw.get("result", {})
                 except Exception as exc:  # noqa: BLE001
                     _LOGGER.debug("OpenAPI %s failed: %s", method, exc)
                     results[key] = {}
