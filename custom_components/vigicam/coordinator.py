@@ -44,6 +44,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.has_openapi = has_openapi
         self.openapi: VIGIOpenAPI | None = openapi
         self.presets: list[dict] = []
+        self.last_preset: str | None = None  # last preset selected from HA; None = unknown
         self._openapi_recheck_counter: int = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
