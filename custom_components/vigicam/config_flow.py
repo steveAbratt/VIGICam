@@ -1,6 +1,7 @@
 """Config flow for VIGI & InSight cameras."""
 from __future__ import annotations
 
+import logging
 import urllib.parse
 
 import aiohttp
@@ -11,6 +12,8 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession, asy
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import CONF_VERIFY_SSL, DEFAULT_USERNAME, DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 STEP_SCHEMA = vol.Schema(
     {
@@ -80,9 +83,11 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info, verify_ssl = await _test_credentials(
                     self.hass, ip, username, password
                 )
-            except VIGIAuthError:
+            except VIGIAuthError as exc:
+                _LOGGER.debug("Authentication failed for %s: %s", ip, exc)
                 errors["base"] = "invalid_auth"
-            except (VIGIError, aiohttp.ClientError, Exception):
+            except (VIGIError, aiohttp.ClientError, Exception) as exc:
+                _LOGGER.debug("Connection failed for %s: %s", ip, exc, exc_info=True)
                 errors["base"] = "cannot_connect"
             else:
                 unique_id = (info.get("mac") or ip).replace(":", "").lower()
