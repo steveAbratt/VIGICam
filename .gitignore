@@ -21,6 +21,10 @@ venv/
 # Local audio files — test/scratch files, not for the repo
 audio/
 
+# Local probe/research scripts and documents
+probe_*.py
+tmp/
+
 # macOS
 .DS_Store
 

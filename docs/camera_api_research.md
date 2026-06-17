@@ -340,15 +340,127 @@ Topics confirmed from `GetEventProperties` on both cameras:
 
 ---
 
-## Probe Scripts
+## OpenAPI (port 20443)
 
-`probe_snapshot.py` — in the repo root, gitignored. Tests all known snapshot/image endpoints. Run with:
+The cameras expose a second, richer API on port 20443 (HTTPS). This must be enabled
+in the camera's web UI: **Settings → Network → OpenAPI → Enable**.
 
-```bash
-python3 probe_snapshot.py 180   # InSight S245
-python3 probe_snapshot.py 88    # VIGI C540V
+Full specification: `tmp/tplinkopenapi.pdf` (gitignored — local only).
+See `docs/IMPLEMENTATION_PLAN.md` for the complete feature map and build plan.
+
+### Authentication
+
+Two-step JSON POST to the root URL (not a path endpoint):
+
+```python
+# Step 1 — GET challenge (new TCP connection)
+POST https://<ip>:20443/
+{"method": "doAuth", "params": null}
+→ {"authenticate": {"realm": "TP-LINK IP-Camera", "nonce": "...", "algorithm": "SHA-256",
+                    "uri": "doAuth", "method": "POST"}, "errCode": -10020}
+
+# Step 2 — compute response and authenticate (new TCP connection)
+A1       = SHA256(f"{username}:{realm}:{password}")
+A2       = SHA256(f"{method}:{uri}")          # "POST:doAuth"
+response = SHA256(f"{A1}:{nonce}:{A2}")
+
+POST https://<ip>:20443/
+{"method": "doAuth", "params": {"nonce": "<from step 1>", "response": "<computed>"}}
+→ {"stok": "...", "errCode": 0}
+
+# All subsequent calls
+POST https://<ip>:20443/stok=<stok>
+{"method": "<method_name>", "params": {...}}
 ```
 
-The script uses the correct auth flow (MD5+RSA) from `api.py`.
+**Critical:** The camera closes the TCP connection after every response. Each call must
+use a fresh connection (`force_close=True` in aiohttp, or a new session per call).
+Stok expires after 30 minutes — cache with a 25-minute TTL and re-auth proactively.
+
+### Confirmed supported modules — both cameras
+
+`system`, `dateTime`, `video`, `dayNightMode`, `motionDetection`, `tamperDetection`,
+`StreamPort`, `msgPush`, `sdCard`, `recordSchedule`, `playback`, `download`,
+`audio_speaker`, `audio_microphone`, `sound_alarm_enabled`, `light_alarm_enabled`,
+`CrossLineDetection`, `InvasionDetection`, `AreaEntryDetection`, `AreaLeaveDetection`,
+`PeopleDetection`, `VehicleDetection`, `DropAndTakeDetection`, `AudioAnomalyDetection`
+
+**InSight S245 only:** `LoiterDetection`, `SceneChangeDetection`
+**VIGI C540V only:** `ptz`, `ptz_zoom`
+
+### subscribeMsg — event push
+
+Sends named events over a persistent HTTP connection:
+
+```python
+POST https://<ip>:20443/stok=<stok>
+{"method": "subscribeMsg", "params": {"event_type": ["all"], "heartbeat": 15}}
+
+# Response: multipart/mixed stream
+# Heartbeat every 15s: {"Heartbeat":"30"}
+# On detection:        {"event_type":"VehicleDetection","time":1723175020}
+#                      {"event_type":"PeopleDetection","time":...}
+#                      {"event_type":"MotionDetection","time":...}
+```
+
+Event types: `MotionDetection`, `TamperDetection`, `CrossLineDetection`,
+`InvasionDetection`, `AreaEntryDetection`, `AreaLeaveDetection`, `PeopleDetection`,
+`VehicleDetection`, `DropAndTakeDetection`, `LoiterDetection`, `SceneChangeDetection`,
+`AudioAnomalyDetection`
+
+**Requirement:** each detection type's `msg_push_enabled` must be `"on"` (check with
+`getMotionDetectionSwitch` etc.; set with the matching `set*` method if off).
+
+### Key differences from Smart Detection catch-all (ONVIF)
+
+ONVIF fires `IsTPSmartEvent` for: vehicle, sound anomaly, loitering, scene change,
+drop/take, area entry, area exit — all merged. `subscribeMsg` fires them separately.
+This is the primary reason to implement the OpenAPI layer.
+
+### getSdCardStatus — extra fields vs JSON API
+
+The OpenAPI version returns additional fields not available via port 443:
+`total_space`, `free_space`, `video_total_space`, `video_free_space`,
+`picture_total_space`, `picture_free_space`, `record_duration` (total seconds stored),
+`record_free_duration` (seconds of remaining capacity), `record_start_time` (unix ts
+of oldest recording), `loop_record_status`.
+
+### PTZ via OpenAPI (C540V only)
+
+- `motorMove` — absolute position: `x_coord`, `y_coord`, `z_coord` all in [-1, 1]
+- `cruiseMove` — continuous: `coord` in `{x, y, -x, -y, z, -z}` + optional `coord_speed`
+- `stopMove` — stop
+- `setPresetPoint` — save current position as preset (id 1–8, name string)
+- `removePresetPoint` — delete preset by id
+- `gotoPresetPoint` — go to preset by id (integer string "1"–"8")
+- `getPresetPoint` — returns id[], name[], position_pan[], position_tilt[], position_zoom[]
+- `getPTZCapability` — speed_x_max, speed_y_max, speed_z_max
+
+### searchVideoList
+
+Returns recording segments for a date with individual `video_type` per segment:
+`MotionDetection`, `PeopleDetection`, `VehicleDetection`, `Timing`, etc.
+Use this to find a specific clip to download.
+
+### Video download (stream interface, port 554, MULTITRANS protocol)
+
+NOT standard RTSP. Uses `MULTITRANS rtsp://<ip>/multitrans RTSP/1.0` verb.
+Auth is SHA-256 Digest (same algorithm as OpenAPI control, different realm).
+Data transmitted as RTP over TCP (`$` framing: 1B `$`, 1B channel, 2B length, RTP).
+Requires `searchVideoList` to get `file_id` first.
+
+---
+
+## Probe Scripts
+
+`probe_snapshot.py` — tests snapshot endpoints and Smart Frame WebSocket. Gitignored.
+`probe_openapi.py` — tests OpenAPI auth and all control endpoints. Gitignored.
+
+Run with:
+```bash
+python3 probe_snapshot.py 180   # InSight S245
+python3 probe_openapi.py 180    # InSight S245
+python3 probe_openapi.py 88     # VIGI C540V
+```
 
 Credentials stored in `.credentials.json` (gitignored).
