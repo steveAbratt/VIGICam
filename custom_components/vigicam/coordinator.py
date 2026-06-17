@@ -98,6 +98,8 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             await safe_openapi("openapi_sd", "getSdCardStatus")
             await safe_openapi("openapi_device", "getDeviceStatus")
+            await safe_openapi("openapi_people", "getPeopleDetectionSwitch")
+            await safe_openapi("openapi_vehicle", "getVehicleDetectionSwitch")
 
         # Update has_sd_card from live storage data on every refresh.
         storage = results.get("storage", {})

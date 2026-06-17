@@ -21,6 +21,9 @@ class VIGISwitchDescription(SwitchEntityDescription):
     turn_off_fn: Callable[[VIGICamera], Any]
     # Return False if the camera doesn't support this feature (field absent from data)
     supported_fn: Callable[[dict], bool] = lambda _: True
+    # Optional OpenAPI handlers — used in preference to JSON API when openapi is available
+    openapi_turn_on_fn: Callable[[Any], Any] | None = None
+    openapi_turn_off_fn: Callable[[Any], Any] | None = None
 
 
 SWITCHES: tuple[VIGISwitchDescription, ...] = (
@@ -35,18 +38,34 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
     VIGISwitchDescription(
         key="person_detection",
         name="Detection Person",
-        is_on_fn=lambda d: d.get("motion", {}).get("people_enabled") == "on",
+        is_on_fn=lambda d: (
+            d["openapi_people"]["enabled"] == "on"
+            if d.get("openapi_people")
+            else d.get("motion", {}).get("people_enabled") == "on"
+        ),
         turn_on_fn=lambda api: api.set_person_detection(True),
         turn_off_fn=lambda api: api.set_person_detection(False),
-        supported_fn=lambda d: "people_enabled" in d.get("motion", {}),
+        supported_fn=lambda d: (
+            "people_enabled" in d.get("motion", {}) or bool(d.get("openapi_people"))
+        ),
+        openapi_turn_on_fn=lambda oapi: oapi.call("setPeopleDetectionSwitch", {"enabled": "on"}),
+        openapi_turn_off_fn=lambda oapi: oapi.call("setPeopleDetectionSwitch", {"enabled": "off"}),
     ),
     VIGISwitchDescription(
         key="vehicle_detection",
         name="Detection Vehicle",
-        is_on_fn=lambda d: d.get("motion", {}).get("vehicle_enabled") == "on",
+        is_on_fn=lambda d: (
+            d["openapi_vehicle"]["enabled"] == "on"
+            if d.get("openapi_vehicle")
+            else d.get("motion", {}).get("vehicle_enabled") == "on"
+        ),
         turn_on_fn=lambda api: api.set_vehicle_detection(True),
         turn_off_fn=lambda api: api.set_vehicle_detection(False),
-        supported_fn=lambda d: "vehicle_enabled" in d.get("motion", {}),
+        supported_fn=lambda d: (
+            "vehicle_enabled" in d.get("motion", {}) or bool(d.get("openapi_vehicle"))
+        ),
+        openapi_turn_on_fn=lambda oapi: oapi.call("setVehicleDetectionSwitch", {"enabled": "on"}),
+        openapi_turn_off_fn=lambda oapi: oapi.call("setVehicleDetectionSwitch", {"enabled": "off"}),
     ),
     VIGISwitchDescription(
         key="tamper_detection",
@@ -140,9 +159,17 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
         return self.entity_description.is_on_fn(self.coordinator.data or {})
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self.entity_description.turn_on_fn(self._entry_data["api"])
+        openapi = self._entry_data.get("openapi")
+        if openapi and self.entity_description.openapi_turn_on_fn:
+            await self.entity_description.openapi_turn_on_fn(openapi)
+        else:
+            await self.entity_description.turn_on_fn(self._entry_data["api"])
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self.entity_description.turn_off_fn(self._entry_data["api"])
+        openapi = self._entry_data.get("openapi")
+        if openapi and self.entity_description.openapi_turn_off_fn:
+            await self.entity_description.openapi_turn_off_fn(openapi)
+        else:
+            await self.entity_description.turn_off_fn(self._entry_data["api"])
         await self.coordinator.async_request_refresh()

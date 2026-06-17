@@ -14,6 +14,21 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b7] - 2026-06-17
+
+### Fixed
+- **Detection Person** and **Detection Vehicle** switches showed wrong state on
+  cameras where smart detection is configured via the camera web UI or OpenAPI.
+  The camera web UI writes smart detection state through OpenAPI; the JSON API
+  `people_enabled` / `vehicle_enabled` fields are legacy and not kept in sync.
+  When OpenAPI is available, these switches now read from
+  `getPeopleDetectionSwitch` / `getVehicleDetectionSwitch` and write via
+  `setPeopleDetectionSwitch` / `setVehicleDetectionSwitch`.
+- OpenAPI is now probed before the first coordinator refresh so smart-detection
+  state is already correct when HA entities are created on startup.
+
+---
+
 ## [0.5.0b6] - 2026-06-17
 
 ### Fixed
