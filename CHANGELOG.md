@@ -14,6 +14,13 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0b7] - 2026-06-17
+
+### Added
+- Last Detection image entity now works on cameras without Smart Frame support (e.g. VIGI C540V). When Smart Frame capture is unavailable, the entity falls back to grabbing a still from the live RTSP stream (stream1) via ffmpeg on any detection event — intrusion, line crossing, motion, person detected, or smart detection. The `source` attribute on the entity indicates `"smart_frame"` or `"rtsp_snapshot"` so you can tell which method was used.
+
+---
+
 ## [0.4.0b6] - 2026-06-17
 
 ### Fixed
