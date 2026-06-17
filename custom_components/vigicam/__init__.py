@@ -476,6 +476,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await camera_api.authenticate()
         device_info = await camera_api.get_device_info()
         presets = await camera_api.get_presets()
+        has_smart_frames = await camera_api.supports_smart_frames()
     except VIGIAuthError as exc:
         raise ConfigEntryAuthFailed(str(exc)) from exc
     except VIGIError as exc:
@@ -496,6 +497,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "onvif_ptz": onvif_ptz,
         "device_info": device_info,
         "has_ptz": has_ptz,
+        "has_smart_frames": has_smart_frames,
         "presets": presets,
         "ip": ip,
         "username": username,

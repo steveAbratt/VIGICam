@@ -14,6 +14,16 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0b3] - 2026-06-17
+
+### Added
+- Smart Frame support is now detected automatically at startup. Cameras that do not support Smart Frame image capture (e.g. VIGI C540V) will not show the Last Detection image entity. Mirrors the existing PTZ capability detection pattern.
+
+### Changed
+- Documented Smart Frame model limitation in `docs/USAGE.md` — the entity will simply be absent on unsupported cameras rather than showing as unavailable.
+
+---
+
 ## [0.4.0b2] - 2026-06-16
 
 ### Fixed

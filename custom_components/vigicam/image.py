@@ -39,6 +39,11 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
+    if not data.get("has_smart_frames"):
+        _LOGGER.debug(
+            "Smart Frame not supported on this camera — Last Detection image entity not registered"
+        )
+        return
     async_add_entities([VIGILastDetectionImage(data["coordinator"], data)])
 
 

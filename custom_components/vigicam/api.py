@@ -410,6 +410,29 @@ class VIGICamera:
 
     # ── Smart Frames ──────────────────────────────────────────────────────────
 
+    async def supports_smart_frames(self) -> bool:
+        """Return True if this camera supports Smart Frame image capture.
+
+        Probes get_media_list with media_type=2. Returns True if the camera
+        accepts the call (error_code 0, even with empty results). Returns False
+        if the camera returns an API error — models like the VIGI C540V do not
+        support Smart Frame / split SD card storage and will error here.
+        """
+        import time as _time
+        now = int(_time.time())
+        try:
+            r = await self._request({"method": "do", "system": {"get_user_id": None}})
+            user_id = r.get("system", {}).get("user_id", 1)
+            await self._request({"method": "do", "media": {"get_media_list": {
+                "channel": [0], "media_type": [2], "all_event": 1,
+                "user_id": user_id,
+                "start_time": str(now - 3600), "end_time": str(now),
+                "event_type": [2],
+            }}})
+            return True
+        except VIGIError:
+            return False
+
     async def get_smart_frames(self, days_back: int = 1, max_items: int = 5) -> list[dict]:
         """Return the most recent Smart Frame entries from the SD card, newest first.
 

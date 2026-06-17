@@ -276,6 +276,11 @@ purposes only; loop recording cannot be enabled/disabled via the local API.
 
 ## Image Entities — Last Detection Snapshot
 
+> **Model support:** Smart Frame image capture is not available on all VIGI / InSight models.
+> The VIGI C540V, for example, does not support split SD card storage and this entity will
+> not appear for those cameras. The integration detects support automatically at startup —
+> if the entity is missing, your camera model does not support Smart Frame capture.
+
 ### Last Detection
 
 Shows the most recent AI-cropped detection image from the camera. The image is a
