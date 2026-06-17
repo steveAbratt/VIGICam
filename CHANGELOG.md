@@ -14,6 +14,24 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b2] - 2026-06-17
+
+### Added
+- **Vehicle Detected** binary sensor — fires on vehicle detection events via OpenAPI
+  subscribeMsg (previously only available as part of the "Smart Detection" catch-all).
+- **Audio Anomaly** binary sensor — fires on sound anomaly detection events.
+- **Loitering** binary sensor — fires when loitering is detected (InSight S245 only).
+- **Scene Change** binary sensor — fires when the camera scene changes unexpectedly
+  (InSight S245 only).
+- **Object Left or Taken** binary sensor — fires on abandoned/removed object events.
+- **Area Entry** / **Area Exit** binary sensors — fire on configured area crossing events.
+- All 7 sensors require OpenAPI to be enabled in camera settings; they appear automatically
+  when `has_openapi=True`. Smart Detection (ONVIF) continues as a catch-all fallback.
+- The integration enables `msg_push_enabled` for each detection type on first connect so
+  events are guaranteed to fire via subscribeMsg.
+
+---
+
 ## [0.5.0b1] - 2026-06-17
 
 ### Added
