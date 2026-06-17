@@ -14,6 +14,13 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0b6] - 2026-06-17
+
+### Fixed
+- Setup still fails with SSL error on cameras using the TP-Link internal CA (e.g. VIGI C320I). Root cause identified: `api.py`'s `_post` method was catching `ClientConnectorCertificateError` as a generic `aiohttp.ClientError` and wrapping it in `VIGIError`, so the config flow's SSL-fallback branch never ran. SSL errors now propagate unwrapped from `_post`, allowing Attempt 2 (no-verify session) to execute correctly.
+
+---
+
 ## [0.4.0b5] - 2026-06-17
 
 ### Fixed
