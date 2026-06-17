@@ -296,7 +296,7 @@ New file: `custom_components/vigicam/openapi_events.py`
 - Modify `binary_sensor.py`: register OpenAPI sensors when `has_openapi=True`
 - Smart Detection continues firing as ONVIF catch-all
 
-### Phase 3 — Richer SD card + uptime sensors  `[TODO]`
+### Phase 3 — Richer SD card + uptime sensors  `[DONE v0.5.0b3]`
 - Gate ALL SD card sensors (existing v0.4.0 ones too) on `has_sd_card`
   - Cameras on NVR-only storage will no longer show "SD Card Status: None" etc.
 - Modify `sensor.py`: add SD card record duration, oldest recording, record capacity (all `has_sd_card` gated)
