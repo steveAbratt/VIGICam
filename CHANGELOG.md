@@ -14,6 +14,24 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b3] - 2026-06-17
+
+### Added
+- **SD Card Recording Duration** sensor — total hours of video stored on the SD card
+  (requires OpenAPI + SD card present).
+- **SD Card Oldest Recording** sensor — datetime of the earliest stored clip
+  (requires OpenAPI + SD card present).
+- **SD Card Record Capacity Remaining** sensor — hours of recording space left
+  (diagnostic, requires OpenAPI + SD card present).
+- **SD Card Video Space Free** sensor — GB of video storage free
+  (diagnostic, requires OpenAPI + SD card present).
+- **Uptime** sensor — hours since last camera reboot (diagnostic, hidden by default,
+  requires OpenAPI).
+- Coordinator now polls `getSdCardStatus` and `getDeviceStatus` via OpenAPI on every
+  30s refresh cycle when OpenAPI is available.
+
+---
+
 ## [0.5.0b2] - 2026-06-17
 
 ### Added

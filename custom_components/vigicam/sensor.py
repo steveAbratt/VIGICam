@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Callable
 
 from homeassistant.components.sensor import (
@@ -11,7 +12,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfInformation
+from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfInformation, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -21,7 +22,7 @@ from .entity import VIGIEntity, _clean_firmware
 
 @dataclass(frozen=True, kw_only=True)
 class VIGISensorDescription(SensorEntityDescription):
-    value_fn: Callable[[dict], float | str | None]
+    value_fn: Callable[[dict], float | str | datetime | None]
 
 
 def _parse_bytes(value: str | None) -> int | None:
@@ -62,6 +63,22 @@ def _parse_gb(value: str | None) -> float | None:
             return float(v[:-1])
         return float(v)
     except ValueError:
+        return None
+
+
+def _seconds_to_hours(value) -> float | None:
+    """Convert seconds (int or numeric string) to hours, 1 decimal place."""
+    try:
+        return round(int(value) / 3600, 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _unix_to_datetime(value) -> datetime | None:
+    """Convert a Unix timestamp to a UTC-aware datetime."""
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
         return None
 
 
@@ -130,16 +147,81 @@ SENSORS: tuple[VIGISensorDescription, ...] = (
 )
 
 
+# OpenAPI SD card sensors — require has_openapi + has_sd_card.
+OPENAPI_SD_SENSORS: tuple[VIGISensorDescription, ...] = (
+    VIGISensorDescription(
+        key="sd_record_duration",
+        name="SD Card Recording Duration",
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:clock-time-eight",
+        value_fn=lambda d: _seconds_to_hours(d.get("openapi_sd", {}).get("record_duration")),
+    ),
+    VIGISensorDescription(
+        key="sd_oldest_recording",
+        name="SD Card Oldest Recording",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda d: _unix_to_datetime(d.get("openapi_sd", {}).get("record_start_time")),
+    ),
+    VIGISensorDescription(
+        key="sd_record_capacity",
+        name="SD Card Record Capacity Remaining",
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:clock-time-eight-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _seconds_to_hours(d.get("openapi_sd", {}).get("record_free_duration")),
+    ),
+    VIGISensorDescription(
+        key="sd_video_free",
+        name="SD Card Video Space Free",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _parse_gb(d.get("openapi_sd", {}).get("video_free_space")),
+    ),
+)
+
+# OpenAPI device sensors — require has_openapi only.
+OPENAPI_DEVICE_SENSORS: tuple[VIGISensorDescription, ...] = (
+    VIGISensorDescription(
+        key="uptime",
+        name="Uptime",
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:timer-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda d: _seconds_to_hours(d.get("openapi_device", {}).get("uptime")),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     has_sd_card = data.get("has_sd_card", True)  # default True preserves behaviour on upgrade
-    async_add_entities(
+    has_openapi = data.get("has_openapi", False)
+
+    entities: list[VIGISensor] = [
         VIGISensor(data["coordinator"], data, desc)
         for desc in SENSORS
         if has_sd_card or desc.key not in _SD_CARD_KEYS
-    )
+    ]
+
+    if has_openapi and has_sd_card:
+        entities.extend(
+            VIGISensor(data["coordinator"], data, desc) for desc in OPENAPI_SD_SENSORS
+        )
+
+    if has_openapi:
+        entities.extend(
+            VIGISensor(data["coordinator"], data, desc) for desc in OPENAPI_DEVICE_SENSORS
+        )
+
+    async_add_entities(entities)
 
 
 class VIGISensor(VIGIEntity, SensorEntity):
