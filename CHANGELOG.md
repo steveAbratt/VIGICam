@@ -14,6 +14,13 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0b4] - 2026-06-17
+
+### Fixed
+- Config flow had no logger — connection failures during setup were silently swallowed with no debug output. Errors during `cannot_connect` and `invalid_auth` are now logged at debug level with full exception detail, making it possible to diagnose setup failures on unsupported or different-firmware cameras.
+
+---
+
 ## [0.4.0b3] - 2026-06-17
 
 ### Added
