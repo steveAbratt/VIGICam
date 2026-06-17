@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b6] - 2026-06-17
+
+### Fixed
+- PTZ Preset dropdown always showed "unknown" — the camera has no API to report
+  its current position, so the dropdown now tracks the last preset selected from
+  HA. Selecting from the dropdown, calling `vigicam.goto_preset`, or using button
+  jogs / `vigicam.ptz` / `vigicam.ptz_move_to` all update the dropdown correctly.
+  State resets to unknown on HA restart (camera may have been moved externally).
+
+---
+
 ## [0.5.0b5] - 2026-06-17
 
 ### Fixed

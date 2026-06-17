@@ -166,6 +166,8 @@ def _register_services(hass: HomeAssistant) -> None:
         speed = call.data["speed"]
         duration = call.data.get("duration")
         pan_v, tilt_v, zoom_v = _DIRECTION_VECTORS[direction]
+        data["coordinator"].last_preset = None
+        data["coordinator"].async_update_listeners()
         await ptz.continuous_move(pan_v * speed, tilt_v * speed, zoom_v * speed)
         if duration:
             await asyncio.sleep(duration)
@@ -195,6 +197,8 @@ def _register_services(hass: HomeAssistant) -> None:
             )
             return
         await data["api"].goto_preset(preset["id"])
+        data["coordinator"].last_preset = preset_name
+        data["coordinator"].async_update_listeners()
 
     async def handle_upload_audio(call: ServiceCall) -> None:
         data = _entry_data_for_entity(hass, call.data["entity_id"])
@@ -496,6 +500,8 @@ def _register_services(hass: HomeAssistant) -> None:
                 "y_coord": call.data["tilt"],
                 "z_coord": call.data["zoom"],
             })
+            data["coordinator"].last_preset = None
+            data["coordinator"].async_update_listeners()
         except Exception as exc:
             _LOGGER.error("vigicam.ptz_move_to failed: %s", exc)
 

@@ -66,9 +66,14 @@ class VIGIPTZPresetSelect(VIGIEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        # Cameras don't report which preset is active
+        last = self.coordinator.last_preset
+        # Only return if the preset still exists (e.g. not deleted since last use)
+        if last and last in self.options:
+            return last
         return None
 
     async def async_select_option(self, option: str) -> None:
         preset = next(p for p in self.coordinator.presets if p["name"] == option)
         await self._entry_data["api"].goto_preset(preset["id"])
+        self.coordinator.last_preset = option
+        self.async_write_ha_state()
