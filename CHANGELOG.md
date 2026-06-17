@@ -14,6 +14,19 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0] - 2026-06-17
+
+### Added
+- **Last Detection image entity** (`image.<camera>_last_detection`) — updates automatically on every detection event (intrusion, line crossing, motion, person detected, smart detection). On cameras with Smart Frame support, downloads the AI-cropped Smart Frame from the SD card via WebSocket; on cameras without Smart Frame support (e.g. VIGI C540V), falls back to grabbing a still from the live RTSP stream. The `source` attribute indicates which method was used (`smart_frame` / `rtsp_snapshot`). Smart Frame images also expose `smart_frame_label` and `file_id` attributes.
+- Smart Frame support is now detected automatically at startup — no manual configuration needed.
+
+### Fixed
+- Camera dashboard thumbnails were broken in recent HA versions — `FFmpegManager.get_image` no longer exists. Replaced with `asyncio.create_subprocess_exec` throughout.
+- Setup failed with SSL certificate errors on cameras using the TP-Link internal CA (e.g. VIGI C320I). Two-stage fix: SSL errors now propagate unwrapped from `api.py` so the config flow's no-verify fallback session can run correctly.
+- Config flow had no logger — all setup failures were silently swallowed with no debug output. Errors are now logged at debug level with full exception detail.
+
+---
+
 ## [0.4.0b7] - 2026-06-17
 
 ### Added
