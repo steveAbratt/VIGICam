@@ -95,6 +95,60 @@ BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
     ),
 )
 
+# OpenAPI-only sensors — registered only when has_openapi=True.
+# These replace the "Smart Detection" catch-all with specific event types.
+OPENAPI_BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
+    VIGIBinarySensorDescription(
+        key="vehicle",
+        name="Vehicle Detected",
+        device_class=BinarySensorDeviceClass.MOTION,
+        icon="mdi:car-side",
+        event_type="vehicle",
+    ),
+    VIGIBinarySensorDescription(
+        key="audio_anomaly",
+        name="Audio Anomaly",
+        device_class=BinarySensorDeviceClass.SOUND,
+        icon="mdi:ear-hearing",
+        event_type="audio_anomaly",
+    ),
+    VIGIBinarySensorDescription(
+        key="loitering",
+        name="Loitering",
+        device_class=BinarySensorDeviceClass.MOTION,
+        icon="mdi:account-clock",
+        event_type="loitering",
+    ),
+    VIGIBinarySensorDescription(
+        key="scene_change",
+        name="Scene Change",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:image-broken-variant",
+        event_type="scene_change",
+    ),
+    VIGIBinarySensorDescription(
+        key="object_left_taken",
+        name="Object Left or Taken",
+        device_class=BinarySensorDeviceClass.MOTION,
+        icon="mdi:bag-personal",
+        event_type="object_left_taken",
+    ),
+    VIGIBinarySensorDescription(
+        key="area_entry",
+        name="Area Entry",
+        device_class=BinarySensorDeviceClass.MOTION,
+        icon="mdi:location-enter",
+        event_type="area_entry",
+    ),
+    VIGIBinarySensorDescription(
+        key="area_exit",
+        name="Area Exit",
+        device_class=BinarySensorDeviceClass.MOTION,
+        icon="mdi:location-exit",
+        event_type="area_exit",
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -107,6 +161,9 @@ async def async_setup_entry(
             entities.append(VIGIEventBinarySensor(coordinator, data, desc))
         elif desc.supported_fn(coordinator.data or {}):
             entities.append(VIGIBinarySensor(coordinator, data, desc))
+    if data.get("has_openapi"):
+        for desc in OPENAPI_BINARY_SENSORS:
+            entities.append(VIGIEventBinarySensor(coordinator, data, desc))
     async_add_entities(entities)
 
 

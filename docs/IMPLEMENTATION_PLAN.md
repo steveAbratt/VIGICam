@@ -276,7 +276,7 @@ Group related entities logically:
 
 ## Build phases
 
-### Phase 1 — OpenAPI infrastructure + SD card detection  `[TODO]`
+### Phase 1 — OpenAPI infrastructure + SD card detection  `[DONE v0.5.0b1]`
 New file: `custom_components/vigicam/openapi.py`
 - `VIGIOpenAPI` class: doAuth, call(), stok cache (25-min TTL), re-auth on -10002
 - Probe function: `try_openapi(ip, user, password) -> bool`
@@ -288,7 +288,7 @@ New file: `custom_components/vigicam/openapi.py`
 - Modify coordinator: periodic re-check for OpenAPI becoming available (every 5 min when False)
 - Add HA repair issue when port 20443 is closed
 
-### Phase 2 — Split detection sensors via subscribeMsg  `[TODO]`
+### Phase 2 — Split detection sensors via subscribeMsg  `[DONE v0.5.0b2]`
 New file: `custom_components/vigicam/openapi_events.py`
 - `VIGIOpenAPIEventListener`: persistent HTTPS connection, multipart/mixed parser
 - Heartbeat keepalive, reconnect on drop

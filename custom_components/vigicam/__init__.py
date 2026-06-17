@@ -19,6 +19,7 @@ from .coordinator import VIGICoordinator, _detect_sd_card
 from .onvif_events import VIGIOnvifEvents
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
 from .openapi import VIGIOpenAPI, try_openapi
+from .openapi_events import VIGIOpenAPIEventListener
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -507,12 +508,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
+    openapi_events = (
+        VIGIOpenAPIEventListener(hass, openapi, entry.entry_id) if has_openapi else None
+    )
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "api": camera_api,
         "coordinator": coordinator,
         "onvif_events": onvif_events,
         "onvif_ptz": onvif_ptz,
+        "openapi_events": openapi_events,
         "device_info": device_info,
         "has_ptz": has_ptz,
         "has_smart_frames": has_smart_frames,
@@ -528,6 +533,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await onvif_events.async_start()
+    if openapi_events:
+        await openapi_events.async_start()
     _register_services(hass)
     return True
 
@@ -537,6 +544,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         data = hass.data[DOMAIN].pop(entry.entry_id)
         await data["onvif_events"].async_stop()
+        if data.get("openapi_events"):
+            await data["openapi_events"].async_stop()
         if data.get("onvif_ptz"):
             await data["onvif_ptz"].close()
         await data["api"].close()
