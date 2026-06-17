@@ -8,7 +8,7 @@ import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
-from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import CONF_VERIFY_SSL, DEFAULT_USERNAME, DOMAIN
@@ -28,24 +28,29 @@ async def _test_credentials(hass, ip: str, username: str, password: str) -> tupl
     """Validate credentials. Returns (device_info, verify_ssl).
 
     Tries SSL verification first (for cameras with proper certs), then falls
-    back to unverified (self-signed certs, which is most VIGI/InSight cameras).
+    back to unverified. Most VIGI/InSight cameras use a TP-Link internal CA
+    (CN=TPRI-CA) that is not in the system trust store.
     """
-    # Attempt 1: verified (proper SSL cert)
+    # Attempt 1: verified (proper SSL cert) using HA's shared session
     session = async_get_clientsession(hass)
     cam = VIGICamera(ip, username, password, session=session)
     try:
         await cam.authenticate()
         return await cam.get_device_info(), True
-    except aiohttp.ClientSSLError:
-        pass  # Self-signed cert — retry without verification
+    except (aiohttp.ClientSSLError, aiohttp.ClientConnectorCertificateError):
+        pass  # Untrusted/self-signed cert — retry with SSL verification disabled
     except (VIGIAuthError, VIGIError):
         raise  # Real error, surface it
 
-    # Attempt 2: unverified (self-signed cert)
-    noverify_session = async_create_clientsession(hass, verify_ssl=False)
-    cam = VIGICamera(ip, username, password, session=noverify_session)
-    await cam.authenticate()
-    return await cam.get_device_info(), False
+    # Attempt 2: no SSL verification. Use session=None so VIGICamera creates its
+    # own session with an explicit no-verify SSL context. async_create_clientsession
+    # with verify_ssl=False is not reliable across all HA/aiohttp versions.
+    cam2 = VIGICamera(ip, username, password, session=None)
+    try:
+        await cam2.authenticate()
+        return await cam2.get_device_info(), False
+    finally:
+        await cam2.close()
 
 
 def _suggested_name(info: dict, fallback: str) -> str:

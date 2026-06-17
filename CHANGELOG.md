@@ -14,6 +14,13 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.4.0b5] - 2026-06-17
+
+### Fixed
+- Setup fails with SSL certificate error on cameras using the TP-Link internal CA (CN=TPRI-CA / CN=TPRI-DEVICE), including the VIGI C320I. The SSL fallback in the config flow was using `async_create_clientsession(verify_ssl=False)` which is unreliable across HA/aiohttp versions. Attempt 2 now uses `session=None` so `VIGICamera` creates its own session with an explicit no-verify SSL context — the same approach used successfully in the rest of the integration.
+
+---
+
 ## [0.4.0b4] - 2026-06-17
 
 ### Fixed
