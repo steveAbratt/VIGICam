@@ -78,6 +78,8 @@ class VIGICamera:
         try:
             async with session.post(url, json=body) as resp:
                 return await resp.json(content_type=None)
+        except (aiohttp.ClientSSLError, aiohttp.ClientConnectorCertificateError):
+            raise  # Let SSL errors propagate as-is so config flow can retry without SSL
         except aiohttp.ClientError as exc:
             raise VIGIError(f"HTTP error communicating with {self._ip}: {exc}") from exc
 
