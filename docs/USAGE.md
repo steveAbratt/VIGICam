@@ -7,6 +7,7 @@ For installation instructions see the [README](../README.md).
 
 ## Contents
 
+- [OpenAPI — unlocking additional sensors](#openapi--unlocking-additional-sensors)
 - [Switches — what they control](#switches)
 - [Buttons — what they trigger](#buttons)
 - [Numbers — adjustable settings](#numbers)
@@ -19,6 +20,54 @@ For installation instructions see the [README](../README.md).
 - [Blueprint: play audio file](#blueprint-play-audio-file)
 - [Playing pre-recorded files](#playing-pre-recorded-files)
 - [Dashboard tips](#dashboard-tips)
+
+---
+
+## OpenAPI — unlocking additional sensors
+
+TP-Link VIGI cameras include a local HTTPS API on port 20443 (the "OpenAPI") in addition
+to the standard ONVIF interface. When enabled, this unlocks a second set of sensors and
+services that are not available over ONVIF.
+
+### What it unlocks
+
+| Feature | Requires OpenAPI |
+|---------|-----------------|
+| Vehicle Detected binary sensor | ✓ |
+| Audio Anomaly Detected binary sensor | ✓ |
+| Loitering Detected binary sensor | ✓ |
+| Scene Change Detected binary sensor | ✓ |
+| Object Left or Taken binary sensor | ✓ |
+| Area Entry Detected binary sensor | ✓ |
+| Area Exit Detected binary sensor | ✓ |
+| SD Card Recording Duration sensor | ✓ |
+| Oldest Recording timestamp sensor | ✓ |
+| Record Capacity Remaining sensor | ✓ |
+| Video Space Free sensor | ✓ |
+| Uptime diagnostic sensor | ✓ |
+| `vigicam.ptz_move_to` service | ✓ |
+| `vigicam.ptz_save_preset` service | ✓ |
+| `vigicam.ptz_delete_preset` service | ✓ |
+
+### How to enable OpenAPI on the camera
+
+1. Open the camera's web UI (browse to `http://<camera-ip>`) and log in.
+2. Go to **Settings → Network → OpenAPI**.
+3. Enable the **OpenAPI** toggle and click **Save**.
+
+That is all — the integration probes port 20443 at startup and activates the additional
+sensors automatically. No further configuration in HA is needed.
+
+> **Firmware note:** OpenAPI requires firmware 2.1.x or later. If the Settings → Network
+> menu does not have an OpenAPI section, update the camera firmware via the VIGI app or
+> camera web UI.
+
+### Verifying it is active
+
+After enabling OpenAPI on the camera, reload the integration (Settings → Devices & Services
+→ VIGICam → three-dot menu → Reload). The additional entities will appear on the device
+page. If they do not appear, check the HA log — a connection failure to port 20443 will be
+logged under `custom_components.vigicam`.
 
 ---
 
@@ -185,6 +234,11 @@ rather than `select.select_option` (which requires an entity ID).
 
 ## Sensors & Diagnostics
 
+> **SD card vs NVR:** All SD card sensors (and the additional OpenAPI SD sensors below)
+> only appear when the integration detects an SD card installed in the camera at startup.
+> If your camera stores recordings on an NVR or NAS instead of a local SD card, these
+> entities will not be created.
+
 ### SD Card Used %
 
 Percentage of SD card storage used. Calculated from the camera's accurate byte values
@@ -198,6 +252,53 @@ Total and free SD card capacity in GB. Only available if a card is fitted.
 
 The camera's reported card status (e.g. `normal`, `full`, `none`). Useful as a trigger
 for a HA alert when the card fills up.
+
+#### Example: notify when the SD card is full
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: sensor.vigi_c540v_sd_card_status
+      to: "full"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "SD Card Full"
+        message: "Front Gate SD card is full — enable loop recording or swap the card"
+```
+
+### SD Card Recording Duration *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Total duration of all video recordings stored on the SD card, in hours. Updates on the
+30-second poll cycle.
+
+### Oldest Recording *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Timestamp of the oldest video recording on the SD card. As the card fills and loop
+recording overwrites old footage, this value advances forward. Useful for knowing how
+far back your recordings go.
+
+### Record Capacity Remaining *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Estimated remaining recording time based on the current video bitrate and available
+space, in hours. Drops as the card fills; resets when loop recording overwrites old
+footage.
+
+> **Loop recording:** If loop recording is enabled and the video partition is full,
+> this sensor reports `0` — this is correct. The camera is continuously overwriting old
+> footage rather than writing to free space.
+
+### Video Space Free *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Free storage on the SD card allocated specifically for video recordings, in GB. May
+differ from **SD Card Free** if the card is formatted with split storage (separate
+space for video and Smart Frame images).
+
+> **Loop recording:** If loop recording is enabled and the video partition is full,
+> this sensor reports `0` — the camera is using all video space and continuously
+> overwriting old footage. Use **SD Card Recording Duration** instead to see how much
+> footage is stored.
 
 ### Firmware Version *(diagnostic — hidden by default)*
 
@@ -215,6 +316,33 @@ the static IP assignment is active.
 
 Whether the camera is using `Static` or `DHCP` addressing.
 
+### Uptime *(OpenAPI — diagnostic — hidden by default)*
+
+The camera's uptime in hours since its last boot. Useful for detecting unexpected
+reboots — a sudden drop to zero means the camera restarted.
+
+**Requirements:** [OpenAPI enabled](#openapi--unlocking-additional-sensors).
+
+To show it: open the entity in HA, click the settings gear, and enable it.
+
+#### Example: alert on unexpected camera reboot
+
+```yaml
+automation:
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.vigi_c540v_uptime
+      below: 0.1    # just rebooted — uptime under ~6 minutes
+  condition:
+    - condition: template
+      value_template: "{{ (now() - this.last_changed).total_seconds() > 300 }}"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Camera Rebooted"
+        message: "Front Gate camera appears to have restarted"
+```
+
 ---
 
 ## Binary Sensors — Detection Events
@@ -231,10 +359,44 @@ explicit "no longer active" event.
 Fires when the camera detects any motion in the frame. Controlled by the Detection Motion
 switch and Motion Sensitivity number entity.
 
+#### Example: record a clip to HA when motion fires
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_motion
+      to: "on"
+  action:
+    - service: camera.record
+      target:
+        entity_id: camera.vigi_c540v_stream
+      data:
+        filename: /config/www/clips/motion_{{ now().strftime('%Y%m%d_%H%M%S') }}.mp4
+        duration: 10
+```
+
 ### Person Detected
 
 Fires when the camera's AI detects a person specifically. More precise than Motion —
 animals and vehicles do not trigger this. Controlled by Detection Person.
+
+#### Example: send a notification with a snapshot when a person is detected
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_person_detected
+      to: "on"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Person Detected"
+        message: "Someone is at the front door"
+        data:
+          image: /api/camera_proxy/camera.vigi_c540v_stream
+```
 
 ### Tamper
 
@@ -242,11 +404,44 @@ Fires when the camera detects it has been covered, turned, or the lens has been
 obscured. Requires the Detection Tamper switch to be on. Useful for a security alert
 when someone tries to block the camera.
 
+#### Example: alert when the camera is tampered with
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_tamper
+      to: "on"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Camera Tamper Alert"
+        message: "Front Gate camera has been covered or moved"
+```
+
 ### Intrusion
 
 Fires when someone enters a configured intrusion zone. Zones are drawn in the VIGI app
 or camera web UI (Active Defence → Intrusion Detection). This entity only appears once
 you have at least one intrusion zone configured and the ONVIF event is seen.
+
+#### Example: flash the alarm light on intrusion
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_intrusion
+      to: "on"
+  action:
+    - service: switch.turn_on
+      target:
+        entity_id: switch.vigi_c540v_alarm_light
+    - delay: "00:00:10"
+    - service: switch.turn_off
+      target:
+        entity_id: switch.vigi_c540v_alarm_light
+```
 
 ### Line Crossing
 
@@ -254,23 +449,225 @@ Fires when something crosses a configured line crossing rule. Lines are drawn in
 VIGI app or camera web UI (Active Defence → Line Crossing). If you have no lines
 configured, this sensor will never fire — it is not the same as generic motion.
 
+#### Example: announce when someone crosses the driveway line
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_line_crossing
+      to: "on"
+  action:
+    - service: vigicam.speak
+      data:
+        entity_id: camera.vigi_c540v_stream
+        message: "Someone has crossed the driveway boundary"
+        tts_engine: tts.cloud
+```
+
 ### Smart Detection
 
 A catch-all sensor that fires for: vehicle detection, sound detection, loitering,
 abandoned objects, and scene change events. These five types all share a single ONVIF
 event topic (`IsTPSmartEvent`) on VIGI cameras and cannot be separated at the ONVIF
-level. If you need to distinguish them, check the VIGI app's event log.
+level.
 
-> **Vehicle detection:** if you have vehicle detection enabled on the camera, it fires
-> this sensor — there is no separate Vehicle Detected sensor. The **Detection Vehicle**
-> switch only enables or disables the feature on the camera; the event always arrives
-> as Smart Detection in HA.
+> **Want individual sensors?** When [OpenAPI is enabled](#openapi--unlocking-additional-sensors),
+> separate binary sensors are created for each type — Vehicle Detected, Audio Anomaly,
+> Loitering, Scene Change, Object Left or Taken, Area Entry, and Area Exit. The Smart
+> Detection sensor continues to fire alongside them.
+
+#### Example: trigger the alarm on any smart detection event
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_smart_detection
+      to: "on"
+  action:
+    - service: button.press
+      target:
+        entity_id: button.vigi_c540v_alarm_trigger
+```
+
+### Vehicle Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Fires when the camera's AI specifically detects a vehicle. Unlike Smart Detection which
+groups all smart event types, this sensor fires only for vehicle events and clears
+independently.
+
+**Requirements:** OpenAPI enabled and vehicle detection active on the camera (Detection
+Vehicle switch on).
+
+#### Example: alert on vehicle detection at night
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_vehicle_detected
+      to: "on"
+  condition:
+    - condition: sun
+      after: sunset
+      before: sunrise
+  action:
+    - service: vigicam.speak
+      data:
+        entity_id: camera.vigi_c540v_stream
+        message: "Vehicle detected outside"
+        tts_engine: tts.cloud
+```
+
+### Audio Anomaly Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Fires when the camera detects an unusual sound — e.g. breaking glass, a car alarm, or
+raised voices. The sensitivity and sound types that trigger it are configured in the
+camera's web UI or VIGI app under **Event → Audio Anomaly Detection**.
+
+#### Example: notify on audio anomaly
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_audio_anomaly_detected
+      to: "on"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Audio Anomaly"
+        message: "Unusual sound detected at Front Gate"
+```
+
+### Loitering Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Fires when a person or vehicle remains in the camera's field of view longer than the
+configured loitering time threshold. The threshold is set in the camera's web UI or
+VIGI app under **Event → Loitering Detection**.
+
+#### Example: turn on a light when someone loiters
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_loitering_detected
+      to: "on"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.driveway
+```
+
+### Scene Change Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Fires when the camera detects a significant change to its scene — typically the camera
+being moved, re-aimed, or having something large placed in front of it. Distinct from
+[Tamper](#tamper) detection which focuses on the lens being covered.
+
+#### Example: alert when the camera is moved
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_scene_change_detected
+      to: "on"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Camera Moved"
+        message: "Front Gate camera scene has changed unexpectedly"
+```
+
+### Object Left or Taken *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Fires when the camera detects that an object has been left in the frame (abandoned
+object) or that an object that was present has been removed. The camera monitors a
+defined zone for objects appearing or disappearing over time.
+
+#### Example: alert on an abandoned object
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_object_left_taken
+      to: "on"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Object Alert"
+        message: "Something left or removed at Front Gate"
+```
+
+### Area Entry Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Fires when a person or vehicle enters a configured virtual area. Areas are drawn in
+the VIGI app or camera web UI under **Event → Area Entry Detection**. Unlike
+[Line Crossing](#line-crossing) which fires on crossing a line, this fires when
+something enters an enclosed zone.
+
+#### Example: sound the alarm on area entry
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_area_entry_detected
+      to: "on"
+  action:
+    - service: vigicam.play_audio
+      data:
+        entity_id: camera.vigi_c540v_stream
+        slot: 0       # built-in alarm tone
+        times: 3
+```
+
+### Area Exit Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Fires when a person or vehicle exits a configured virtual area. Mirrors Area Entry
+Detected but triggers on departure. Useful for detecting when a vehicle leaves a
+monitored zone.
+
+#### Example: notify when a vehicle leaves the property
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_area_exit_detected
+      to: "on"
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Vehicle Left"
+        message: "Vehicle exited the monitored area"
+```
 
 ### Loop Recording
 
 Indicates whether the camera's SD card loop recording is active. This is polled (not
 real-time) — it updates on the 30-second coordinator cycle. Provided for monitoring
 purposes only; loop recording cannot be enabled/disabled via the local API.
+
+#### Example: alert when loop recording stops unexpectedly
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_loop_recording
+      to: "off"
+      for: "00:02:00"   # wait 2 min to avoid false alerts on startup
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Recording Stopped"
+        message: "Front Gate loop recording is no longer active"
+```
 
 ---
 
@@ -500,6 +897,25 @@ Use `vigicam.speak` instead if you want TTS — it handles format conversion aut
 | 102 | Fixed sound A — upload once, keep permanently |
 | 103 | Fixed sound B — upload once, keep permanently |
 
+#### Example: pre-load a chime on HA startup
+
+Upload a fixed chime to slot 102 when HA starts so it is ready to play without
+delay in any automation:
+
+```yaml
+automation:
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - service: vigicam.upload_audio
+      data:
+        entity_id: camera.vigi_c540v_stream
+        url: http://192.168.1.x:8123/media/local/chime.wav
+        slot: 102
+        name: chime
+```
+
 ---
 
 ### `vigicam.play_audio` — Play a camera audio slot
@@ -519,6 +935,25 @@ data:
 Built-in slots 0 and 1 play the camera's built-in Alarm Tone and Ring Tone respectively,
 without triggering the full alarm response.
 
+#### Example: play a pre-uploaded clip on motion
+
+Upload your clip once using `vigicam.upload_audio` (or `vigicam.play_file`), then
+trigger it cheaply on every event without re-uploading:
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_motion
+      to: "on"
+  action:
+    - service: vigicam.play_audio
+      data:
+        entity_id: camera.vigi_c540v_stream
+        slot: 102
+        times: 1
+```
+
 ---
 
 ### `vigicam.delete_audio` — Remove a custom audio slot
@@ -530,6 +965,23 @@ service: vigicam.delete_audio
 data:
   entity_id: camera.vigi_c540v_stream
   slot: 101
+```
+
+#### Example: clear all custom slots on HA shutdown
+
+```yaml
+automation:
+  trigger:
+    - platform: homeassistant
+      event: shutdown
+  action:
+    - repeat:
+        count: 3
+        sequence:
+          - service: vigicam.delete_audio
+            data:
+              entity_id: camera.vigi_c540v_stream
+              slot: "{{ 101 + repeat.index - 1 }}"
 ```
 
 ---
@@ -548,9 +1000,28 @@ data:
   duration: 3          # seconds before auto-stop (optional)
 ```
 
+#### Example: pan right for 2 seconds when a button is pressed
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: input_button.pan_right
+  action:
+    - service: vigicam.ptz
+      data:
+        entity_id: camera.vigi_c540v_stream
+        direction: right
+        speed: 0.5
+        duration: 2
+```
+
 ---
 
 ### `vigicam.ptz_stop` — Stop camera movement *(PTZ cameras only)*
+
+Stops any in-progress PTZ movement immediately. Use this after a `vigicam.ptz` call
+that did not include a `duration`.
 
 ```yaml
 service: vigicam.ptz_stop
@@ -570,6 +1041,90 @@ service: vigicam.goto_preset
 data:
   entity_id: camera.vigi_c540v_stream
   preset: "Full Stable Yard"
+```
+
+#### Example: return to home position at night
+
+```yaml
+automation:
+  trigger:
+    - platform: sun
+      event: sunset
+  action:
+    - service: vigicam.goto_preset
+      data:
+        entity_id: camera.vigi_c540v_stream
+        preset: "Home"
+```
+
+---
+
+### `vigicam.ptz_move_to` — Move to absolute position *(PTZ cameras only, requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Moves the camera to an absolute pan/tilt/zoom position. Useful for precise positioning
+without needing a named preset, or for building patrol automations across exact coordinates.
+
+```yaml
+service: vigicam.ptz_move_to
+data:
+  entity_id: camera.vigi_c540v_stream
+  pan: 120.0    # horizontal angle (degrees)
+  tilt: -10.0   # vertical angle (degrees, negative = down)
+  zoom: 1.0     # zoom level (1.0 = wide)
+```
+
+> **Tip:** Use the VIGI app's PTZ control to move the camera to the position you want,
+> then save it as a preset with `vigicam.ptz_save_preset`. Read back the saved preset's
+> pan/tilt/zoom to find the coordinate values for future `ptz_move_to` calls.
+
+---
+
+### `vigicam.ptz_save_preset` — Save current position as a preset *(PTZ cameras only, requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Saves the camera's current position as a named preset. The preset name appears in the
+**PTZ Preset** select entity immediately after saving and can then be used with
+`vigicam.goto_preset`.
+
+```yaml
+service: vigicam.ptz_save_preset
+data:
+  entity_id: camera.vigi_c540v_stream
+  name: "Entrance View"
+```
+
+#### Example: move to a position then save it
+
+```yaml
+automation:
+  trigger:
+    - platform: time
+      at: "22:00:00"
+  action:
+    - service: vigicam.ptz_move_to
+      data:
+        entity_id: camera.vigi_c540v_stream
+        pan: 180.0
+        tilt: -5.0
+        zoom: 1.0
+    - delay: "00:00:02"
+    - service: vigicam.ptz_save_preset
+      data:
+        entity_id: camera.vigi_c540v_stream
+        name: "Night Watch"
+```
+
+---
+
+### `vigicam.ptz_delete_preset` — Delete a PTZ preset *(PTZ cameras only, requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+
+Removes a named preset from the camera. The preset will no longer appear in the PTZ
+Preset select entity after deletion.
+
+```yaml
+service: vigicam.ptz_delete_preset
+data:
+  entity_id: camera.vigi_c540v_stream
+  name: "Old Position"
 ```
 
 ---
