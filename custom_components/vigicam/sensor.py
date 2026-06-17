@@ -116,8 +116,9 @@ SENSORS: tuple[VIGISensorDescription, ...] = (
     VIGISensorDescription(
         key="firmware",
         name="Firmware Version",
-        value_fn=lambda d: _clean_firmware(d.get("device_info", {}).get("sw_version")),
+        entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
+        value_fn=lambda d: _clean_firmware(d.get("device_info", {}).get("sw_version")),
     ),
     VIGISensorDescription(
         key="ip_address",

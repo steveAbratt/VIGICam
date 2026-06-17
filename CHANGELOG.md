@@ -14,6 +14,16 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b8] - 2026-06-17
+
+### Fixed
+- **Firmware Version** sensor now consistently appears in the Diagnostics
+  section when enabled. Previously it had no entity category, so it appeared
+  under Information/Sensors on one camera and was invisible on another.
+  Still hidden by default — enable via the entity settings gear.
+
+---
+
 ## [0.5.0b7] - 2026-06-17
 
 ### Fixed
