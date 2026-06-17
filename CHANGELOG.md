@@ -14,6 +14,25 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.5.0b1] - 2026-06-17
+
+### Added
+- **OpenAPI client** (`openapi.py`) — connects to the TP-Link IPC OpenAPI on port 20443
+  using the two-step SHA-256 `doAuth` flow, with a 25-minute stok cache and automatic
+  re-authentication. Lays the groundwork for Vehicle Detection, Audio Anomaly, and other
+  split detection sensors (coming in v0.5.0b2).
+- **OpenAPI feature detection** — at startup the integration probes port 20443; if
+  available, `has_openapi=True` is set and the OpenAPI client is activated. If not
+  available, an INFO log message explains how to enable it in the camera settings.
+  The coordinator re-checks every 5 minutes so the flag activates without a restart if
+  the user enables OpenAPI later.
+- **SD card detection** (`has_sd_card`) — at startup the integration checks whether a
+  usable SD card is present (status `normal` or `full`). SD card sensors (Used %, Total,
+  Free, Status) are now only registered when an SD card is detected, keeping the device
+  page clean for cameras on NVR-only storage.
+
+---
+
 ## [0.4.0] - 2026-06-17
 
 ### Added

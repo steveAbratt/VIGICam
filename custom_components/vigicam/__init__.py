@@ -15,9 +15,10 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession, asy
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import CONF_VERIFY_SSL, DOMAIN
-from .coordinator import VIGICoordinator
+from .coordinator import VIGICoordinator, _detect_sd_card
 from .onvif_events import VIGIOnvifEvents
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
+from .openapi import VIGIOpenAPI, try_openapi
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -488,6 +489,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = VIGICoordinator(hass, camera_api, has_ptz=has_ptz)
     await coordinator.async_config_entry_first_refresh()
 
+    # Determine SD card presence from first-refresh storage data.
+    has_sd_card = _detect_sd_card(coordinator.data.get("storage", {}))
+    coordinator.has_sd_card = has_sd_card
+
+    # Probe OpenAPI — non-fatal; integration works fully without it.
+    has_openapi = await try_openapi(ip, username, password)
+    openapi: VIGIOpenAPI | None = VIGIOpenAPI(ip, username, password) if has_openapi else None
+    coordinator.has_openapi = has_openapi
+    coordinator.openapi = openapi
+    if not has_openapi:
+        _LOGGER.info(
+            "VIGICam: OpenAPI not available on %s. "
+            "Enable it in camera Settings → Network → OpenAPI to unlock "
+            "Vehicle Detection, Audio Anomaly, and other split detection sensors.",
+            ip,
+        )
+
     onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -498,6 +516,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "device_info": device_info,
         "has_ptz": has_ptz,
         "has_smart_frames": has_smart_frames,
+        "has_sd_card": has_sd_card,
+        "has_openapi": has_openapi,
+        "openapi": openapi,
         "presets": presets,
         "ip": ip,
         "username": username,
