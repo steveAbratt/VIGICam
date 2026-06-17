@@ -65,6 +65,8 @@ def _parse_gb(value: str | None) -> float | None:
         return None
 
 
+_SD_CARD_KEYS = {"sd_used_percent", "sd_total", "sd_free", "sd_status"}
+
 SENSORS: tuple[VIGISensorDescription, ...] = (
     VIGISensorDescription(
         key="sd_used_percent",
@@ -132,8 +134,11 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
+    has_sd_card = data.get("has_sd_card", True)  # default True preserves behaviour on upgrade
     async_add_entities(
-        VIGISensor(data["coordinator"], data, desc) for desc in SENSORS
+        VIGISensor(data["coordinator"], data, desc)
+        for desc in SENSORS
+        if has_sd_card or desc.key not in _SD_CARD_KEYS
     )
 
 

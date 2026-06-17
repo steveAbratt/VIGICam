@@ -84,6 +84,9 @@ any new session should read this file before starting work.
 ### Capability flags (stored in entry data at setup)
 - `has_ptz` — camera supports PTZ (detected via ONVIF profiles)
 - `has_smart_frames` — camera supports Smart Frame SD capture (detected via `get_media_list` probe)
+- `has_sd_card` — SD card is present and usable (detected via `getSdCardStatus` on JSON API; status `"none"` or error → False)
+- `has_openapi` — camera has OpenAPI enabled and reachable on port 20443
+- `has_nvr` — camera reports an active NVR connection (investigated in Phase 3; flag reserved)
 
 ---
 
@@ -120,6 +123,10 @@ fire for all of the above as before — no regression.
 
 **Richer SD card sensors** (via `getSdCardStatus`)
 
+Only registered when `has_sd_card=True`. The existing v0.4.0 SD card sensors (Used %, Total, Free,
+Status) will also be gated on `has_sd_card` in v0.5.0 — cameras on NVR-only storage won't see
+irrelevant "SD Card: None" clutter.
+
 | New entity | Description | Default visibility |
 |---|---|---|
 | SD Card Record Duration | Total hours of video stored | Visible |
@@ -127,6 +134,13 @@ fire for all of the above as before — no regression.
 | SD Card Record Capacity | How much more recording time remains | Diagnostic |
 | SD Card Video Space Total | Total GB allocated for video | Diagnostic |
 | SD Card Video Space Free | Free GB for video | Diagnostic |
+
+**NVR diagnostics** (investigated Phase 3)
+
+When a camera is managed by a TP-Link NVR, useful diagnostic info may be available (NVR IP,
+connection state, last seen). Methods to probe: `getNVRInfo`, network status calls. If found,
+add `has_nvr` flag and a diagnostic-hidden "NVR Connection" sensor. Low priority — useful but
+not essential.
 
 **PTZ services** (via `motorMove`, `setPresetPoint`, `removePresetPoint`)
 
@@ -262,12 +276,16 @@ Group related entities logically:
 
 ## Build phases
 
-### Phase 1 — OpenAPI infrastructure  `[TODO]`
+### Phase 1 — OpenAPI infrastructure + SD card detection  `[TODO]`
 New file: `custom_components/vigicam/openapi.py`
-- `VIGIOpenAPI` class: doAuth, call(), stok cache (25-min TTL), re-auth on 401
+- `VIGIOpenAPI` class: doAuth, call(), stok cache (25-min TTL), re-auth on -10002
 - Probe function: `try_openapi(ip, user, password) -> bool`
-- Modify `__init__.py`: probe OpenAPI at setup, store `has_openapi` in entry data
-- Modify coordinator: periodic re-check for OpenAPI becoming available
+- Modify `__init__.py`:
+  - Probe OpenAPI at setup, store `has_openapi` in entry data
+  - Probe SD card at setup via JSON API `getSdCardStatus`, store `has_sd_card` in entry data
+    - `has_sd_card=True` if `status` is `"normal"` or `"full"`; False if `"none"` or error
+  - Re-check `has_sd_card` on each coordinator refresh (card may be inserted/removed)
+- Modify coordinator: periodic re-check for OpenAPI becoming available (every 5 min when False)
 - Add HA repair issue when port 20443 is closed
 
 ### Phase 2 — Split detection sensors via subscribeMsg  `[TODO]`
@@ -279,8 +297,12 @@ New file: `custom_components/vigicam/openapi_events.py`
 - Smart Detection continues firing as ONVIF catch-all
 
 ### Phase 3 — Richer SD card + uptime sensors  `[TODO]`
-- Modify `sensor.py`: add SD card record duration, oldest recording, record capacity
+- Gate ALL SD card sensors (existing v0.4.0 ones too) on `has_sd_card`
+  - Cameras on NVR-only storage will no longer show "SD Card Status: None" etc.
+- Modify `sensor.py`: add SD card record duration, oldest recording, record capacity (all `has_sd_card` gated)
 - Add uptime sensor (diagnostic, hidden)
+- Investigate NVR diagnostics: probe `getNVRInfo` and related methods; add `has_nvr` flag and
+  "NVR Connection" diagnostic sensor if the camera exposes useful data
 - All powered from existing coordinator poll (no new polling)
 
 ### Phase 4 — PTZ absolute position + preset management  `[TODO]`

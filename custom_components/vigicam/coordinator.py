@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -11,12 +11,26 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
+if TYPE_CHECKING:
+    from .openapi import VIGIOpenAPI
+
 _LOGGER = logging.getLogger(__name__)
+
+# How many coordinator ticks between OpenAPI re-checks when has_openapi=False.
+# 10 ticks × 30 s = 5 minutes.
+_OPENAPI_RECHECK_TICKS = 10
 
 
 class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
-        self, hass: HomeAssistant, camera: VIGICamera, has_ptz: bool = False
+        self,
+        hass: HomeAssistant,
+        camera: VIGICamera,
+        *,
+        has_ptz: bool = False,
+        has_sd_card: bool = False,
+        has_openapi: bool = False,
+        openapi: "VIGIOpenAPI | None" = None,
     ) -> None:
         super().__init__(
             hass,
@@ -26,7 +40,11 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.camera = camera
         self.has_ptz = has_ptz
+        self.has_sd_card = has_sd_card
+        self.has_openapi = has_openapi
+        self.openapi: VIGIOpenAPI | None = openapi
         self.presets: list[dict] = []
+        self._openapi_recheck_counter: int = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -68,4 +86,33 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.presets = []
             results["presets"] = self.presets
 
+        # Update has_sd_card from live storage data on every refresh.
+        storage = results.get("storage", {})
+        self.has_sd_card = _detect_sd_card(storage)
+
+        # Periodically probe for OpenAPI becoming available.
+        if not self.has_openapi:
+            self._openapi_recheck_counter += 1
+            if self._openapi_recheck_counter >= _OPENAPI_RECHECK_TICKS:
+                self._openapi_recheck_counter = 0
+                await self._recheck_openapi()
+
         return results
+
+    async def _recheck_openapi(self) -> None:
+        from .openapi import VIGIOpenAPI, try_openapi
+
+        ip = self.camera._ip
+        if await try_openapi(ip, self.camera._username, self.camera._password):
+            self.has_openapi = True
+            self.openapi = VIGIOpenAPI(ip, self.camera._username, self.camera._password)
+            _LOGGER.info(
+                "OpenAPI is now available on %s — reload the VIGICam integration "
+                "to enable Vehicle Detection and other OpenAPI sensors",
+                ip,
+            )
+
+
+def _detect_sd_card(storage: dict) -> bool:
+    """Return True only when a usable SD card is present."""
+    return storage.get("status", "").lower() in {"normal", "full"}
