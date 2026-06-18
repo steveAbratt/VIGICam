@@ -1,13 +1,13 @@
 {
   "domain": "vigicam",
   "name": "VIGI & InSight Cameras",
-  "version": "0.6.1",
-  "documentation": "https://github.com/stevebratt/VIGICam",
-  "issue_tracker": "https://github.com/stevebratt/VIGICam/issues",
   "codeowners": ["@stevebratt"],
-  "requirements": ["pycryptodome>=3.20.0"],
-  "dependencies": ["ffmpeg", "stream"],
   "config_flow": true,
+  "dependencies": ["ffmpeg", "stream"],
+  "documentation": "https://github.com/stevebratt/VIGICam",
   "iot_class": "local_polling",
-  "loggers": ["custom_components.vigicam"]
+  "issue_tracker": "https://github.com/stevebratt/VIGICam/issues",
+  "loggers": ["custom_components.vigicam"],
+  "requirements": ["pycryptodome>=3.20.0"],
+  "version": "0.6.1"
 }
