@@ -14,6 +14,23 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b10] - 2026-06-18
+
+### Added
+- **Capability diagnostic sensors** — four binary sensor entities now appear in the
+  Diagnostics section of every camera device page:
+  - **PTZ** — on if pan/tilt/zoom was detected at startup
+  - **OpenAPI** — on if the OpenAPI endpoint is reachable
+  - **Smart Frame Capture** — on if the camera supports AI-cropped Smart Frame images
+  - **SD Card** — on/off updated live as the card is inserted or removed
+  - **ONVIF Events** — on while the ONVIF pull-point subscription is active; goes off if the subscription drops or detection events are disabled
+
+  These are automation-friendly: use them as conditions to write automations that
+  adapt to whichever cameras have PTZ, or to check at a glance what the integration
+  detected on a given camera.
+
+---
+
 ## [0.6.0b9] - 2026-06-18
 
 ### Added
