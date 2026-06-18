@@ -14,6 +14,18 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b13] - 2026-06-18
+
+### Fixed
+- **Event Image Capture sensor still false positive on VIGI C540V** — `get_picture_list`
+  also returns error_code 0 on both cameras (like `get_media_list`), so the previous fix
+  did not help. The probe now reads `picture_total_space_accurate` from `harddisk_manage`
+  `hd_info` instead. Cameras with a split SD card partition return a non-zero byte count
+  (e.g. `3221225472B` on the InSight S245); cameras without image storage return `0B`
+  (VIGI C540V). Verified against live cameras before release.
+
+---
+
 ## [0.6.0b12] - 2026-06-18
 
 ### Fixed
