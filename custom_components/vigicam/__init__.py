@@ -699,7 +699,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await camera_api.authenticate()
         device_info = await camera_api.get_device_info()
         presets = await camera_api.get_presets()
-        has_smart_frames = await camera_api.supports_smart_frames()
+        has_smart_frames = await camera_api.supports_event_image_capture()
     except VIGIAuthError as exc:
         raise ConfigEntryAuthFailed(str(exc)) from exc
     except VIGIError as exc:
