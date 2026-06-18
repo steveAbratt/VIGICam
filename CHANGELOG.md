@@ -14,6 +14,28 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b9] - 2026-06-18
+
+### Added
+- **Last Detection image entity** — when a detection event fires, the integration
+  grabs an image and stores it as a `Last Detection` entity on the device. On cameras
+  with Smart Frame enabled (and an SD card), it downloads the AI-cropped Smart Frame.
+  On cameras without Smart Frame (e.g. VIGI C540V), it falls back to capturing a still
+  from the live RTSP stream two seconds after the event arrives.
+- **`detection_zone` attribute on detection binary sensors** — when the camera's ONVIF
+  event identifies which detection zone triggered (e.g. `Area1`, `Line1`), that name is
+  now exposed as a `detection_zone` attribute on the binary sensor and the Last Detection
+  image entity. Use this in automations to distinguish `Area1` from `Area2` on the same
+  camera.
+
+### Fixed
+- **`DETECTION_EVENT_SUFFIXES` mismatch** — event-driven binary sensors use unique-ID
+  suffixes like `event_person`, `event_motion`, etc., but the cleanup set contained the
+  bare keys (`person`, `motion`). The mismatch meant disabling Detection Events did not
+  remove stale entities from the registry. Corrected to use the actual suffixes.
+
+---
+
 ## [0.6.0b8] - 2026-06-18
 
 ### Fixed

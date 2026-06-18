@@ -281,8 +281,12 @@ class VIGIOnvifEvents:
                 active = str(val).lower() in ("true", "1", "yes")
                 break
 
+        # The ONVIF Source block identifies which detection zone fired.
+        # TP-Link cameras put this in a "Rule" SimpleItem (e.g. "Area1", "Line1").
+        area: str | None = data.get("Rule") or data.get("RuleName") or data.get("RuleRegionID")
+
         async_dispatcher_send(
             self._hass,
             SIGNAL_VIGICAM_EVENT.format(self._entry_id),
-            {"type": event_type, "active": active},
+            {"type": event_type, "active": active, "area": area},
         )

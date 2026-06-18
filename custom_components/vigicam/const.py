@@ -38,10 +38,16 @@ DEFAULT_FEATURE_IMAGE_CONTROLS = False
 CAMERA_STREAM_SUFFIXES: frozenset[str] = frozenset({"stream"})
 
 DETECTION_EVENT_SUFFIXES: frozenset[str] = frozenset({
-    "motion", "person", "tamper", "intrusion", "line_cross",
-    "smart_event", "loop_recording",
-    "vehicle", "audio_anomaly", "loitering", "scene_change",
-    "object_left_taken", "area_entry", "area_exit",
+    # Coordinator-polled (VIGIBinarySensor uses key directly)
+    "loop_recording",
+    # Event-driven (VIGIEventBinarySensor uses f"event_{key}")
+    "event_motion", "event_person", "event_tamper", "event_intrusion", "event_line_cross",
+    "event_smart_event",
+    # OpenAPI event sensors
+    "event_vehicle", "event_audio_anomaly", "event_loitering", "event_scene_change",
+    "event_object_left_taken", "event_area_entry", "event_area_exit",
+    # Image entity
+    "last_detection",
 })
 
 IMAGE_CONTROL_SUFFIXES: frozenset[str] = frozenset({

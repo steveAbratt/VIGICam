@@ -191,11 +191,17 @@ class VIGIOpenAPIEventListener:
                 _LOGGER.debug(
                     "OpenAPI raw event from %s: %s", self._openapi._ip, data
                 )
-                self._dispatch(data["event_type"])
+                area: str | None = (
+                    data.get("detection_area")
+                    or data.get("area_name")
+                    or data.get("rule_name")
+                    or data.get("region_name")
+                )
+                self._dispatch(data["event_type"], area=area)
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
 
-    def _dispatch(self, event_type: str) -> None:
+    def _dispatch(self, event_type: str, area: str | None = None) -> None:
         mapped = _EVENT_TYPE_MAP.get(event_type)
         if mapped is None:
             if event_type not in _EVENT_TYPE_MAP:
@@ -210,5 +216,5 @@ class VIGIOpenAPIEventListener:
         async_dispatcher_send(
             self._hass,
             SIGNAL_VIGICAM_EVENT.format(self._entry_id),
-            {"type": mapped, "active": True},
+            {"type": mapped, "active": True, "area": area},
         )
