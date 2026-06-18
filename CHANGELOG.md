@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.1] - 2026-06-18
+
+### Changed
+- `smart_frame.py` renamed to `event_image.py`; internal function names updated to match
+  (`fetch_latest_smart_frame` → `fetch_latest_event_image`, `get_smart_frames` →
+  `get_event_images`). No user-visible entity changes.
+- Configure dialog capability summary now shows "Event Image Capture" instead of
+  "Smart Frame".
+
+---
+
 ## [0.6.0] - 2026-06-18
 
 ### Added

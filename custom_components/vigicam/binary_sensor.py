@@ -171,7 +171,7 @@ CAPABILITY_SENSORS: tuple[VIGICapabilityDescription, ...] = (
 _STATIC_CAPABILITY_KEYS: dict[str, str] = {
     "cap_ptz":         "has_ptz",
     "cap_openapi":     "has_openapi",
-    "cap_event_capture": "has_smart_frames",
+    "cap_event_capture": "has_event_capture",
 }
 
 

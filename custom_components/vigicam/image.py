@@ -30,7 +30,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS, DOMAIN
 from .entity import VIGIEntity
 from .onvif_events import SIGNAL_VIGICAM_EVENT
-from .smart_frame import fetch_latest_smart_frame
+from .event_image import fetch_latest_event_image
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._grabbing = False
         self._unsub_dispatcher: object = None
         self._attr_extra_state_attributes: dict = {}
-        self._has_smart_frames: bool = entry_data.get("has_smart_frames", False)
+        self._has_event_capture: bool = entry_data.get("has_event_capture", False)
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -94,8 +94,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
 
     async def _grab_frame(self, event: dict) -> None:
         try:
-            if self._has_smart_frames:
-                await self._grab_smart_frame(event)
+            if self._has_event_capture:
+                await self._grab_event_image(event)
             else:
                 await self._grab_rtsp_snapshot(event)
         except Exception as exc:
@@ -103,7 +103,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         finally:
             self._grabbing = False
 
-    async def _grab_smart_frame(self, event: dict) -> None:
+    async def _grab_event_image(self, event: dict) -> None:
         event_type = event["type"]
         area = event.get("area")
         await asyncio.sleep(_POST_EVENT_DELAY_SF)
@@ -111,7 +111,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
         except Exception:
             ffmpeg_bin = "ffmpeg"
-        result = await fetch_latest_smart_frame(
+        result = await fetch_latest_event_image(
             ip=self._entry_data["ip"],
             username=self._entry_data["username"],
             password=self._entry_data["password"],

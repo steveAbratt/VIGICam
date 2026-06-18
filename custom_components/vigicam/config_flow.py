@@ -148,7 +148,7 @@ def _capabilities_text(entry_data: dict, has_frigate: bool) -> str:
         _item(entry_data.get("has_sd_card", False),     "SD card"),
         _item(entry_data.get("has_ptz", False),          "PTZ"),
         _item(entry_data.get("has_openapi", False),      "OpenAPI"),
-        _item(entry_data.get("has_smart_frames", False), "Smart Frame"),
+        _item(entry_data.get("has_event_capture", False), "Event Image Capture"),
         _item(has_frigate,                               "Frigate"),
     ])
 

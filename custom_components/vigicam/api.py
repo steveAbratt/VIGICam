@@ -436,7 +436,7 @@ class VIGICamera:
     async def goto_preset(self, preset_id: str) -> None:
         await self.do("preset", {"goto_preset": {"channel": 0, "id": preset_id}})
 
-    # ── Smart Frames ──────────────────────────────────────────────────────────
+    # ── Event Image Capture ───────────────────────────────────────────────────
 
     async def supports_event_image_capture(self) -> bool:
         """Return True if this camera has an SD card image partition.
@@ -457,15 +457,11 @@ class VIGICamera:
         except (VIGIError, ValueError):
             return False
 
-    async def supports_smart_frames(self) -> bool:
-        """Deprecated alias for supports_event_image_capture."""
-        return await self.supports_event_image_capture()
-
-    async def get_smart_frames(self, days_back: int = 1, max_items: int = 5) -> list[dict]:
-        """Return the most recent Smart Frame entries from the SD card, newest first.
+    async def get_event_images(self, days_back: int = 1, max_items: int = 5) -> list[dict]:
+        """Return the most recent event image entries from the SD card, newest first.
 
         Each dict: file_id, start_time (unix str), event_type, size.
-        Returns [] if Smart Frame capture is disabled or no SD card is present.
+        Returns [] if event image capture is disabled or no SD card is present.
 
         Uses get_media_list (not get_picture_list) because get_picture_list returns
         items oldest-first by page and there is no way to request the last page without
