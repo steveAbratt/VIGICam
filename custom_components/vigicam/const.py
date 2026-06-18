@@ -21,3 +21,55 @@ NIGHT_VISION_MODES = {
 }
 
 LOGGER = logging.getLogger(f"custom_components.{DOMAIN}")
+
+# ── Feature group options ──────────────────────────────────────────────────────
+
+CONF_FEATURE_CAMERA_STREAM = "feature_camera_stream"
+CONF_FEATURE_DETECTION_EVENTS = "feature_detection_events"
+CONF_FEATURE_IMAGE_CONTROLS = "feature_image_controls"
+
+DEFAULT_FEATURE_CAMERA_STREAM = True
+DEFAULT_FEATURE_DETECTION_EVENTS = True
+DEFAULT_FEATURE_IMAGE_CONTROLS = False
+
+# Unique-ID suffixes that belong to each feature group.
+# Used by the entity cleanup function to remove stale entries when a
+# feature group is disabled via the options flow.
+CAMERA_STREAM_SUFFIXES: frozenset[str] = frozenset({"stream"})
+
+DETECTION_EVENT_SUFFIXES: frozenset[str] = frozenset({
+    "motion", "person", "tamper", "intrusion", "line_cross",
+    "smart_event", "loop_recording",
+    "vehicle", "audio_anomaly", "loitering", "scene_change",
+    "object_left_taken", "area_entry", "area_exit",
+})
+
+IMAGE_CONTROL_SUFFIXES: frozenset[str] = frozenset({
+    # Numbers (key matches VIGINumberDescription.key)
+    "luma", "contrast", "saturation", "chroma", "sharpness", "wd_gain", "exp_gain",
+    # Selects
+    "flip", "rotate", "flicker", "white_balance", "exposure_type",
+    # Switches
+    "wide_dynamic", "high_light_compensation", "dehaze", "eis",
+    "auto_exp_antiflicker", "backlight", "ldc",
+    "full_color_people_enhance", "full_color_vehicle_enhance",
+})
+
+# ── Repairs issue identifiers ──────────────────────────────────────────────────
+
+REPAIRS_SD_CARD_MISSING = "sd_card_missing"
+REPAIRS_FRIGATE_GONE = "frigate_camera_gone"
+
+# Unique-ID suffixes for entities that have been superseded and should be
+# removed from the registry on the next setup (one-time migration).
+DEPRECATED_SUFFIXES: frozenset[str] = frozenset({
+    "spotlight_intensity",  # replaced by the spotlight light entity brightness
+})
+
+# Unique-ID suffixes for all SD card sensor entities — used by the repair fix
+# flow to remove stale entities when the user confirms the card is gone.
+SD_ENTITY_SUFFIXES: frozenset[str] = frozenset({
+    "sd_used_percent", "sd_total", "sd_free", "sd_status",
+    "sd_record_duration", "sd_oldest_recording", "sd_record_capacity",
+    "sd_video_free", "loop_recording",
+})

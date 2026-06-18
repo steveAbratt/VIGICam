@@ -188,6 +188,9 @@ class VIGIOpenAPIEventListener:
             if "Heartbeat" in data:
                 _LOGGER.debug("OpenAPI heartbeat from %s", self._openapi._ip)
             elif "event_type" in data:
+                _LOGGER.debug(
+                    "OpenAPI raw event from %s: %s", self._openapi._ip, data
+                )
                 self._dispatch(data["event_type"])
 
     # ── Dispatch ──────────────────────────────────────────────────────────────

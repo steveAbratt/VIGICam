@@ -71,6 +71,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await safe_get("device_info", self.camera.get_device_info())
         await safe_get("motion", self.camera.get_motion_detection())
         await safe_get("image_switch", self.camera.get_image_switch())
+        await safe_get("image_common", self.camera.get_image_common())
         await safe_get("alarm", self.camera.get_alarm())
         await safe_get("led", self.camera.get_led())
         await safe_get("speaker", self.camera.get_audio_speaker())
@@ -78,6 +79,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await safe_get("storage", self.camera.get_storage())
         await safe_get("tamper", self.camera.get_tamper())
         await safe_get("network", self.camera.get_network())
+        await safe_get("lens_mask", self.camera.get_lens_mask())
 
         if self.has_ptz:
             if not self.presets:

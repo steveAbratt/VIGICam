@@ -14,6 +14,115 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b5] - 2026-06-18
+
+### Added
+- **`docs/FRIGATE_SETUP.md`** — step-by-step guide for running VIGICam alongside
+  Frigate: recommended architecture, which feature groups to disable, automation
+  examples combining both integrations.
+- **`docs/MOVING_TO_FRIGATE.md`** — migration checklist for existing standalone
+  VIGICam users adding Frigate: what changes, how to update automations, how to
+  reverse the change.
+- **`docs/USAGE.md` additions:**
+  - Feature Groups section — explains the three feature groups, how to configure
+    them, and the Repairs notifications.
+  - Spotlight light entity — replaces the removed Spotlight Intensity number entity.
+  - Privacy Mask switch — blanks the camera feed on demand; includes automation example.
+  - Image Controls section — full reference for all image tuning numbers, switches,
+    and selects added in v0.6.0b3.
+
+---
+
+## [0.6.0b4] - 2026-06-18
+
+### Added
+- **Frigate integration awareness** — VIGICam now detects whether Frigate has a
+  camera configured at the same IP address. When detected:
+  - The Options flow shows an advisory note suggesting you disable Camera Stream
+    and Detection Events to avoid duplicate entities.
+  - A `has_frigate` flag is stored in entry data for future features.
+- **Frigate gone repair notice** — if VIGICam was previously detected alongside
+  Frigate but Frigate is no longer present (removed or reconfigured), a Repairs
+  notification appears in HA's Problems section, guiding you to re-enable Camera
+  Stream and Detection Events.
+
+### Changed
+- Frigate detection logic extracted into its own `frigate.py` module (was an
+  inline function in `config_flow.py`). Covers both modern Frigate config entries
+  and older builds that embed the camera URL in entity unique IDs.
+
+---
+
+## [0.6.0b3] - 2026-06-18
+
+### Added
+- **Image controls** — optional camera tuning entities available when the
+  Image Controls feature group is enabled in the integration options. All are
+  in the Configuration entity category and hidden by default (enable
+  individually from the entity settings gear):
+  - **Numbers:** Image Brightness, Contrast, Saturation, Chroma, Sharpness,
+    WDR Gain, Exposure Gain (all 0–100 sliders)
+  - **Selects:** Flip, Rotate, Flicker (50/60 Hz), White Balance,
+    Exposure Type
+  - **Switches:** WDR, HLC, Dehaze, EIS, Auto Exposure Anti-flicker,
+    Backlight Compensation, Lens Distortion Correction, Full Colour People
+    Enhance, Full Colour Vehicle Enhance
+- **Privacy Mask switch** — toggle the camera's lens mask (screen blackout)
+  on/off. Appears automatically when the camera supports it; always visible
+  regardless of the Image Controls feature group setting.
+- `image_common` and `lens_mask` are now fetched every coordinator poll cycle
+  so all new entities stay up to date.
+
+---
+
+## [0.6.0b2] - 2026-06-18
+
+### Added
+- **Spotlight light entity** — the camera spotlight is now a proper HA `light`
+  entity with brightness control, replacing the separate Spotlight Intensity
+  number entity. Use it in automations with `light.turn_on(brightness=200)`,
+  include it in scenes, and control it from the default light card on dashboards.
+  Brightness maps the camera's 1–4 internal scale to HA's 0–255 range.
+
+### Removed
+- **Spotlight Intensity** number entity — superseded by the spotlight light
+  entity's brightness control. Existing automations using the number entity
+  should be updated to use `light.turn_on` with `brightness:` instead.
+  The entity is removed from the registry automatically on first load.
+
+---
+
+## [0.6.0b1] - 2026-06-18
+
+### Added
+- **Feature groups** — new Options flow (Settings → Devices & Services → VIGICam → Configure)
+  lets you enable or disable three feature groups per camera:
+  - **Camera stream** (on by default) — the RTSP live-feed entity. Disable when Frigate
+    provides the stream.
+  - **Detection events** (on by default) — motion/person/intrusion binary sensors and
+    ONVIF/OpenAPI event subscriptions. Disable when Frigate handles detection.
+  - **Image controls** (off by default) — camera tuning entities added in a later release;
+    toggle on here when ready.
+- **Automatic entity cleanup** — when a feature group is turned off, any entities that
+  belonged to it are removed from the entity registry immediately on reload. No stale
+  unavailable stubs left behind.
+- **SD card removal notification** — if the SD card is removed while HA is running, a
+  notice appears in Settings → System → Repairs explaining what happened. Dismiss it to
+  keep the entities (e.g. card temporarily removed); it clears automatically when the card
+  is reinserted and the integration reloads.
+- **Frigate awareness** — the Options flow detects whether Frigate has a camera at the
+  same IP and shows a contextual note recommending which feature groups to disable.
+- `light` platform stub added (Phase 2 will introduce the spotlight light entity).
+
+### Changed
+- README rewritten — new intro selling VIGI/InSight hardware, two-path setup explanation
+  (standalone vs Frigate), and a "Why VIGI" section covering PoE, business-spec build
+  quality, InSight line, and on-device AI.
+- OpenAPI event stream now logs the full raw event payload at DEBUG level, making it
+  easier to inspect what the camera sends when zone-based detection fires.
+
+---
+
 ## [0.5.0b8] - 2026-06-17
 
 ### Fixed

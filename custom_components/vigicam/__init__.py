@@ -8,13 +8,30 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
-from .const import CONF_VERIFY_SSL, DOMAIN
+from .const import (
+    CAMERA_STREAM_SUFFIXES,
+    CONF_FEATURE_CAMERA_STREAM,
+    CONF_FEATURE_DETECTION_EVENTS,
+    CONF_FEATURE_IMAGE_CONTROLS,
+    CONF_VERIFY_SSL,
+    DEFAULT_FEATURE_CAMERA_STREAM,
+    DEFAULT_FEATURE_DETECTION_EVENTS,
+    DEFAULT_FEATURE_IMAGE_CONTROLS,
+    DEPRECATED_SUFFIXES,
+    DETECTION_EVENT_SUFFIXES,
+    DOMAIN,
+    IMAGE_CONTROL_SUFFIXES,
+    REPAIRS_FRIGATE_GONE,
+    REPAIRS_SD_CARD_MISSING,
+    SD_ENTITY_SUFFIXES,
+)
+from .frigate import detect_frigate_camera
 from .coordinator import VIGICoordinator, _detect_sd_card
 from .onvif_events import VIGIOnvifEvents
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
@@ -23,9 +40,12 @@ from .openapi_events import VIGIOpenAPIEventListener
 
 _LOGGER = logging.getLogger(__name__)
 
+# All platforms the integration can ever create — individual setup functions
+# gate their own entities on feature flags and capability detection.
 PLATFORMS = [
     Platform.CAMERA,
     Platform.BINARY_SENSOR,
+    Platform.LIGHT,
     Platform.SWITCH,
     Platform.SELECT,
     Platform.SENSOR,
@@ -33,6 +53,98 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.IMAGE,
 ]
+
+# ── Feature helpers ───────────────────────────────────────────────────────────
+
+def _feature(entry: ConfigEntry, key: str, default: bool) -> bool:
+    """Return the current option value for a feature flag."""
+    return entry.options.get(key, default)
+
+
+def _cleanup_stale_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove entity registry entries for disabled feature groups.
+
+    Called at the start of async_setup_entry so that entities belonging to
+    a feature group the user has turned off are removed cleanly rather than
+    left as unavailable stubs.
+    """
+    options = entry.options
+    registry = er.async_get(hass)
+
+    # Build the set of unique-ID suffixes that should no longer exist.
+    remove_suffixes: set[str] = set()
+    if not options.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM):
+        remove_suffixes |= CAMERA_STREAM_SUFFIXES
+    if not options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS):
+        remove_suffixes |= DETECTION_EVENT_SUFFIXES
+    if not options.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS):
+        remove_suffixes |= IMAGE_CONTROL_SUFFIXES
+
+    # Always remove deprecated entities regardless of feature flags.
+    remove_suffixes |= DEPRECATED_SUFFIXES
+
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        # Unique IDs are "{device_id}_{suffix}" — extract the suffix part.
+        parts = reg_entry.unique_id.split("_", 1)
+        suffix = parts[1] if len(parts) == 2 else reg_entry.unique_id
+        if suffix in remove_suffixes:
+            _LOGGER.debug(
+                "Removing stale entity %s (feature group disabled)", reg_entry.entity_id
+            )
+            registry.async_remove(reg_entry.entity_id)
+
+
+async def _raise_sd_card_repair(hass: HomeAssistant, entry: ConfigEntry, camera_name: str) -> None:
+    """Create a Repairs issue when the SD card disappears at runtime."""
+    try:
+        from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
+        async_create_issue(
+            hass,
+            DOMAIN,
+            f"{REPAIRS_SD_CARD_MISSING}_{entry.entry_id}",
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key=REPAIRS_SD_CARD_MISSING,
+            translation_placeholders={"camera_name": camera_name},
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not create SD card repair issue: %s", exc)
+
+
+async def _clear_sd_card_repair(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the SD card repair issue when the card is reinserted."""
+    try:
+        from homeassistant.helpers.issue_registry import async_delete_issue
+        async_delete_issue(hass, DOMAIN, f"{REPAIRS_SD_CARD_MISSING}_{entry.entry_id}")
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not delete SD card repair issue: %s", exc)
+
+
+async def _raise_frigate_repair(hass: HomeAssistant, entry: ConfigEntry, camera_name: str) -> None:
+    """Notify user that Frigate has disappeared and detection events should be re-enabled."""
+    try:
+        from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
+        async_create_issue(
+            hass,
+            DOMAIN,
+            f"{REPAIRS_FRIGATE_GONE}_{entry.entry_id}",
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key=REPAIRS_FRIGATE_GONE,
+            translation_placeholders={"camera_name": camera_name},
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not create Frigate repair issue: %s", exc)
+
+
+async def _clear_frigate_repair(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the Frigate repair issue when Frigate is detected again."""
+    try:
+        from homeassistant.helpers.issue_registry import async_delete_issue
+        async_delete_issue(hass, DOMAIN, f"{REPAIRS_FRIGATE_GONE}_{entry.entry_id}")
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not delete Frigate repair issue: %s", exc)
+
 
 # ── Service schemas ────────────────────────────────────────────────────────────
 
@@ -568,6 +680,10 @@ def _register_services(hass: HomeAssistant) -> None:
 # ── Setup / teardown ──────────────────────────────────────────────────────────
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    # Remove entities that belong to disabled feature groups before creating
+    # new ones — prevents unavailable stubs accumulating after options changes.
+    _cleanup_stale_entities(hass, entry)
+
     ip = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
@@ -616,22 +732,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     has_sd_card = _detect_sd_card(coordinator.data.get("storage", {}))
     coordinator.has_sd_card = has_sd_card
 
-    onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
-    openapi_events = (
-        VIGIOpenAPIEventListener(hass, openapi, entry.entry_id) if has_openapi else None
+    # Clear any stale SD card repair issue if the card is now present.
+    if has_sd_card:
+        await _clear_sd_card_repair(hass, entry)
+
+    camera_name = (
+        device_info.get("dev_name") or device_info.get("alias") or ip
     )
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+    # Detect whether a Frigate camera is running at the same IP.
+    frigate_camera = detect_frigate_camera(hass, ip)
+    had_frigate = entry.data.get("_frigate_linked", False)
+
+    if frigate_camera:
+        # Frigate is present — clear any stale "gone" repair and record the link.
+        await _clear_frigate_repair(hass, entry)
+        if not had_frigate:
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "_frigate_linked": True}
+            )
+    elif had_frigate:
+        # Frigate was previously linked but is no longer detected.
+        _LOGGER.info(
+            "VIGICam: Frigate no longer detected for %s — raising repair notice", ip
+        )
+        await _raise_frigate_repair(hass, entry, camera_name)
+
+    # Only start event listeners when detection events are enabled.
+    want_detection = _feature(entry, CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
+    onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
+    openapi_events = (
+        VIGIOpenAPIEventListener(hass, openapi, entry.entry_id)
+        if (has_openapi and want_detection)
+        else None
+    )
+
+    entry_data = {
         "api": camera_api,
         "coordinator": coordinator,
         "onvif_events": onvif_events,
         "onvif_ptz": onvif_ptz,
         "openapi_events": openapi_events,
         "device_info": device_info,
+        "camera_name": camera_name,
         "has_ptz": has_ptz,
         "has_smart_frames": has_smart_frames,
         "has_sd_card": has_sd_card,
         "has_openapi": has_openapi,
+        "has_frigate": frigate_camera is not None,
         "openapi": openapi,
         "presets": presets,
         "ip": ip,
@@ -639,19 +787,57 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "password": password,
         "entry_id": entry.entry_id,
     }
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry_data
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await onvif_events.async_start()
-    if openapi_events:
-        await openapi_events.async_start()
+
+    if want_detection:
+        await onvif_events.async_start()
+        if openapi_events:
+            await openapi_events.async_start()
+
+    # Watch for SD card transitions during normal operation.
+    _prev_sd: dict[str, bool] = {"has_sd": has_sd_card}
+
+    @callback
+    def _on_coordinator_update() -> None:
+        now_has_sd = coordinator.has_sd_card
+        was_has_sd = _prev_sd["has_sd"]
+        if was_has_sd == now_has_sd:
+            return
+        _prev_sd["has_sd"] = now_has_sd
+        if not now_has_sd:
+            _LOGGER.info("VIGICam: SD card removed from %s — raising repair notice", ip)
+            hass.async_create_task(
+                _raise_sd_card_repair(hass, entry, camera_name)
+            )
+        else:
+            _LOGGER.info("VIGICam: SD card reinserted in %s — scheduling reload", ip)
+            hass.async_create_task(_clear_sd_card_repair(hass, entry))
+            hass.async_create_task(
+                hass.config_entries.async_schedule_reload(entry.entry_id)
+            )
+
+    entry_data["_sd_unsub"] = coordinator.async_add_listener(_on_coordinator_update)
+
+    # Re-register a listener so options changes trigger a reload.
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
     _register_services(hass)
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry when options are changed."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         data = hass.data[DOMAIN].pop(entry.entry_id)
+        if unsub := data.get("_sd_unsub"):
+            unsub()
         await data["onvif_events"].async_stop()
         if data.get("openapi_events"):
             await data["openapi_events"].async_stop()

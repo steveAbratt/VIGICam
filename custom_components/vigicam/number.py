@@ -1,4 +1,4 @@
-"""Number entities for VIGI cameras — volume, sensitivity, spotlight intensity."""
+"""Number entities for VIGI cameras — volume, sensitivity, image controls."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,12 +6,12 @@ from typing import Any, Callable
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import VIGICamera
-from .const import DOMAIN
+from .const import CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS, DOMAIN
 from .entity import VIGIEntity
 
 
@@ -47,17 +47,7 @@ NUMBERS: tuple[VIGINumberDescription, ...] = (
         set_fn=lambda api, v: api.set_motion_sensitivity(int(v)),
         supported_fn=lambda d: "digital_sensitivity" in d.get("motion", {}),
     ),
-    VIGINumberDescription(
-        key="spotlight_intensity",
-        name="Spotlight Intensity",
-        native_min_value=1,
-        native_max_value=4,
-        native_step=1,
-        mode=NumberMode.SLIDER,
-        value_fn=lambda d: d.get("image_switch", {}).get("wtl_intensity_level"),
-        set_fn=lambda api, v: api.set_spotlight_intensity(int(v)),
-        supported_fn=lambda d: "wtl_intensity_level" in d.get("image_switch", {}),
-    ),
+
     VIGINumberDescription(
         key="alarm_sound_times",
         name="Alarm Sound Repetitions",
@@ -76,16 +66,60 @@ NUMBERS: tuple[VIGINumberDescription, ...] = (
 )
 
 
+def _image_common_number(
+    key: str,
+    name: str,
+    icon: str | None = None,
+) -> VIGINumberDescription:
+    """Shorthand for a 0–100 image.common number in the Config category."""
+    return VIGINumberDescription(
+        key=key,
+        name=name,
+        native_min_value=0,
+        native_max_value=100,
+        native_step=1,
+        mode=NumberMode.SLIDER,
+        icon=icon,
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+        value_fn=lambda d, k=key: d.get("image_common", {}).get(k),
+        set_fn=lambda api, v, k=key: api.set_image_common_value(k, int(v)),
+        supported_fn=lambda d, k=key: k in d.get("image_common", {}),
+    )
+
+
+IMAGE_CONTROL_NUMBERS: tuple[VIGINumberDescription, ...] = (
+    _image_common_number("luma",      "Image Brightness", "mdi:brightness-6"),
+    _image_common_number("contrast",  "Image Contrast",   "mdi:contrast-circle"),
+    _image_common_number("saturation","Image Saturation", "mdi:palette"),
+    _image_common_number("chroma",    "Image Chroma"),
+    _image_common_number("sharpness", "Image Sharpness",  "mdi:image-filter-center-focus"),
+    _image_common_number("wd_gain",   "WDR Gain",         "mdi:sun-wireless"),
+    _image_common_number("exp_gain",  "Exposure Gain",    "mdi:camera-iris"),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
-    async_add_entities(
+    coord_data = coordinator.data or {}
+
+    entities = [
         VIGINumber(coordinator, data, desc)
         for desc in NUMBERS
-        if desc.supported_fn(coordinator.data or {})
-    )
+        if desc.supported_fn(coord_data)
+    ]
+
+    if entry.options.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS):
+        entities.extend(
+            VIGINumber(coordinator, data, desc)
+            for desc in IMAGE_CONTROL_NUMBERS
+            if desc.supported_fn(coord_data)
+        )
+
+    async_add_entities(entities)
 
 
 class VIGINumber(VIGIEntity, NumberEntity):
