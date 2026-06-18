@@ -14,6 +14,26 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b4] - 2026-06-18
+
+### Added
+- **Frigate integration awareness** — VIGICam now detects whether Frigate has a
+  camera configured at the same IP address. When detected:
+  - The Options flow shows an advisory note suggesting you disable Camera Stream
+    and Detection Events to avoid duplicate entities.
+  - A `has_frigate` flag is stored in entry data for future features.
+- **Frigate gone repair notice** — if VIGICam was previously detected alongside
+  Frigate but Frigate is no longer present (removed or reconfigured), a Repairs
+  notification appears in HA's Problems section, guiding you to re-enable Camera
+  Stream and Detection Events.
+
+### Changed
+- Frigate detection logic extracted into its own `frigate.py` module (was an
+  inline function in `config_flow.py`). Covers both modern Frigate config entries
+  and older builds that embed the camera URL in entity unique IDs.
+
+---
+
 ## [0.6.0b3] - 2026-06-18
 
 ### Added

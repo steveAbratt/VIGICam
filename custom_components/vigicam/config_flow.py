@@ -22,6 +22,7 @@ from .const import (
     DEFAULT_USERNAME,
     DOMAIN,
 )
+from .frigate import detect_frigate_camera
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class VIGIOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        frigate_note = _detect_frigate_camera(self.hass, self.config_entry.data[CONF_HOST])
+        frigate_note = detect_frigate_camera(self.hass, self.config_entry.data[CONF_HOST])
         description = (
             "Configure which feature groups are active for this camera."
         )
@@ -114,26 +115,6 @@ class VIGIOptionsFlow(config_entries.OptionsFlow):
             data_schema=_options_schema(dict(self.config_entry.options)),
             description_placeholders={"note": description},
         )
-
-
-def _detect_frigate_camera(hass, ip: str) -> bool:
-    """Return True if Frigate has a camera configured at *ip*."""
-    try:
-        from homeassistant.helpers import entity_registry as er
-        registry = er.async_get(hass)
-        for entry in registry.entities.values():
-            if entry.platform == "frigate" and ip in (entry.config_entry_id or ""):
-                return True
-        # Also check via config entries directly
-        for ce in hass.config_entries.async_entries("frigate"):
-            cameras = ce.data.get("cameras", {})
-            for cam_cfg in cameras.values():
-                host = (cam_cfg.get("ffmpeg", {}).get("inputs") or [{}])[0].get("path", "")
-                if ip in host:
-                    return True
-    except Exception:  # noqa: BLE001
-        pass
-    return False
 
 
 class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

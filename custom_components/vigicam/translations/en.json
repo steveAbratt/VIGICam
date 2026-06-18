@@ -48,6 +48,10 @@
     "sd_card_missing": {
       "title": "SD card no longer detected — {camera_name}",
       "description": "The SD card was previously present in **{camera_name}** but is no longer detected. SD card sensor entities are still in Home Assistant.\n\nIf you have removed the card temporarily, dismiss this — the entities will keep working once the card is reinserted.\n\nIf you are no longer using an SD card in this camera, use **Fix** to remove the stale SD card entities."
+    },
+    "frigate_camera_gone": {
+      "title": "Frigate camera link lost — {camera_name}",
+      "description": "**{camera_name}** was previously detected alongside a Frigate camera at this IP address, but Frigate no longer has a camera here.\n\nIf Frigate was removed or reconfigured, you may want to re-enable **Camera Stream** and **Detection Events** for this camera:\n1. Go to **Settings → Devices & Services → VIGI & InSight Cameras**\n2. Select **{camera_name} → Configure**\n3. Re-enable the relevant feature groups\n\nDismiss this notice once you have decided how to proceed."
     }
   }
 }

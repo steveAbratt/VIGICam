@@ -27,9 +27,11 @@ from .const import (
     DETECTION_EVENT_SUFFIXES,
     DOMAIN,
     IMAGE_CONTROL_SUFFIXES,
+    REPAIRS_FRIGATE_GONE,
     REPAIRS_SD_CARD_MISSING,
     SD_ENTITY_SUFFIXES,
 )
+from .frigate import detect_frigate_camera
 from .coordinator import VIGICoordinator, _detect_sd_card
 from .onvif_events import VIGIOnvifEvents
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
@@ -116,6 +118,32 @@ async def _clear_sd_card_repair(hass: HomeAssistant, entry: ConfigEntry) -> None
         async_delete_issue(hass, DOMAIN, f"{REPAIRS_SD_CARD_MISSING}_{entry.entry_id}")
     except Exception as exc:  # noqa: BLE001
         _LOGGER.debug("Could not delete SD card repair issue: %s", exc)
+
+
+async def _raise_frigate_repair(hass: HomeAssistant, entry: ConfigEntry, camera_name: str) -> None:
+    """Notify user that Frigate has disappeared and detection events should be re-enabled."""
+    try:
+        from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
+        async_create_issue(
+            hass,
+            DOMAIN,
+            f"{REPAIRS_FRIGATE_GONE}_{entry.entry_id}",
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key=REPAIRS_FRIGATE_GONE,
+            translation_placeholders={"camera_name": camera_name},
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not create Frigate repair issue: %s", exc)
+
+
+async def _clear_frigate_repair(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the Frigate repair issue when Frigate is detected again."""
+    try:
+        from homeassistant.helpers.issue_registry import async_delete_issue
+        async_delete_issue(hass, DOMAIN, f"{REPAIRS_FRIGATE_GONE}_{entry.entry_id}")
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not delete Frigate repair issue: %s", exc)
 
 
 # ── Service schemas ────────────────────────────────────────────────────────────
@@ -708,6 +736,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if has_sd_card:
         await _clear_sd_card_repair(hass, entry)
 
+    camera_name = (
+        device_info.get("dev_name") or device_info.get("alias") or ip
+    )
+
+    # Detect whether a Frigate camera is running at the same IP.
+    frigate_camera = detect_frigate_camera(hass, ip)
+    had_frigate = entry.data.get("_frigate_linked", False)
+
+    if frigate_camera:
+        # Frigate is present — clear any stale "gone" repair and record the link.
+        await _clear_frigate_repair(hass, entry)
+        if not had_frigate:
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "_frigate_linked": True}
+            )
+    elif had_frigate:
+        # Frigate was previously linked but is no longer detected.
+        _LOGGER.info(
+            "VIGICam: Frigate no longer detected for %s — raising repair notice", ip
+        )
+        await _raise_frigate_repair(hass, entry, camera_name)
+
     # Only start event listeners when detection events are enabled.
     want_detection = _feature(entry, CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
     onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
@@ -715,10 +765,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         VIGIOpenAPIEventListener(hass, openapi, entry.entry_id)
         if (has_openapi and want_detection)
         else None
-    )
-
-    camera_name = (
-        device_info.get("dev_name") or device_info.get("alias") or ip
     )
 
     entry_data = {
@@ -733,6 +779,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "has_smart_frames": has_smart_frames,
         "has_sd_card": has_sd_card,
         "has_openapi": has_openapi,
+        "has_frigate": frigate_camera is not None,
         "openapi": openapi,
         "presets": presets,
         "ip": ip,

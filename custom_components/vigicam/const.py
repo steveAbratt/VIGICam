@@ -58,6 +58,7 @@ IMAGE_CONTROL_SUFFIXES: frozenset[str] = frozenset({
 # ── Repairs issue identifiers ──────────────────────────────────────────────────
 
 REPAIRS_SD_CARD_MISSING = "sd_card_missing"
+REPAIRS_FRIGATE_GONE = "frigate_camera_gone"
 
 # Unique-ID suffixes for entities that have been superseded and should be
 # removed from the registry on the next setup (one-time migration).
