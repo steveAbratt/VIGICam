@@ -14,6 +14,63 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0] - 2026-06-18
+
+### Added
+- **Feature groups** — Options flow (Settings → Devices & Services → VIGICam → Configure)
+  lets you enable or disable Camera Stream, Detection Events, and Image Controls per camera.
+  Disabling a group removes its entities from the registry immediately.
+- **Last Detection image entity** — updates on every detection event. Downloads a still
+  from the SD card at the moment of the event if Event Image Capture is configured;
+  otherwise falls back to a live RTSP grab. Exposes `source`, `event_label`, and
+  `detection_zone` attributes.
+- **Event Image Capture capability sensor** — binary sensor indicating whether the camera
+  has an SD card partition formatted for image storage. Probed via
+  `picture_total_space_accurate` in `hd_info` (verified against live cameras; cameras
+  without image storage always return `0B`).
+- **PTZ capability, OpenAPI capability, SD Card, and ONVIF Events** capability sensors —
+  all five capability sensors appear in the Diagnostics section of each camera device page.
+- **Spotlight light entity** — proper HA `light` entity with brightness control
+  (0–255 mapped to camera's 1–4 scale). Replaces the old Spotlight Intensity number entity.
+- **Privacy Mask switch** — toggle the camera's lens mask on/off.
+- **Image controls** — optional tuning entities (brightness, contrast, saturation, WDR,
+  HLC, flip, rotate, etc.) available when the Image Controls feature group is enabled.
+- **Frigate integration awareness** — detects Frigate at the same IP and suggests which
+  feature groups to disable.
+- **Entity removal confirmation step** — options flow lists active entities that will be
+  removed when a feature group is disabled, so changes aren't accidental.
+- **`detection_zone` attribute** on detection binary sensors and the Last Detection image
+  entity — identifies which configured zone fired (e.g. `Area1`, `Line1`).
+- **OpenAPI detection sensors** (require OpenAPI enabled in camera settings): Vehicle
+  Detected, Audio Anomaly, Loitering, Scene Change, Object Left or Taken, Area Entry,
+  Area Exit.
+- **SD card sensors** (require OpenAPI): Recording Duration, Oldest Recording, Record
+  Capacity Remaining, Video Space Free.
+- **Uptime** sensor (require OpenAPI) — hours since last camera reboot.
+- **PTZ services**: `vigicam.ptz_move_to` (absolute position), `vigicam.ptz_save_preset`,
+  `vigicam.ptz_delete_preset`.
+- **HACS Action workflow** (`.github/workflows/validate.yaml`) — validates the repository
+  against HACS requirements daily and on every push/PR.
+
+### Changed
+- `source` attribute on the Last Detection image entity: `"smart_frame"` → `"event_capture"`.
+  Update any automations that check this value.
+- `smart_frame_label` attribute renamed to `event_label`. Update any automations that
+  reference this attribute.
+- **"Smart Frame Capture" capability sensor renamed to "Event Image Capture"**
+  (`cap_smart_frame` → `cap_event_capture`). Existing installations: delete the old entity
+  from the entity registry.
+- PTZ preset select entity tracks last-selected preset in HA (camera has no position API).
+- Entity naming uses alphabetical prefixes — Alarm, Detection, PTZ clusters in device view.
+
+### Fixed
+- Camera dashboard thumbnails work on HA 2026.x+ (replaced removed `FFmpegManager.get_image`).
+- SSL certificate errors on cameras using TP-Link internal CA (e.g. VIGI C320I).
+- Smart Detection and Line Crossing sensors now show "Clear / Detected" not "Off / On".
+- RTSP credentials redacted in log output if a snapshot grab fails.
+
+---
+
 ## [0.6.0b13] - 2026-06-18
 
 ### Fixed
