@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.2] - 2026-06-18
+
+### Fixed
+- Removed deprecated `homeassistant` key from `manifest.json` (rejected by hassfest validator).
+- Sorted `manifest.json` keys to match required order: `domain`, `name`, then alphabetical.
+
+### Added
+- Hassfest validation workflow (`.github/workflows/hassfest.yaml`) for HA integration compliance checks.
+
+---
+
 ## [0.6.1] - 2026-06-18
 
 ### Changed
