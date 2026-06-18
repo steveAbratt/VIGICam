@@ -439,33 +439,22 @@ class VIGICamera:
     # ── Smart Frames ──────────────────────────────────────────────────────────
 
     async def supports_event_image_capture(self) -> bool:
-        """Return True if this camera supports saving event images to SD card.
+        """Return True if this camera has an SD card image partition.
 
-        Probes get_picture_list with media_type=2. This API backs the
-        "Capture Playback" submenu in the VIGI app — cameras without a split
-        SD card partition (e.g. VIGI C540V) do not have this submenu and will
-        return an API error here. Cameras with a capture partition (e.g. InSight
-        S245 formatted for split storage) return error_code 0 even when no
-        images have been saved yet.
+        Reads picture_total_space_accurate from harddisk_manage.hd_info.
+        On cameras with a split SD card partition (e.g. InSight S245 formatted
+        for image + video storage) this is a non-zero byte count. On cameras
+        without image storage (e.g. VIGI C540V) it is always '0B' regardless
+        of whether an SD card is present.
 
-        get_media_list(media_type=2) is intentionally NOT used here — both
-        cameras accept that call regardless of whether SD card capture is
-        supported, making it an unreliable differentiator.
+        Both get_media_list(media_type=2) and get_picture_list return
+        error_code 0 on both camera models, making them unreliable probes.
         """
-        import time as _time
-        now = int(_time.time())
         try:
-            r = await self._request({"method": "do", "system": {"get_user_id": None}})
-            user_id = r.get("system", {}).get("user_id", 1)
-            await self._request({"method": "do", "media": {"get_picture_list": {
-                "channel": [0], "media_type": [2], "event_feature": "0",
-                "user_id": user_id,
-                "page_num": 1, "item_per_page": 1,
-                "start_time": str(now - 86400), "end_time": str(now),
-                "event_type": [2],
-            }}})
-            return True
-        except VIGIError:
+            storage = await self.get_storage()
+            pic_space = storage.get("picture_total_space_accurate", "0B")
+            return int(pic_space.rstrip("B") or 0) > 0
+        except (VIGIError, ValueError):
             return False
 
     async def supports_smart_frames(self) -> bool:
