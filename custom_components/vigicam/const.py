@@ -45,12 +45,14 @@ DETECTION_EVENT_SUFFIXES: frozenset[str] = frozenset({
 })
 
 IMAGE_CONTROL_SUFFIXES: frozenset[str] = frozenset({
-    "image_brightness", "image_contrast", "image_saturation", "image_sharpness",
-    "wdr_gain", "exposure_gain",
+    # Numbers (key matches VIGINumberDescription.key)
+    "luma", "contrast", "saturation", "chroma", "sharpness", "wd_gain", "exp_gain",
+    # Selects
     "flip", "rotate", "flicker", "white_balance", "exposure_type",
-    "wdr", "hlc", "dehaze", "eis", "backlight_compensation",
-    "lens_distortion_correction", "full_color_people_enhance",
-    "full_color_vehicle_enhance",
+    # Switches
+    "wide_dynamic", "high_light_compensation", "dehaze", "eis",
+    "auto_exp_antiflicker", "backlight", "ldc",
+    "full_color_people_enhance", "full_color_vehicle_enhance",
 })
 
 # ── Repairs issue identifiers ──────────────────────────────────────────────────

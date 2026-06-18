@@ -14,6 +14,28 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b3] - 2026-06-18
+
+### Added
+- **Image controls** — optional camera tuning entities available when the
+  Image Controls feature group is enabled in the integration options. All are
+  in the Configuration entity category and hidden by default (enable
+  individually from the entity settings gear):
+  - **Numbers:** Image Brightness, Contrast, Saturation, Chroma, Sharpness,
+    WDR Gain, Exposure Gain (all 0–100 sliders)
+  - **Selects:** Flip, Rotate, Flicker (50/60 Hz), White Balance,
+    Exposure Type
+  - **Switches:** WDR, HLC, Dehaze, EIS, Auto Exposure Anti-flicker,
+    Backlight Compensation, Lens Distortion Correction, Full Colour People
+    Enhance, Full Colour Vehicle Enhance
+- **Privacy Mask switch** — toggle the camera's lens mask (screen blackout)
+  on/off. Appears automatically when the camera supports it; always visible
+  regardless of the Image Controls feature group setting.
+- `image_common` and `lens_mask` are now fetched every coordinator poll cycle
+  so all new entities stay up to date.
+
+---
+
 ## [0.6.0b2] - 2026-06-18
 
 ### Added

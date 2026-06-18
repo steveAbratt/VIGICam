@@ -1,4 +1,4 @@
-"""Switch entities for VIGI cameras — detection toggles, LED, alarm, audio mute."""
+"""Switch entities for VIGI cameras — detection toggles, LED, alarm, audio mute, image controls."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,11 +6,12 @@ from typing import Any, Callable
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import VIGICamera
-from .const import DOMAIN
+from .const import CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS, DOMAIN
 from .entity import VIGIEntity
 
 
@@ -128,18 +129,87 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
 )
 
 
+def _common_switch(key: str, name: str, icon: str | None = None) -> VIGISwitchDescription:
+    """Shorthand for an image.common on/off switch in the Config category."""
+    return VIGISwitchDescription(
+        key=key,
+        name=name,
+        icon=icon,
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+        is_on_fn=lambda d, k=key: d.get("image_common", {}).get(k) == "on",
+        turn_on_fn=lambda api, k=key: api.set_image_common_value(k, "on"),
+        turn_off_fn=lambda api, k=key: api.set_image_common_value(k, "off"),
+        supported_fn=lambda d, k=key: k in d.get("image_common", {}),
+    )
+
+
+def _switch_switch(key: str, name: str, icon: str | None = None) -> VIGISwitchDescription:
+    """Shorthand for an image.switch on/off switch in the Config category."""
+    return VIGISwitchDescription(
+        key=key,
+        name=name,
+        icon=icon,
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+        is_on_fn=lambda d, k=key: d.get("image_switch", {}).get(k) == "on",
+        turn_on_fn=lambda api, k=key: api.set_image_switch_value(k, "on"),
+        turn_off_fn=lambda api, k=key: api.set_image_switch_value(k, "off"),
+        supported_fn=lambda d, k=key: k in d.get("image_switch", {}),
+    )
+
+
+IMAGE_CONTROL_SWITCHES: tuple[VIGISwitchDescription, ...] = (
+    _common_switch("wide_dynamic",            "WDR",                       "mdi:sun-wireless"),
+    _common_switch("high_light_compensation", "HLC",                       "mdi:car-light-high"),
+    _common_switch("dehaze",                  "Dehaze",                    "mdi:weather-fog"),
+    _common_switch("eis",                     "EIS",                       "mdi:image-filter-center-focus-strong"),
+    _common_switch("auto_exp_antiflicker",    "Auto Exposure Anti-flicker","mdi:sine-wave"),
+    _common_switch("backlight",               "Backlight Compensation",    "mdi:backburger"),
+    _switch_switch("ldc",                     "Lens Distortion Correction","mdi:camera-enhance"),
+    _switch_switch("full_color_people_enhance",  "Full Colour People Enhance",  "mdi:human"),
+    _switch_switch("full_color_vehicle_enhance", "Full Colour Vehicle Enhance", "mdi:car"),
+)
+
+PRIVACY_SWITCHES: tuple[VIGISwitchDescription, ...] = (
+    VIGISwitchDescription(
+        key="privacy_mask",
+        name="Privacy Mask",
+        icon="mdi:eye-off",
+        is_on_fn=lambda d: d.get("lens_mask", {}).get("enabled") == "on",
+        turn_on_fn=lambda api: api.set_lens_mask(True),
+        turn_off_fn=lambda api: api.set_lens_mask(False),
+        supported_fn=lambda d: bool(d.get("lens_mask")),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
+    coord_data = coordinator.data or {}
 
-    # Only create switches for features the camera actually reports
     entities = [
         VIGISwitch(coordinator, data, desc)
         for desc in SWITCHES
-        if desc.supported_fn(coordinator.data or {})
+        if desc.supported_fn(coord_data)
     ]
+
+    entities.extend(
+        VIGISwitch(coordinator, data, desc)
+        for desc in PRIVACY_SWITCHES
+        if desc.supported_fn(coord_data)
+    )
+
+    if entry.options.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS):
+        entities.extend(
+            VIGISwitch(coordinator, data, desc)
+            for desc in IMAGE_CONTROL_SWITCHES
+            if desc.supported_fn(coord_data)
+        )
+
     async_add_entities(entities)
 
 

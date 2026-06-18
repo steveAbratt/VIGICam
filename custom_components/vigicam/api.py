@@ -210,6 +210,32 @@ class VIGICamera:
     async def set_spotlight_intensity(self, level: int) -> None:
         await self.set("image", {"switch": {"wtl_intensity_level": level}})
 
+    # ── Image common (brightness, contrast, WDR, etc.) ───────────────────────
+
+    async def get_image_common(self) -> dict:
+        resp = await self.get("image", ["common"])
+        return resp.get("common", resp)
+
+    async def set_image_common_value(self, key: str, value) -> None:
+        await self.set("image", {"common": {key: value}})
+
+    async def set_image_switch_value(self, key: str, value) -> None:
+        """Set a single image.switch field. The types list tells the camera which
+        fields are being updated (required for partial switch updates)."""
+        await self.set("image", {"switch": {key: value, "types": [key]}})
+
+    # ── Lens mask (privacy) ───────────────────────────────────────────────────
+
+    async def get_lens_mask(self) -> dict:
+        resp = await self.get("lens_mask", "lens_mask")
+        return resp.get("lens_mask", resp)
+
+    async def set_lens_mask(self, enabled: bool) -> None:
+        await self.set(
+            "lens_mask",
+            {"lens_mask": {"enabled": "on" if enabled else "off"}},
+        )
+
     # ── Alarm ─────────────────────────────────────────────────────────────────
 
     async def get_alarm(self) -> dict:
