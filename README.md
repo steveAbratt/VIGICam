@@ -37,7 +37,7 @@ feature set competes with cameras three times the price.
 ## Standalone or with Frigate — your choice
 
 **Standalone (no NVR required):** VIGICam uses the camera's own on-device AI for
-detection events and Smart Frame image captures. Motion, person detection, intrusion
+detection events and event image captures. Motion, person detection, intrusion
 zones, and line crossing all fire in real time through ONVIF, directly into Home
 Assistant automations. This is a capable, self-contained setup that needs nothing beyond
 the camera and Home Assistant.
@@ -70,8 +70,9 @@ created dynamically — only capabilities the camera actually reports appear in 
 - **Split detection sensors** — individual binary sensors for vehicle, audio anomaly,
   loitering, scene change, object left/taken, area entry, area exit
   *(requires [OpenAPI](#openapi--extended-detection--sensors))*
-- **Smart Frame captures** — last-detection snapshot image entity per camera, updated
-  each time a detection event fires
+- **Last detection image** — snapshot entity per camera updated on every detection event;
+  uses the camera's own event-captured image when SD card capture is configured,
+  otherwise falls back to a live RTSP grab
 
 ### Camera controls
 - **Spotlight** — on/off with brightness control

@@ -17,6 +17,7 @@ For installation instructions see the [README](../README.md).
 - [Image controls — advanced camera tuning](#image-controls)
 - [Sensors & diagnostics](#sensors--diagnostics)
 - [Binary sensors — detection events](#binary-sensors--detection-events)
+- [Capability diagnostic sensors](#capability-diagnostic-sensors)
 - [Image entities — last detection snapshot](#image-entities--last-detection-snapshot)
 - [Services — automation and scripting](#services)
 - [Blueprint: camera announcements](#blueprint-camera-announcements)
@@ -486,7 +487,7 @@ footage.
 
 Free storage on the SD card allocated specifically for video recordings, in GB. May
 differ from **SD Card Free** if the card is formatted with split storage (separate
-space for video and Smart Frame images).
+space for video and event images).
 
 > **Loop recording:** If loop recording is enabled and the video partition is full,
 > this sensor reports `0` — the camera is using all video space and continuously
@@ -546,6 +547,12 @@ arrive within a second or two of the camera detecting them.
 
 All sensors auto-clear 15 seconds after the last event if the camera does not send an
 explicit "no longer active" event.
+
+When the camera's ONVIF event identifies which detection zone fired (e.g. `Area1`, `Line1`
+as configured in the VIGI app), that name is exposed as a `detection_zone` attribute on
+the sensor. Use this in automation conditions to distinguish between different zones on the
+same camera — for example, triggering a different response for the front gate versus the
+back garden.
 
 ### Motion
 
@@ -864,6 +871,96 @@ automation:
 
 ---
 
+## Capability Diagnostic Sensors
+
+Each camera device includes five diagnostic binary sensors that report which capabilities
+were detected at startup. These appear in the **Diagnostics** section of the device page
+(below the main entity list) and are intended for automation conditions — they let you
+write a single automation that works across cameras with different hardware.
+
+| Sensor | On means | Off means |
+|--------|----------|-----------|
+| **PTZ** | Camera supports pan/tilt/zoom via ONVIF | Fixed camera — no PTZ controls created |
+| **OpenAPI** | OpenAPI is enabled and reachable on port 20443 | OpenAPI disabled or not yet enabled on camera |
+| **Event Image Capture** | Camera saves a full-frame still to SD card at the moment of each detection event | SD card capture not configured; Last Detection will use RTSP fallback |
+| **SD Card** | An SD card is detected in the camera | No SD card fitted or card not readable |
+| **ONVIF Events** | Active ONVIF pull-point subscription running | ONVIF subscription failed or not yet established |
+
+> **Note:** PTZ, OpenAPI, and Event Image Capture are detected once at startup and do not
+> change until the integration reloads. SD Card and ONVIF Events reflect live state and
+> update with each coordinator poll.
+
+### Using capability sensors in automations
+
+Capability sensors let you write conditional automations that adapt to different cameras
+without needing a separate automation for each one.
+
+#### Example: only move the camera to a patrol preset if it has PTZ
+
+```yaml
+automation:
+  trigger:
+    - platform: time
+      at: "22:00:00"
+  condition:
+    - condition: state
+      entity_id: binary_sensor.vigi_c540v_ptz
+      state: "on"
+  action:
+    - service: vigicam.goto_preset
+      data:
+        entity_id: camera.vigi_c540v_stream
+        preset: "Night Watch"
+```
+
+#### Example: alert when the ONVIF subscription drops
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_onvif_events
+      to: "off"
+      for: "00:01:00"   # wait 1 min to avoid alerts during a normal reload
+  action:
+    - service: notify.mobile_app_your_phone
+      data:
+        title: "Camera Events Offline"
+        message: "Front Gate ONVIF subscription has dropped — detection sensors may not update"
+```
+
+#### Example: send different notifications depending on whether event image capture is configured
+
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_person_detected
+      to: "on"
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: binary_sensor.vigi_c540v_event_image_capture
+              state: "on"
+          sequence:
+            - service: notify.mobile_app_your_phone
+              data:
+                title: "Person Detected"
+                message: "Event-synchronised image available"
+                data:
+                  image: /api/image_proxy/image.vigi_c540v_last_detection
+      default:
+        - service: notify.mobile_app_your_phone
+          data:
+            title: "Person Detected"
+            message: "Snapshot available"
+            data:
+              image: /api/image_proxy/image.vigi_c540v_last_detection
+```
+
+---
+
 ## Image Entities — Last Detection Snapshot
 
 ### Last Detection
@@ -874,20 +971,62 @@ motion, person detected, or smart detection. It uses the same real-time ONVIF
 subscription as the binary sensors, so it refreshes within seconds of a detection,
 not on the 30-second poll cycle.
 
+For users who do not want the complexity or extra hardware of a dedicated NVR like
+Frigate, the Last Detection entity provides a lightweight alternative that runs
+entirely on the camera. When event image capture is configured, the camera saves a
+full-frame still at the exact instant of detection — so the image shows exactly what
+triggered the event, not a frame grabbed a second or two later from a live stream.
+No GPU, no separate server, no additional integration required.
+
+#### Reviewing past events — VIGI app vs Home Assistant
+
+The Last Detection entity in HA holds only the **most recent** image. It is not a
+history — it is overwritten on every new detection.
+
+**For a timeline of past events, use the VIGI app.** On cameras with event image
+capture configured, the app's **Playback → Capture Playback** screen shows a
+timestamped grid of all stored event images you can scroll back through. This is the intended tool
+for reviewing overnight events and is far more capable than anything you can build in HA
+for this purpose.
+
+**For a HA-based history of RTSP snapshots**, the [Gallery Card](https://github.com/TarheelGrad1998/gallery-card)
+(available via HACS) combined with an automation is the most practical approach:
+
+```yaml
+automation:
+  alias: "Save detection snapshot to gallery"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_motion
+      to: "on"
+  action:
+    - service: camera.snapshot
+      target:
+        entity_id: camera.vigi_c540v_stream
+      data:
+        filename: /config/www/cameras/front_gate/{{ now().strftime('%Y%m%d_%H%M%S') }}.jpg
+```
+
+Point the Gallery Card at `/local/cameras/front_gate/` to browse the saved images on
+your dashboard. Images accumulate indefinitely — add a separate cleanup automation or
+cron job to remove files older than a few days if storage is a concern.
+
 #### How the image is captured
 
-The integration detects at startup whether your camera supports Smart Frame capture and
+The integration detects at startup whether your camera supports event image capture and
 uses the best available method:
 
-**Smart Frame (AI-cropped image)** — used when the camera supports it (most VIGI cameras
-with an SD card formatted for split storage). The image is an AI-cropped close-up of the
-detected subject (person, vehicle, etc.) rather than the full frame. The camera saves this
-to the SD card; the integration downloads it ~3 seconds after the event.
+**Event capture (SD card image)** — used when the camera has an SD card formatted with
+a capture partition and Upload Capture enabled in the event settings. The camera saves a
+full-frame still at the exact instant of detection; the integration downloads it ~3 seconds
+after the event fires. Because the image is written by the camera at detection time, it
+reliably shows the subject that triggered the event.
 
-**RTSP snapshot (full-frame still)** — used as a fallback on cameras that do not support
-Smart Frame (e.g. VIGI C540V). When a detection event fires, the integration grabs a
-single frame from the live RTSP stream ~2 seconds after the event. The image is the full
-camera frame at the moment of capture.
+**RTSP snapshot (live stream grab)** — used as a fallback on cameras without event image
+capture configured (e.g. VIGI C540V, or any camera where the SD card lacks a capture
+partition). When a detection event fires, the integration grabs a frame from the live
+RTSP stream ~2 seconds after the notification arrives. Fast-moving subjects may have
+already left the frame.
 
 The `source` attribute on the entity tells you which method was used.
 
@@ -896,24 +1035,60 @@ The `source` attribute on the entity tells you which method was used.
 | Attribute | Example | Description |
 |---|---|---|
 | `detection_type` | `motion`, `smart_event` | ONVIF event type that triggered the grab |
-| `source` | `smart_frame`, `rtsp_snapshot` | Which capture method was used |
-| `smart_frame_label` | `Person`, `Smart Detection` | AI label (Smart Frame only) |
-| `file_id` | `00010000000260` | Internal SD card file ID (Smart Frame only) |
+| `source` | `event_capture`, `rtsp_snapshot` | Which capture method was used |
+| `detection_zone` | `Area1`, `Line2` | Detection zone name from the camera, when available |
+| `event_label` | `Person`, `Smart Detection` | AI classification label (event capture only) |
+| `file_id` | `00010000000260` | Internal SD card file ID (event capture only) |
 
-#### Requirements for Smart Frame capture
+#### Setting up event image capture
 
-Smart Frame images require both of the following to be configured on the camera:
+Event image capture requires four steps in the camera's web UI or VIGI app. Do them in
+order — changing the capture capacity allocation requires reformatting the disk.
 
-1. **Smart Frame capture enabled** — in the camera's web UI or VIGI app go to
-   **Event → Smart Frame** (also called Smart Capture) and turn it on.
+> **Not all cameras support this.** Saving event images to SD card requires an SD card
+> and firmware support for a split storage partition (separate space for video and images).
+> Fixed cameras like the VIGI C540V can upload event images via FTP but cannot save them
+> to the SD card. On those cameras the integration always uses the RTSP snapshot fallback.
+> Check the **Event Image Capture** diagnostic sensor on the device page — if it shows
+> **Off**, your camera model or SD card setup does not support this feature.
 
-2. **SD card formatted for image capture** — go to **Storage → Format** and choose the
-   format option that includes image storage. If the card has only been used for video
-   recording it may need to be reformatted.
+> **Note on "Smart Frame":** The VIGI app has a setting called Smart Frame under Event
+> settings. This is a separate feature — it draws a bounding box around detected objects
+> on the live video feed and in app notifications. It is not related to saving images to
+> the SD card and does not need to be enabled for event image capture to work.
 
-> If Smart Frame capture is not configured, the integration falls back to RTSP snapshot
-> automatically — the entity will still populate, just with a full-frame still instead of
-> an AI-cropped image.
+**Step 1 — Enable event-triggered capture**
+
+Go to **Storage → Capture Management** and turn on **Event-triggered capture**.
+
+This tells the camera to save an AI-cropped image to the SD card each time a detection
+event fires.
+
+**Step 2 — Allocate storage space for images**
+
+Go to **Storage → Storage Management**. If your camera supports image capture, you will
+see a **Capture Capacity** slider (this option does not appear on cameras that lack the
+feature). Increase it from 0% to your preferred allocation — 5% is enough for most
+users and stores several hundred AI-cropped images before the oldest are overwritten.
+
+**Step 3 — Format the disk**
+
+After changing Capture Capacity, the disk must be reformatted to apply the new partition
+layout. Format from **Storage → Storage Management → Format disk**. This erases all
+existing recordings — do this before the camera goes into service, or be prepared to
+lose stored footage.
+
+**Step 4 — Enable upload to SD card**
+
+Go to **Event → Smart Event** and turn on **Upload Capture** (labelled as
+*Upload to FTP/SD card* on some firmware versions). This is the per-event-type toggle
+that controls whether captured images are actually written to storage. Without this step
+the camera allocates space for images but never writes them.
+
+> If event image capture is not set up, the integration falls back to RTSP snapshot
+> automatically — the Last Detection entity will still populate with a frame grabbed from
+> the live stream. The `source` attribute on the entity tells you which method was used:
+> `event_capture` or `rtsp_snapshot`.
 
 ---
 

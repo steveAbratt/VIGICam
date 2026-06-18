@@ -161,7 +161,7 @@ class VIGICapabilityDescription:
 CAPABILITY_SENSORS: tuple[VIGICapabilityDescription, ...] = (
     VIGICapabilityDescription(key="cap_ptz",          name="PTZ",                  icon="mdi:pan"),
     VIGICapabilityDescription(key="cap_openapi",       name="OpenAPI",              icon="mdi:api"),
-    VIGICapabilityDescription(key="cap_smart_frame",   name="Smart Frame Capture",  icon="mdi:image-filter-center-focus"),
+    VIGICapabilityDescription(key="cap_event_capture",  name="Event Image Capture",  icon="mdi:image-multiple"),
     VIGICapabilityDescription(key="cap_sd_card",       name="SD Card",              icon="mdi:sd"),
     VIGICapabilityDescription(key="cap_onvif",         name="ONVIF Events",         icon="mdi:broadcast"),
 )
@@ -171,7 +171,7 @@ CAPABILITY_SENSORS: tuple[VIGICapabilityDescription, ...] = (
 _STATIC_CAPABILITY_KEYS: dict[str, str] = {
     "cap_ptz":         "has_ptz",
     "cap_openapi":     "has_openapi",
-    "cap_smart_frame": "has_smart_frames",
+    "cap_event_capture": "has_smart_frames",
 }
 
 
