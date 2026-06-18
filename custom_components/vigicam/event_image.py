@@ -1,6 +1,6 @@
-"""WebSocket Smart Frame download for VIGI InSight cameras.
+"""WebSocket event image download for VIGI/InSight cameras.
 
-Downloads the AI-cropped detection image from wss://<ip>:8443/stream.
+Downloads the event-captured still from wss://<ip>:8443/stream.
 All I/O is non-blocking; ffmpeg runs via asyncio subprocess.
 
 Protocol summary
@@ -32,10 +32,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .api import VIGICamera
 
-# event_type integers returned by get_media_list for media_type=2 (Smart Frames).
+# event_type integers returned by get_media_list for media_type=2 (event images).
 # Confirmed on S245 firmware 3.1.1: 2=Person, 27=Smart Detection (catch-all).
 # Values 1/3/4/8/16/18 follow TP-Link's standard AI event enumeration.
-SMART_FRAME_EVENT_LABELS: dict[int, str] = {
+EVENT_IMAGE_LABELS: dict[int, str] = {
     1: "Motion",
     2: "Person",
     3: "Vehicle",
@@ -156,7 +156,7 @@ async def _ws_download_h264(
     file_id: str,
     start_time: str,
 ) -> bytes | None:
-    """Authenticate via WebSocket Digest and download one Smart Frame.
+    """Authenticate via WebSocket Digest and download one event image.
 
     Returns raw H.264 AVC Annex B bytes, or None on any failure.
     """
@@ -296,21 +296,21 @@ async def _h264_to_jpeg(h264: bytes, ffmpeg_bin: str) -> bytes | None:
         return None
 
 
-async def fetch_latest_smart_frame(
+async def fetch_latest_event_image(
     ip: str,
     username: str,
     password: str,
     camera: VIGICamera,
     ffmpeg_bin: str = "ffmpeg",
 ) -> dict | None:
-    """Fetch the most recent Smart Frame and return a result dict, or None.
+    """Fetch the most recent event image and return a result dict, or None.
 
     Returns:
         {"jpeg": bytes, "event_type": int, "label": str, "file_id": str, "timestamp": str}
-    Returns None if Smart Frame capture is disabled, the SD card is absent,
+    Returns None if event image capture is disabled, the SD card is absent,
     or any network/decode step fails.
     """
-    frames = await camera.get_smart_frames(days_back=1, max_items=5)
+    frames = await camera.get_event_images(days_back=1, max_items=5)
     if not frames:
         return None
 
@@ -331,7 +331,7 @@ async def fetch_latest_smart_frame(
     return {
         "jpeg": jpeg,
         "event_type": et,
-        "label": SMART_FRAME_EVENT_LABELS.get(et, f"Detection ({et})"),
+        "label": EVENT_IMAGE_LABELS.get(et, f"Detection ({et})"),
         "file_id": frame["file_id"],
         "timestamp": frame["start_time"],
     }
