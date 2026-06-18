@@ -16,11 +16,10 @@ zones, and line crossing all fire in real time through ONVIF, directly into Home
 Assistant automations. This is a capable, self-contained setup that needs nothing beyond
 the camera and Home Assistant.
 
-**Alongside Frigate *(coming in v0.6)*:** When you add Frigate for recording and
-advanced detection, VIGICam steps back gracefully — streams and detection hand off to
-Frigate while VIGICam retains exclusive control over the functions Frigate can't reach:
-PTZ, spotlight, image tuning, announcements, and alarms. Entities merge onto the Frigate
-device automatically.
+**Alongside Frigate:** When you add Frigate for recording and advanced detection,
+VIGICam steps back gracefully — streams and detection hand off to Frigate while VIGICam
+retains exclusive control over the functions Frigate can't reach: PTZ, spotlight, image
+tuning, announcements, and alarms. Entities merge onto the Frigate device automatically.
 
 ---
 
