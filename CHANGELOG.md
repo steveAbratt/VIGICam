@@ -14,6 +14,13 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.0] - 2026-06-18
+
+### Added
+- **Target Tracking switch** (PTZ cameras only) — enables/disables the camera's auto-tracking feature, which pans and tilts to follow a detected subject.
+
+---
+
 ## [0.6.2] - 2026-06-18
 
 ### Fixed
