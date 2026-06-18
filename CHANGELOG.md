@@ -14,6 +14,18 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b12] - 2026-06-18
+
+### Fixed
+- **Event Image Capture sensor false positive on VIGI C540V** — the startup probe used
+  `get_media_list(media_type=2)`, which both cameras accept regardless of whether SD card
+  capture is supported. Switched to `get_picture_list(media_type=2)`, which backs the
+  "Capture Playback" submenu in the VIGI app. Cameras without a split SD card partition
+  (e.g. VIGI C540V) do not have this submenu and return an error on this call, so the
+  sensor now correctly shows Off on those cameras.
+
+---
+
 ## [0.6.0b11] - 2026-06-18
 
 ### Added

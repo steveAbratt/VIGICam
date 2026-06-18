@@ -438,28 +438,39 @@ class VIGICamera:
 
     # ── Smart Frames ──────────────────────────────────────────────────────────
 
-    async def supports_smart_frames(self) -> bool:
-        """Return True if this camera supports Smart Frame image capture.
+    async def supports_event_image_capture(self) -> bool:
+        """Return True if this camera supports saving event images to SD card.
 
-        Probes get_media_list with media_type=2. Returns True if the camera
-        accepts the call (error_code 0, even with empty results). Returns False
-        if the camera returns an API error — models like the VIGI C540V do not
-        support Smart Frame / split SD card storage and will error here.
+        Probes get_picture_list with media_type=2. This API backs the
+        "Capture Playback" submenu in the VIGI app — cameras without a split
+        SD card partition (e.g. VIGI C540V) do not have this submenu and will
+        return an API error here. Cameras with a capture partition (e.g. InSight
+        S245 formatted for split storage) return error_code 0 even when no
+        images have been saved yet.
+
+        get_media_list(media_type=2) is intentionally NOT used here — both
+        cameras accept that call regardless of whether SD card capture is
+        supported, making it an unreliable differentiator.
         """
         import time as _time
         now = int(_time.time())
         try:
             r = await self._request({"method": "do", "system": {"get_user_id": None}})
             user_id = r.get("system", {}).get("user_id", 1)
-            await self._request({"method": "do", "media": {"get_media_list": {
-                "channel": [0], "media_type": [2], "all_event": 1,
+            await self._request({"method": "do", "media": {"get_picture_list": {
+                "channel": [0], "media_type": [2], "event_feature": "0",
                 "user_id": user_id,
-                "start_time": str(now - 3600), "end_time": str(now),
+                "page_num": 1, "item_per_page": 1,
+                "start_time": str(now - 86400), "end_time": str(now),
                 "event_type": [2],
             }}})
             return True
         except VIGIError:
             return False
+
+    async def supports_smart_frames(self) -> bool:
+        """Deprecated alias for supports_event_image_capture."""
+        return await self.supports_event_image_capture()
 
     async def get_smart_frames(self, days_back: int = 1, max_items: int = 5) -> list[dict]:
         """Return the most recent Smart Frame entries from the SD card, newest first.
