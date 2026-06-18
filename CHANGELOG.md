@@ -14,6 +14,37 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b1] - 2026-06-18
+
+### Added
+- **Feature groups** — new Options flow (Settings → Devices & Services → VIGICam → Configure)
+  lets you enable or disable three feature groups per camera:
+  - **Camera stream** (on by default) — the RTSP live-feed entity. Disable when Frigate
+    provides the stream.
+  - **Detection events** (on by default) — motion/person/intrusion binary sensors and
+    ONVIF/OpenAPI event subscriptions. Disable when Frigate handles detection.
+  - **Image controls** (off by default) — camera tuning entities added in a later release;
+    toggle on here when ready.
+- **Automatic entity cleanup** — when a feature group is turned off, any entities that
+  belonged to it are removed from the entity registry immediately on reload. No stale
+  unavailable stubs left behind.
+- **SD card removal notification** — if the SD card is removed while HA is running, a
+  notice appears in Settings → System → Repairs explaining what happened. Dismiss it to
+  keep the entities (e.g. card temporarily removed); it clears automatically when the card
+  is reinserted and the integration reloads.
+- **Frigate awareness** — the Options flow detects whether Frigate has a camera at the
+  same IP and shows a contextual note recommending which feature groups to disable.
+- `light` platform stub added (Phase 2 will introduce the spotlight light entity).
+
+### Changed
+- README rewritten — new intro selling VIGI/InSight hardware, two-path setup explanation
+  (standalone vs Frigate), and a "Why VIGI" section covering PoE, business-spec build
+  quality, InSight line, and on-device AI.
+- OpenAPI event stream now logs the full raw event payload at DEBUG level, making it
+  easier to inspect what the camera sends when zone-based detection fires.
+
+---
+
 ## [0.5.0b8] - 2026-06-17
 
 ### Fixed

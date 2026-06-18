@@ -25,7 +25,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 
-from .const import DOMAIN
+from .const import CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS, DOMAIN
 from .entity import VIGIEntity
 from .onvif_events import AUTO_CLEAR_S, SIGNAL_VIGICAM_EVENT
 
@@ -153,6 +153,8 @@ OPENAPI_BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if not entry.options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS):
+        return
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     entities: list[BinarySensorEntity] = []

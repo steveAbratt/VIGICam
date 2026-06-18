@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM, DOMAIN
 from .coordinator import VIGICoordinator
 from .entity import VIGIEntity
 
@@ -20,6 +20,8 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if not entry.options.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM):
+        return
     data = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([VIGIRTSPCamera(data["coordinator"], data)])
 

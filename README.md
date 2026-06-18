@@ -1,38 +1,102 @@
-# VIGICam — TP-Link VIGI/InSight Camera Integration for Home Assistant
+# VIGICam — TP-Link VIGI & InSight Cameras for Home Assistant
 
-Local API integration for TP-Link VIGI and InSight cameras. Full entity control,
-real-time detection events, PTZ, and TTS announcements through the camera speaker —
-no cloud required.
+Full local control of TP-Link VIGI and InSight cameras — real-time smart detection, PTZ,
+two-way audio announcements, image configuration, and deep camera management.
+No cloud account. No subscription. No dependency on TP-Link servers.
 
 **→ [Full entity & feature reference](docs/USAGE.md)**
 
 ---
 
+## Why VIGI and InSight cameras?
+
+Most home security cameras are a compromise: consumer-grade hardware, cloud-dependent
+software, and WiFi connectivity that drops out the moment you need it most. VIGI and
+InSight cameras take a different approach.
+
+**Built to stay put.** PoE-powered and hardwired, these cameras draw power and data
+through a single cable. No batteries to change, no WiFi negotiation on every boot, no
+coverage gap when the router reboots. Once installed, they work indefinitely.
+
+**Business-spec hardware at competitive prices.** Metal housings, proper IP66/67 weather
+ratings, and firmware update paths you'd expect from enterprise networking gear — TP-Link's
+background in business networking shows. The InSight line is their higher-specification
+tier: more detection capability, tamper detection, and construction quality suited to
+demanding outdoor installations.
+
+**AI on the camera, not a server.** Person, vehicle, intrusion zone, line crossing, audio
+anomaly, and loitering detection all run on the device itself. You get smart detection
+events without a GPU, without a separate NVR, and without sending footage off-premises.
+
+**Ubiquiti-class features without Ubiquiti pricing.** Configurable detection zones, PTZ
+with named presets, two-way audio, smart capture, PoE infrastructure compatibility — the
+feature set competes with cameras three times the price.
+
+---
+
+## Standalone or with Frigate — your choice
+
+**Standalone (no NVR required):** VIGICam uses the camera's own on-device AI for
+detection events and Smart Frame image captures. Motion, person detection, intrusion
+zones, and line crossing all fire in real time through ONVIF, directly into Home
+Assistant automations. This is a capable, self-contained setup that needs nothing beyond
+the camera and Home Assistant.
+
+**Alongside Frigate *(coming in v0.6)*:** When you add Frigate for recording and
+advanced detection, VIGICam steps back gracefully — streams and detection hand off to
+Frigate while VIGICam retains exclusive control over the functions Frigate can't reach:
+PTZ, spotlight, image tuning, announcements, and alarms. Entities merge onto the Frigate
+device automatically.
+
+---
+
 ## Tested Cameras
 
-| Model | Type |
-|-------|------|
-| VIGI C540V | Outdoor PTZ, 4MP, spotlight + IR |
-| InSight S245 | Fixed outdoor, 4MP, spotlight + IR, tamper detection |
+| Model | Type | Notes |
+|-------|------|-------|
+| VIGI C540V | Outdoor PTZ, 4MP, spotlight + IR | Full feature set including PTZ |
+| InSight S245 | Fixed outdoor, 4MP, spotlight + IR, tamper | InSight higher-spec line |
 
-Other VIGI and InSight models using the same local HTTPS API should also work.
-Entities are created dynamically — only capabilities the camera actually supports appear.
+Other VIGI and InSight models using the same local HTTPS API should work. Entities are
+created dynamically — only capabilities the camera actually reports appear in HA.
 
 ---
 
 ## Features
 
-- **Live stream** — RTSP HD stream in dashboards and automations
-- **Detection events** — real-time motion, person, tamper, intrusion, line crossing, smart detection via ONVIF (fires within seconds, not the 30 s poll cycle)
-- **Split detection sensors** — individual binary sensors for vehicle, audio anomaly, loitering, scene change, object left/taken, area entry, area exit *(requires [OpenAPI](#openapi--extended-detection--sensors))*
-- **Alarm control** — enable/disable alarm, sound and light independently, set repeat count, trigger or stop manually
-- **Camera announcements** — speak any text through the camera speaker via `vigicam.speak` (TTS → format conversion → upload → play, all automatic)
-- **Play pre-recorded files** — play any audio file (WAV, MP3, OGG…) via `vigicam.play_file`; accepts HA media browser URLs, `www/` URLs, file paths, or external URLs
-- **PTZ control** — pan/tilt/zoom buttons, named presets, continuous move, absolute positioning, save/delete presets *(absolute position and preset management require [OpenAPI](#openapi--extended-detection--sensors))*
+### Detection & events
+- **Real-time detection** — motion, person, tamper, intrusion, line crossing, smart
+  detection fire within seconds via ONVIF pull-point subscription — not the 30 s poll cycle
+- **Split detection sensors** — individual binary sensors for vehicle, audio anomaly,
+  loitering, scene change, object left/taken, area entry, area exit
+  *(requires [OpenAPI](#openapi--extended-detection--sensors))*
+- **Smart Frame captures** — last-detection snapshot image entity per camera, updated
+  each time a detection event fires
+
+### Camera controls
+- **Spotlight** — on/off with brightness control
 - **Night vision** — switch between IR auto, IR always on, spotlight, colour, off
-- **Audio management** — upload custom sounds, play on demand, delete slots
-- **Storage monitoring** — SD card used %, free space, total capacity, status, loop recording state; recording duration, oldest recording, capacity remaining *(extended sensors require [OpenAPI](#openapi--extended-detection--sensors))*
-- **Diagnostics** — firmware version, IP address, connection type, uptime *(uptime requires [OpenAPI](#openapi--extended-detection--sensors))*
+- **Alarm control** — enable/disable alarm, sound and light independently, set repeat
+  count, trigger or stop manually
+- **PTZ** — pan/tilt/zoom buttons, named presets, continuous move, absolute positioning,
+  save/delete presets *(absolute position and preset management require
+  [OpenAPI](#openapi--extended-detection--sensors))*
+
+### Audio
+- **Camera announcements** — speak any text through the camera speaker via
+  `vigicam.speak` (TTS → resampled WAV → upload → play, fully automatic)
+- **Play pre-recorded files** — play any audio file (WAV, MP3, OGG…) via
+  `vigicam.play_file`; accepts HA media browser URLs, `www/` paths, file paths,
+  or external URLs
+- **Custom sound management** — upload, play on demand, and delete custom audio slots
+
+### Monitoring & diagnostics
+- **Live stream** — RTSP HD stream in dashboards and automations
+- **Storage monitoring** — SD card used %, free space, total capacity, status, loop
+  recording state, recording duration, oldest recording, capacity remaining
+  *(extended sensors require [OpenAPI](#openapi--extended-detection--sensors))*
+- **Diagnostics** — firmware version, IP address, connection type, MAC address, uptime
+  *(uptime requires [OpenAPI](#openapi--extended-detection--sensors))*
 
 ---
 
@@ -46,7 +110,8 @@ Entities are created dynamically — only capabilities the camera actually suppo
 
 ## Manual Installation
 
-Copy `custom_components/vigicam/` into your HA config directory and restart.
+Copy `custom_components/vigicam/` into your HA `config/custom_components/` directory
+and restart.
 
 ---
 
@@ -69,9 +134,14 @@ Several features require the camera's local OpenAPI (HTTPS port 20443) to be ena
 2. Go to **Settings → Network → OpenAPI** and enable it
 3. Reload the integration — the additional entities appear automatically
 
-**What it unlocks:** Vehicle / Audio Anomaly / Loitering / Scene Change / Object Left or Taken / Area Entry / Area Exit binary sensors, SD card recording duration and capacity sensors, Uptime diagnostic, and the `vigicam.ptz_move_to` / `vigicam.ptz_save_preset` / `vigicam.ptz_delete_preset` services.
+**What it unlocks:** Vehicle / Audio Anomaly / Loitering / Scene Change / Object Left
+or Taken / Area Entry / Area Exit binary sensors, extended SD card sensors (recording
+duration, oldest recording, capacity remaining), the Uptime diagnostic, and the
+`vigicam.ptz_move_to` / `vigicam.ptz_save_preset` / `vigicam.ptz_delete_preset`
+services.
 
-> Requires firmware 2.1.x or later. If the OpenAPI menu is missing, update the camera firmware via the VIGI app or camera web UI.
+> Requires firmware 2.1.x or later. If the OpenAPI menu is missing, update the camera
+> firmware via the VIGI app or camera web UI.
 
 ---
 
@@ -90,27 +160,27 @@ data:
   pause: 1.5    # optional — seconds between repeats
 ```
 
-Handles everything automatically: TTS generation → resampled to 8 kHz mono WAV
-via ffmpeg → uploaded to camera → played. Works with any configured HA TTS engine.
+Handles everything automatically: TTS generation → resampled to 8 kHz mono WAV via
+ffmpeg → uploaded to camera → played. Works with any configured HA TTS engine.
 
 **Limit:** Keep messages under ~10 seconds (camera hard limit: 15 s / 256 KB).
 
 ### Blueprint
-
-A ready-made automation blueprint turns this into a simple form:
 
 1. **Settings → Automations → Blueprints → Import Blueprint**
 2. Paste:
    ```
    https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_announce.yaml
    ```
-3. Click **Create Automation** — fill in trigger, camera, message, TTS engine, repeat count. Done.
+3. Click **Create Automation** — fill in trigger, camera, message, TTS engine, repeat
+   count. Done.
 
 ---
 
 ## Playing Pre-recorded Files
 
-Play any audio file through the camera speaker using `vigicam.play_file`. Accepts WAV, MP3, OGG, or any other format ffmpeg can read — the integration converts it automatically.
+Play any audio file through the camera speaker using `vigicam.play_file`. Accepts WAV,
+MP3, OGG, or any other format ffmpeg can read — the integration converts automatically.
 
 **From the HA media browser** (upload via sidebar → Media → My media):
 
@@ -129,20 +199,16 @@ data:
 url: /config/media/alert.wav
 ```
 
-Media browser URLs (`/media/local/`) and HA www URLs (`/local/`) are automatically resolved to file paths — no token or authentication setup required. External URLs are fetched directly.
-
-**Limit:** 15 seconds / 256 KB after conversion to 8 kHz mono WAV.
+Media browser URLs (`/media/local/`) and HA www URLs (`/local/`) are resolved to file
+paths automatically. External URLs are fetched directly.
 
 ### Blueprint
-
-A ready-made blueprint for this too — upload your file to the media browser, paste the URL, done:
 
 1. **Settings → Automations → Blueprints → Import Blueprint**
 2. Paste:
    ```
    https://raw.githubusercontent.com/steveAbratt/VIGICam/main/blueprints/automation/vigicam/camera_play_file.yaml
    ```
-3. Click **Create Automation** — fill in trigger, camera, audio URL, repeat count. Done.
 
 ---
 
@@ -161,13 +227,13 @@ data:
 service: vigicam.goto_preset
 data:
   entity_id: camera.vigi_c540v_stream
-  preset: "Full Stable Yard"   # name exactly as it appears in the PTZ Preset select entity
+  preset: "Full Stable Yard"
 ```
 
-The following services require [OpenAPI enabled](#openapi--extended-detection--sensors):
+The following require [OpenAPI enabled](#openapi--extended-detection--sensors):
 
 ```yaml
-service: vigicam.ptz_move_to      # move to an absolute pan/tilt/zoom position
+service: vigicam.ptz_move_to
 data:
   entity_id: camera.vigi_c540v_stream
   pan: 120.0
@@ -176,7 +242,7 @@ data:
 ```
 
 ```yaml
-service: vigicam.ptz_save_preset  # save current position as a named preset
+service: vigicam.ptz_save_preset
 data:
   entity_id: camera.vigi_c540v_stream
   name: "Entrance View"
@@ -193,8 +259,8 @@ data:
 
 ## Full Documentation
 
-For a plain-language explanation of every entity, button, switch, sensor, and service
-— including what they actually do, automation examples, and dashboard tips — see:
+For a plain-language explanation of every entity, button, switch, sensor, and service —
+including what they actually do, automation examples, and dashboard tips — see:
 
 **[docs/USAGE.md](docs/USAGE.md)**
 
@@ -202,7 +268,8 @@ For a plain-language explanation of every entity, button, switch, sensor, and se
 
 ## Dependencies
 
-`pycryptodome` and `ffmpeg` are handled automatically by Home Assistant from the manifest.
+`pycryptodome` and `ffmpeg` are handled automatically by Home Assistant from the
+manifest.
 
 ---
 
@@ -211,5 +278,6 @@ For a plain-language explanation of every entity, button, switch, sensor, and se
 - **[JurajNyiri/HomeAssistant-Tapo-Control](https://github.com/JurajNyiri/HomeAssistant-Tapo-Control)** (MIT) — entity architecture and coordinator pattern inspiration
 - **[JurajNyiri/pytapo](https://github.com/JurajNyiri/pytapo)** (MIT) — authentication flow reference
 - **[yetanothercarbot/vigi_camera_lighting](https://github.com/yetanothercarbot/vigi_camera_lighting)** — spotlight/night-vision endpoint reference
+- **[Komzpa/ha-vigi-control](https://github.com/Komzpa/ha-vigi-control)** — image control API field reference and Frigate integration approach
 
 MIT licensed. See [LICENSE](LICENSE).

@@ -11,7 +11,17 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
-from .const import CONF_VERIFY_SSL, DEFAULT_USERNAME, DOMAIN
+from .const import (
+    CONF_FEATURE_CAMERA_STREAM,
+    CONF_FEATURE_DETECTION_EVENTS,
+    CONF_FEATURE_IMAGE_CONTROLS,
+    CONF_VERIFY_SSL,
+    DEFAULT_FEATURE_CAMERA_STREAM,
+    DEFAULT_FEATURE_DETECTION_EVENTS,
+    DEFAULT_FEATURE_IMAGE_CONTROLS,
+    DEFAULT_USERNAME,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,10 +74,76 @@ def _suggested_name(info: dict, fallback: str) -> str:
     return fallback
 
 
+def _options_schema(current: dict) -> vol.Schema:
+    return vol.Schema({
+        vol.Required(
+            CONF_FEATURE_CAMERA_STREAM,
+            default=current.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM),
+        ): bool,
+        vol.Required(
+            CONF_FEATURE_DETECTION_EVENTS,
+            default=current.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS),
+        ): bool,
+        vol.Required(
+            CONF_FEATURE_IMAGE_CONTROLS,
+            default=current.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS),
+        ): bool,
+    })
+
+
+class VIGIOptionsFlow(config_entries.OptionsFlow):
+    """Options flow — feature group toggles for a configured camera."""
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        frigate_note = _detect_frigate_camera(self.hass, self.config_entry.data[CONF_HOST])
+        description = (
+            "Configure which feature groups are active for this camera."
+        )
+        if frigate_note:
+            description += (
+                "\n\nFrigate is detected with a camera at this IP address. "
+                "Consider disabling Camera Stream and Detection Events to avoid "
+                "duplicate entities — Frigate handles those surfaces."
+            )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_options_schema(dict(self.config_entry.options)),
+            description_placeholders={"note": description},
+        )
+
+
+def _detect_frigate_camera(hass, ip: str) -> bool:
+    """Return True if Frigate has a camera configured at *ip*."""
+    try:
+        from homeassistant.helpers import entity_registry as er
+        registry = er.async_get(hass)
+        for entry in registry.entities.values():
+            if entry.platform == "frigate" and ip in (entry.config_entry_id or ""):
+                return True
+        # Also check via config entries directly
+        for ce in hass.config_entries.async_entries("frigate"):
+            cameras = ce.data.get("cameras", {})
+            for cam_cfg in cameras.values():
+                host = (cam_cfg.get("ffmpeg", {}).get("inputs") or [{}])[0].get("path", "")
+                if ip in host:
+                    return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
 class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow to add a VIGI or InSight camera."""
 
     VERSION = 1
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return VIGIOptionsFlow()
 
     def __init__(self) -> None:
         self._host: str = ""

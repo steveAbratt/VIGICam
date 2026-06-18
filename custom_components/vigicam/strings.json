@@ -25,5 +25,29 @@
     "abort": {
       "already_configured": "This camera is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Camera feature groups",
+        "description": "Enable or disable feature groups for this camera. Changes take effect immediately after saving.\n\n{note}",
+        "data": {
+          "feature_camera_stream": "Camera stream (RTSP live feed entity)",
+          "feature_detection_events": "Detection events (motion, person, intrusion, and other binary sensors)",
+          "feature_image_controls": "Image controls (brightness, contrast, WDR, flip, and other camera tuning — disabled by default)"
+        },
+        "data_description": {
+          "feature_camera_stream": "Disable if Frigate or another integration already provides the camera stream.",
+          "feature_detection_events": "Disable if Frigate handles detection — this also stops ONVIF event subscriptions.",
+          "feature_image_controls": "Adds camera tuning controls to the Configuration section of the device. Most users leave this off."
+        }
+      }
+    }
+  },
+  "issues": {
+    "sd_card_missing": {
+      "title": "SD card no longer detected — {camera_name}",
+      "description": "The SD card was previously present in **{camera_name}** but is no longer detected. SD card sensor entities are still in Home Assistant.\n\nIf you have removed the card temporarily, dismiss this — the entities will keep working once the card is reinserted.\n\nIf you are no longer using an SD card in this camera, use **Fix** to remove the stale SD card entities."
+    }
   }
 }
