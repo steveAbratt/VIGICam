@@ -22,7 +22,9 @@ venv/
 audio/
 
 # Local probe/research scripts and documents
+probe/
 probe_*.py
+docs/camera_api_research.md
 tmp/
 
 # macOS
