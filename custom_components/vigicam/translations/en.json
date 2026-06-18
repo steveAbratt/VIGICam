@@ -28,6 +28,10 @@
   },
   "options": {
     "step": {
+      "confirm": {
+        "title": "Confirm entity removal",
+        "description": "The following entities are currently active and will be **permanently removed** from Home Assistant. Any automations, scripts, or dashboards using them will stop working.\n\n{entity_list}\n\nPress **Submit** to confirm, or close this dialog to cancel."
+      },
       "init": {
         "title": "Camera feature groups",
         "description": "Enable or disable feature groups for this camera. Changes take effect immediately after saving.\n\n**Detected capabilities**\n{capabilities}\n\n{note}",

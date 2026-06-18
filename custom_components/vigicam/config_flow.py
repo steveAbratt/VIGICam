@@ -8,10 +8,12 @@ import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import (
+    CAMERA_STREAM_SUFFIXES,
     CONF_FEATURE_CAMERA_STREAM,
     CONF_FEATURE_DETECTION_EVENTS,
     CONF_FEATURE_IMAGE_CONTROLS,
@@ -20,7 +22,9 @@ from .const import (
     DEFAULT_FEATURE_DETECTION_EVENTS,
     DEFAULT_FEATURE_IMAGE_CONTROLS,
     DEFAULT_USERNAME,
+    DETECTION_EVENT_SUFFIXES,
     DOMAIN,
+    IMAGE_CONTROL_SUFFIXES,
 )
 from .frigate import detect_frigate_camera
 
@@ -95,6 +99,43 @@ def _options_schema(current: dict, suggest_frigate_defaults: bool = False) -> vo
     })
 
 
+def _enabled_entities_being_removed(
+    hass, entry: config_entries.ConfigEntry, new_options: dict
+) -> list[str]:
+    """Return entity IDs that are currently enabled and will be removed by new_options.
+
+    Only looks at feature groups that are being newly turned off — groups that were
+    already off are ignored.
+    """
+    old = entry.options
+    newly_off: set[str] = set()
+
+    if (old.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM)
+            and not new_options.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM)):
+        newly_off |= CAMERA_STREAM_SUFFIXES
+
+    if (old.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
+            and not new_options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)):
+        newly_off |= DETECTION_EVENT_SUFFIXES
+
+    if (old.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS)
+            and not new_options.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS)):
+        newly_off |= IMAGE_CONTROL_SUFFIXES
+
+    if not newly_off:
+        return []
+
+    registry = er.async_get(hass)
+    affected = []
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        parts = reg_entry.unique_id.split("_", 1)
+        suffix = parts[1] if len(parts) == 2 else reg_entry.unique_id
+        if suffix in newly_off and reg_entry.disabled_by is None:
+            affected.append(reg_entry.entity_id)
+
+    return sorted(affected)
+
+
 def _capabilities_text(entry_data: dict, has_frigate: bool) -> str:
     """Return a markdown bullet list of detected camera capabilities."""
     def _row(detected: bool, label: str) -> str:
@@ -112,8 +153,19 @@ def _capabilities_text(entry_data: dict, has_frigate: bool) -> str:
 class VIGIOptionsFlow(config_entries.OptionsFlow):
     """Options flow — feature group toggles for a configured camera."""
 
+    def __init__(self) -> None:
+        self._pending_options: dict = {}
+        self._entities_to_warn: list[str] = []
+
     async def async_step_init(self, user_input=None):
         if user_input is not None:
+            to_warn = _enabled_entities_being_removed(
+                self.hass, self.config_entry, user_input
+            )
+            if to_warn:
+                self._pending_options = user_input
+                self._entities_to_warn = to_warn
+                return await self.async_step_confirm()
             return self.async_create_entry(title="", data=user_input)
 
         ip = self.config_entry.data[CONF_HOST]
@@ -150,6 +202,18 @@ class VIGIOptionsFlow(config_entries.OptionsFlow):
                 "capabilities": capabilities,
                 "note": frigate_note,
             },
+        )
+
+    async def async_step_confirm(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(title="", data=self._pending_options)
+
+        entity_list = "\n".join(f"- `{eid}`" for eid in self._entities_to_warn)
+
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema({}),
+            description_placeholders={"entity_list": entity_list},
         )
 
 

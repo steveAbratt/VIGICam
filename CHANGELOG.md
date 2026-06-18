@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b7] - 2026-06-18
+
+### Added
+- **Entity removal confirmation step** — when disabling a feature group would remove
+  entities that are currently active in HA, the options flow now shows a confirmation
+  screen listing those entities before saving. Closing the dialog without submitting
+  cancels the change. Entities that are disabled (never individually enabled) are
+  removed silently without a prompt.
+
+---
+
 ## [0.6.0b6] - 2026-06-18
 
 ### Added
