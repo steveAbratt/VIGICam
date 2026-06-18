@@ -8,7 +8,6 @@
   "requirements": ["pycryptodome>=3.20.0"],
   "dependencies": ["ffmpeg", "stream"],
   "config_flow": true,
-  "homeassistant": "2024.1.0",
   "iot_class": "local_polling",
   "loggers": ["custom_components.vigicam"]
 }
