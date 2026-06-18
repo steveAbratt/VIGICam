@@ -111,6 +111,15 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
         supported_fn=lambda d: "sound_alarm_enabled" in d.get("alarm", {}),
     ),
     VIGISwitchDescription(
+        key="target_track",
+        name="Target Tracking",
+        icon="mdi:crosshairs-gps",
+        is_on_fn=lambda d: d.get("target_track", {}).get("enabled") == "on",
+        turn_on_fn=lambda api: api.set_target_track(True),
+        turn_off_fn=lambda api: api.set_target_track(False),
+        supported_fn=lambda d: "enabled" in d.get("target_track", {}),
+    ),
+    VIGISwitchDescription(
         key="speaker_mute",
         name="Speaker Mute",
         is_on_fn=lambda d: d.get("speaker", {}).get("mute") == "on",

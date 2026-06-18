@@ -410,6 +410,18 @@ class VIGICamera:
             {"tamper_det": {"enabled": "on" if enabled else "off"}},
         )
 
+    # ── Target tracking (PTZ auto-follow) ────────────────────────────────────
+
+    async def get_target_track(self) -> dict:
+        resp = await self.get("target_track", "target_track_info")
+        return resp.get("target_track_info", resp)
+
+    async def set_target_track(self, enabled: bool) -> None:
+        await self.set(
+            "target_track",
+            {"target_track_info": {"enabled": "on" if enabled else "off"}},
+        )
+
     # ── PTZ presets ───────────────────────────────────────────────────────────
 
     async def get_presets(self) -> list[dict]:
