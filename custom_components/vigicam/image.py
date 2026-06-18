@@ -23,7 +23,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS, DOMAIN
 from .entity import VIGIEntity
 from .onvif_events import SIGNAL_VIGICAM_EVENT
 from .smart_frame import fetch_latest_smart_frame
@@ -37,6 +37,8 @@ _POST_EVENT_DELAY_RTSP = 2.0  # seconds to wait for subject to enter RTSP frame
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if not entry.options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS):
+        return
     data = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([VIGILastDetectionImage(data["coordinator"], data)])
 
@@ -84,20 +86,22 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         if self._grabbing:
             return
         self._grabbing = True
-        self.hass.async_create_task(self._grab_frame(event["type"]))
+        self.hass.async_create_task(self._grab_frame(event))
 
-    async def _grab_frame(self, event_type: str) -> None:
+    async def _grab_frame(self, event: dict) -> None:
         try:
             if self._has_smart_frames:
-                await self._grab_smart_frame(event_type)
+                await self._grab_smart_frame(event)
             else:
-                await self._grab_rtsp_snapshot(event_type)
+                await self._grab_rtsp_snapshot(event)
         except Exception as exc:
             _LOGGER.debug("Detection image grab failed: %s", exc)
         finally:
             self._grabbing = False
 
-    async def _grab_smart_frame(self, event_type: str) -> None:
+    async def _grab_smart_frame(self, event: dict) -> None:
+        event_type = event["type"]
+        area = event.get("area")
         await asyncio.sleep(_POST_EVENT_DELAY_SF)
         try:
             ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
@@ -113,12 +117,15 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         if result:
             self._cached_image = result["jpeg"]
             self._image_last_updated = datetime.now(timezone.utc)
-            self._attr_extra_state_attributes = {
+            attrs: dict = {
                 "detection_type": event_type,
                 "smart_frame_label": result["label"],
                 "file_id": result["file_id"],
                 "source": "smart_frame",
             }
+            if area:
+                attrs["detection_zone"] = area
+            self._attr_extra_state_attributes = attrs
             self.async_write_ha_state()
             _LOGGER.debug(
                 "Smart Frame updated: %s / %s (%d bytes)",
@@ -130,7 +137,9 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
                 event_type,
             )
 
-    async def _grab_rtsp_snapshot(self, event_type: str) -> None:
+    async def _grab_rtsp_snapshot(self, event: dict) -> None:
+        event_type = event["type"]
+        area = event.get("area")
         await asyncio.sleep(_POST_EVENT_DELAY_RTSP)
         try:
             ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
@@ -140,7 +149,6 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         user = self._entry_data["username"]
         pw = self._entry_data["password"]
         stream_url = f"rtsp://{user}:{pw}@{ip}:554/stream1"
-        redacted = f"rtsp://{user}:***@{ip}:554/stream1"
         proc = await asyncio.create_subprocess_exec(
             ffmpeg_bin,
             "-rtsp_transport", "tcp",
@@ -156,10 +164,13 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         if stdout and proc.returncode == 0:
             self._cached_image = stdout
             self._image_last_updated = datetime.now(timezone.utc)
-            self._attr_extra_state_attributes = {
+            attrs: dict = {
                 "detection_type": event_type,
                 "source": "rtsp_snapshot",
             }
+            if area:
+                attrs["detection_zone"] = area
+            self._attr_extra_state_attributes = attrs
             self.async_write_ha_state()
             _LOGGER.debug(
                 "RTSP snapshot captured for %s (%d bytes)", event_type, len(stdout)
@@ -168,8 +179,9 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             _LOGGER.debug(
                 "RTSP snapshot returned no data for %s — stream accessible?", event_type
             )
-            safe_url = stream_url.replace(pw, "***")
-            _LOGGER.debug("RTSP snapshot URL was: %s", safe_url)
+            _LOGGER.debug(
+                "RTSP snapshot URL was: rtsp://%s:***@%s:554/stream1", user, ip
+            )
 
     async def async_image(self) -> bytes | None:
         return self._cached_image

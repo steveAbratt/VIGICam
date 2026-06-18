@@ -202,6 +202,7 @@ class VIGIEventBinarySensor(VIGIEntity, BinarySensorEntity):
         self._is_on = False
         self._clear_cancel: Callable | None = None
         self._unsub_dispatcher: Callable | None = None
+        self._attr_extra_state_attributes: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -225,6 +226,9 @@ class VIGIEventBinarySensor(VIGIEntity, BinarySensorEntity):
             self._clear_cancel()
             self._clear_cancel = None
         self._is_on = event["active"]
+        area = event.get("area")
+        if area:
+            self._attr_extra_state_attributes = {"detection_zone": area}
         if self._is_on:
             self._clear_cancel = async_call_later(
                 self.hass, AUTO_CLEAR_S, self._auto_clear
