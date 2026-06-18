@@ -377,9 +377,10 @@ in the integration options.
 3. Enable **Image Controls**
 4. Click **Submit**
 
-After enabling, the new entities appear in the **Configuration** category on the device
-page. Each entity is hidden by default and must be individually enabled via the entity's
-settings gear if you want it on a dashboard.
+After enabling, the new entities are added to the device but are **disabled by default**.
+To use them, go to the device page, scroll to the bottom and click **"X entities not
+shown"**, then enable the specific entities you want. Each entity must be individually
+enabled via its settings gear icon.
 
 ### Number entities (0–100 sliders)
 

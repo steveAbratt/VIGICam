@@ -75,21 +75,38 @@ def _suggested_name(info: dict, fallback: str) -> str:
     return fallback
 
 
-def _options_schema(current: dict) -> vol.Schema:
+def _options_schema(current: dict, suggest_frigate_defaults: bool = False) -> vol.Schema:
+    # When Frigate is newly detected and the user has never saved options,
+    # pre-set Camera Stream and Detection Events to off to avoid duplicates.
+    if suggest_frigate_defaults:
+        stream_default = False
+        detection_default = False
+    else:
+        stream_default = current.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM)
+        detection_default = current.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
+
     return vol.Schema({
-        vol.Required(
-            CONF_FEATURE_CAMERA_STREAM,
-            default=current.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM),
-        ): bool,
-        vol.Required(
-            CONF_FEATURE_DETECTION_EVENTS,
-            default=current.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS),
-        ): bool,
+        vol.Required(CONF_FEATURE_CAMERA_STREAM, default=stream_default): bool,
+        vol.Required(CONF_FEATURE_DETECTION_EVENTS, default=detection_default): bool,
         vol.Required(
             CONF_FEATURE_IMAGE_CONTROLS,
             default=current.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS),
         ): bool,
     })
+
+
+def _capabilities_text(entry_data: dict, has_frigate: bool) -> str:
+    """Return a markdown bullet list of detected camera capabilities."""
+    def _row(detected: bool, label: str) -> str:
+        return f"- {label}: {'✓' if detected else '✗'}"
+
+    return "\n".join([
+        _row(entry_data.get("has_sd_card", False),      "SD card"),
+        _row(entry_data.get("has_ptz", False),           "PTZ controls"),
+        _row(entry_data.get("has_openapi", False),       "OpenAPI (extended sensors)"),
+        _row(entry_data.get("has_smart_frames", False),  "Smart Frame capture"),
+        _row(has_frigate,                                "Frigate integration"),
+    ])
 
 
 class VIGIOptionsFlow(config_entries.OptionsFlow):
@@ -99,21 +116,40 @@ class VIGIOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        frigate_note = detect_frigate_camera(self.hass, self.config_entry.data[CONF_HOST])
-        description = (
-            "Configure which feature groups are active for this camera."
+        ip = self.config_entry.data[CONF_HOST]
+        has_frigate = detect_frigate_camera(self.hass, ip) is not None
+
+        entry_data: dict = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
+        capabilities = (
+            _capabilities_text(entry_data, has_frigate)
+            if entry_data
+            else "_(Camera not currently loaded — reload to refresh)_"
         )
-        if frigate_note:
-            description += (
-                "\n\nFrigate is detected with a camera at this IP address. "
-                "Consider disabling Camera Stream and Detection Events to avoid "
-                "duplicate entities — Frigate handles those surfaces."
+
+        frigate_note = (
+            "Frigate is detected at this IP address. "
+            "Camera Stream and Detection Events have been pre-set to **off** to avoid "
+            "duplicate entities — adjust below if needed."
+            if (has_frigate and not self.config_entry.options)
+            else (
+                "Frigate is detected at this IP address. "
+                "Consider disabling Camera Stream and Detection Events if Frigate handles those."
+                if has_frigate
+                else ""
             )
+        )
+
+        # Only suggest Frigate defaults the very first time Configure is opened
+        # (options dict empty) and Frigate is present.
+        suggest_frigate = has_frigate and not self.config_entry.options
 
         return self.async_show_form(
             step_id="init",
-            data_schema=_options_schema(dict(self.config_entry.options)),
-            description_placeholders={"note": description},
+            data_schema=_options_schema(dict(self.config_entry.options), suggest_frigate),
+            description_placeholders={
+                "capabilities": capabilities,
+                "note": frigate_note,
+            },
         )
 
 

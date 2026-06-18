@@ -14,6 +14,20 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b6] - 2026-06-18
+
+### Added
+- **Capability summary in Configure dialog** — the options flow now shows a
+  ✓/✗ list of what was detected at startup: SD card, PTZ controls, OpenAPI,
+  Smart Frame capture, and Frigate integration. Useful for confirming the
+  integration found a feature, or spotting why an expected feature is missing.
+- **Frigate auto-defaults** — when Frigate is detected and the camera has never
+  been configured via the options flow before, Camera Stream and Detection Events
+  are pre-set to **off** in the dialog to avoid duplicate entities. The user can
+  override before saving.
+
+---
+
 ## [0.6.0b5] - 2026-06-18
 
 ### Added
