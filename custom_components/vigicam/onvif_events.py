@@ -83,6 +83,15 @@ class VIGIOnvifEvents:
         self._task: asyncio.Task | None = None
         self._session: aiohttp.ClientSession | None = None
 
+    @property
+    def is_connected(self) -> bool:
+        """True when an active pull-point subscription exists."""
+        return (
+            self._sub_address is not None
+            and self._task is not None
+            and not self._task.done()
+        )
+
     async def async_start(self) -> None:
         """Create subscription and start background polling loop."""
         self._session = aiohttp.ClientSession()

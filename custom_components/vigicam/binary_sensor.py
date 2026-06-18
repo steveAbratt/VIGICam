@@ -22,6 +22,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 
@@ -150,23 +151,85 @@ OPENAPI_BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
 )
 
 
+@dataclass(frozen=True, kw_only=True)
+class VIGICapabilityDescription:
+    key: str
+    name: str
+    icon: str
+
+
+CAPABILITY_SENSORS: tuple[VIGICapabilityDescription, ...] = (
+    VIGICapabilityDescription(key="cap_ptz",          name="PTZ",                  icon="mdi:pan"),
+    VIGICapabilityDescription(key="cap_openapi",       name="OpenAPI",              icon="mdi:api"),
+    VIGICapabilityDescription(key="cap_smart_frame",   name="Smart Frame Capture",  icon="mdi:image-filter-center-focus"),
+    VIGICapabilityDescription(key="cap_sd_card",       name="SD Card",              icon="mdi:sd"),
+    VIGICapabilityDescription(key="cap_onvif",         name="ONVIF Events",         icon="mdi:broadcast"),
+)
+
+# Maps VIGICapabilityDescription.key → entry_data key for static capabilities.
+# SD card and ONVIF are excluded — they are read live from coordinator/onvif_events.
+_STATIC_CAPABILITY_KEYS: dict[str, str] = {
+    "cap_ptz":         "has_ptz",
+    "cap_openapi":     "has_openapi",
+    "cap_smart_frame": "has_smart_frames",
+}
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    if not entry.options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS):
-        return
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     entities: list[BinarySensorEntity] = []
-    for desc in BINARY_SENSORS:
-        if desc.event_type is not None:
-            entities.append(VIGIEventBinarySensor(coordinator, data, desc))
-        elif desc.supported_fn(coordinator.data or {}):
-            entities.append(VIGIBinarySensor(coordinator, data, desc))
-    if data.get("has_openapi"):
-        for desc in OPENAPI_BINARY_SENSORS:
-            entities.append(VIGIEventBinarySensor(coordinator, data, desc))
+
+    # Capability sensors — always present, not gated on feature flags.
+    for desc in CAPABILITY_SENSORS:
+        entities.append(VIGICapabilityBinarySensor(coordinator, data, desc))
+
+    # Detection event and coordinator-polled sensors.
+    if entry.options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS):
+        for desc in BINARY_SENSORS:
+            if desc.event_type is not None:
+                entities.append(VIGIEventBinarySensor(coordinator, data, desc))
+            elif desc.supported_fn(coordinator.data or {}):
+                entities.append(VIGIBinarySensor(coordinator, data, desc))
+        if data.get("has_openapi"):
+            for desc in OPENAPI_BINARY_SENSORS:
+                entities.append(VIGIEventBinarySensor(coordinator, data, desc))
+
     async_add_entities(entities)
+
+
+class VIGICapabilityBinarySensor(VIGIEntity, BinarySensorEntity):
+    """Diagnostic binary sensor — is a camera capability detected?
+
+    State is set once at startup from entry_data (static capabilities) or read
+    live from coordinator.has_sd_card (SD card, which can be inserted/removed).
+    On = detected / available.  Off = not detected / unavailable.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_data: dict, description: VIGICapabilityDescription) -> None:
+        super().__init__(coordinator, entry_data)
+        self._desc = description
+        self._attr_name = description.name
+        self._attr_icon = description.icon
+        entry_data_key = _STATIC_CAPABILITY_KEYS.get(description.key)
+        self._static_value: bool = bool(entry_data.get(entry_data_key, False)) if entry_data_key else False
+
+    @property
+    def _unique_id_suffix(self) -> str:
+        return self._desc.key
+
+    @property
+    def is_on(self) -> bool:
+        if self._desc.key == "cap_sd_card":
+            return self.coordinator.has_sd_card
+        if self._desc.key == "cap_onvif":
+            onvif = self._entry_data.get("onvif_events")
+            return onvif.is_connected if onvif is not None else False
+        return self._static_value
 
 
 class VIGIBinarySensor(VIGIEntity, BinarySensorEntity):
