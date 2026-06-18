@@ -8,32 +8,6 @@ No cloud account. No subscription. No dependency on TP-Link servers.
 
 ---
 
-## Why VIGI and InSight cameras?
-
-Most home security cameras are a compromise: consumer-grade hardware, cloud-dependent
-software, and WiFi connectivity that drops out the moment you need it most. VIGI and
-InSight cameras take a different approach.
-
-**Built to stay put.** PoE-powered and hardwired, these cameras draw power and data
-through a single cable. No batteries to change, no WiFi negotiation on every boot, no
-coverage gap when the router reboots. Once installed, they work indefinitely.
-
-**Business-spec hardware at competitive prices.** Metal housings, proper IP66/67 weather
-ratings, and firmware update paths you'd expect from enterprise networking gear — TP-Link's
-background in business networking shows. The InSight line is their higher-specification
-tier: more detection capability, tamper detection, and construction quality suited to
-demanding outdoor installations.
-
-**AI on the camera, not a server.** Person, vehicle, intrusion zone, line crossing, audio
-anomaly, and loitering detection all run on the device itself. You get smart detection
-events without a GPU, without a separate NVR, and without sending footage off-premises.
-
-**Ubiquiti-class features without Ubiquiti pricing.** Configurable detection zones, PTZ
-with named presets, two-way audio, smart capture, PoE infrastructure compatibility — the
-feature set competes with cameras three times the price.
-
----
-
 ## Standalone or with Frigate — your choice
 
 **Standalone (no NVR required):** VIGICam uses the camera's own on-device AI for
@@ -98,6 +72,32 @@ created dynamically — only capabilities the camera actually reports appear in 
   *(extended sensors require [OpenAPI](#openapi--extended-detection--sensors))*
 - **Diagnostics** — firmware version, IP address, connection type, MAC address, uptime
   *(uptime requires [OpenAPI](#openapi--extended-detection--sensors))*
+
+---
+
+## Why VIGI and InSight cameras?
+
+Most home security cameras are a compromise: consumer-grade hardware, cloud-dependent
+software, and WiFi connectivity that drops out the moment you need it most. VIGI and
+InSight cameras take a different approach.
+
+**Built to stay put.** PoE-powered and hardwired, these cameras draw power and data
+through a single cable. No batteries to change, no WiFi negotiation on every boot, no
+coverage gap when the router reboots. Once installed, they work indefinitely.
+
+**Business-spec hardware at competitive prices.** Metal housings, proper IP66/67 weather
+ratings, and firmware update paths you'd expect from enterprise networking gear — TP-Link's
+background in business networking shows. The InSight line is their higher-specification
+tier: more detection capability, tamper detection, and construction quality suited to
+demanding outdoor installations.
+
+**AI on the camera, not a server.** Person, vehicle, intrusion zone, line crossing, audio
+anomaly, and loitering detection all run on the device itself. You get smart detection
+events without a GPU, without a separate NVR, and without sending footage off-premises.
+
+**Ubiquiti-class features without Ubiquiti pricing.** Configurable detection zones, PTZ
+with named presets, two-way audio, smart capture, PoE infrastructure compatibility — the
+feature set competes with cameras three times the price.
 
 ---
 
