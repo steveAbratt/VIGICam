@@ -14,6 +14,39 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b11] - 2026-06-18
+
+### Added
+- **Capability diagnostic sensors** — full section in USAGE.md documenting all five
+  sensors (PTZ, OpenAPI, Event Image Capture, SD Card, ONVIF Events) with automation
+  examples.
+- **Event image capture setup guide** in USAGE.md — step-by-step instructions:
+  Storage → Capture Management → Event-triggered capture; Storage → Storage Management
+  → Capture Capacity slider + disk format; Event → Smart Event → Upload Capture.
+  Includes a note clarifying that the VIGI app's "Smart Frame" setting is a separate
+  feature (live-view bounding box overlay) and does not need to be enabled for SD card
+  image capture to work.
+- **`detection_zone` attribute** documentation added to the Binary Sensors and Last
+  Detection sections in USAGE.md.
+- **Image history guidance** in USAGE.md — explains VIGI app Capture Playback as the
+  right tool for reviewing past events; covers Gallery Card + automation approach for
+  users who want a HA-based snapshot archive.
+
+### Changed
+- **"Smart Frame Capture" capability sensor renamed to "Event Image Capture"**
+  (`cap_smart_frame` → `cap_event_capture`). "Smart Frame" is a VIGI app display
+  feature (bounding box overlay on the live feed) unrelated to saving images to SD card.
+  The sensor now accurately describes what it detects: whether the camera supports
+  saving a full-frame still to SD card at the moment of each detection event.
+  Existing installations will see a new entity; the old `cap_smart_frame` entity can be
+  removed from the entity registry.
+- `source` attribute on the Last Detection image entity renamed from `"smart_frame"` to
+  `"event_capture"`. Update any automations that check this value.
+- `smart_frame_label` attribute on the Last Detection image entity renamed to
+  `event_label`. Update any automations that reference this attribute.
+
+---
+
 ## [0.6.0b10] - 2026-06-18
 
 ### Added
@@ -21,7 +54,7 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   Diagnostics section of every camera device page:
   - **PTZ** — on if pan/tilt/zoom was detected at startup
   - **OpenAPI** — on if the OpenAPI endpoint is reachable
-  - **Smart Frame Capture** — on if the camera supports AI-cropped Smart Frame images
+  - **Event Image Capture** — on if the camera supports saving event images to SD card
   - **SD Card** — on/off updated live as the card is inserted or removed
   - **ONVIF Events** — on while the ONVIF pull-point subscription is active; goes off if the subscription drops or detection events are disabled
 

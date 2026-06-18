@@ -1,11 +1,15 @@
 """Image entity — last detection snapshot.
 
-On cameras with Smart Frame capture enabled (and SD card formatted for image
-storage), downloads the AI-cropped Smart Frame via WebSocket on each detection
-event.
+On cameras that support event image capture (SD card with a capture partition,
+and Upload Capture enabled in event settings), downloads the most recent
+event image via WebSocket on each detection event. The image is a full-frame
+still saved by the camera at the exact moment of detection.
 
-On cameras without Smart Frame support (e.g. VIGI C540V), falls back to
-grabbing a still from the live RTSP stream when any detection event fires.
+On cameras without event image capture support (e.g. VIGI C540V, or cameras
+where the SD card has not been formatted with a capture partition), falls back
+to grabbing a still from the live RTSP stream when any detection event fires.
+The RTSP grab runs ~2 seconds after the notification arrives, so it may
+occasionally miss fast-moving subjects.
 
 The grab runs in the background so it does not block the event dispatcher.
 Only one concurrent grab per camera is allowed.
@@ -30,7 +34,7 @@ from .smart_frame import fetch_latest_smart_frame
 
 _LOGGER = logging.getLogger(__name__)
 
-_POST_EVENT_DELAY_SF = 3.0    # seconds to wait for Smart Frame SD card write
+_POST_EVENT_DELAY_SF = 3.0    # seconds to wait for event image SD card write
 _POST_EVENT_DELAY_RTSP = 2.0  # seconds to wait for subject to enter RTSP frame
 
 
@@ -44,7 +48,7 @@ async def async_setup_entry(
 
 
 class VIGILastDetectionImage(VIGIEntity, ImageEntity):
-    """Last detection snapshot — Smart Frame if supported, RTSP fallback otherwise."""
+    """Last detection snapshot — event image from SD card if supported, RTSP fallback otherwise."""
 
     _attr_name = "Last Detection"
     _attr_icon = "mdi:image-search"
@@ -119,21 +123,21 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             self._image_last_updated = datetime.now(timezone.utc)
             attrs: dict = {
                 "detection_type": event_type,
-                "smart_frame_label": result["label"],
+                "event_label": result["label"],
                 "file_id": result["file_id"],
-                "source": "smart_frame",
+                "source": "event_capture",
             }
             if area:
                 attrs["detection_zone"] = area
             self._attr_extra_state_attributes = attrs
             self.async_write_ha_state()
             _LOGGER.debug(
-                "Smart Frame updated: %s / %s (%d bytes)",
+                "Event image captured: %s / %s (%d bytes)",
                 event_type, result["label"], len(result["jpeg"]),
             )
         else:
             _LOGGER.debug(
-                "No Smart Frame for %s event — Smart Frame capture enabled in camera settings?",
+                "No event image for %s — Upload Capture enabled in camera event settings?",
                 event_type,
             )
 
