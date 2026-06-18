@@ -47,17 +47,7 @@ NUMBERS: tuple[VIGINumberDescription, ...] = (
         set_fn=lambda api, v: api.set_motion_sensitivity(int(v)),
         supported_fn=lambda d: "digital_sensitivity" in d.get("motion", {}),
     ),
-    VIGINumberDescription(
-        key="spotlight_intensity",
-        name="Spotlight Intensity",
-        native_min_value=1,
-        native_max_value=4,
-        native_step=1,
-        mode=NumberMode.SLIDER,
-        value_fn=lambda d: d.get("image_switch", {}).get("wtl_intensity_level"),
-        set_fn=lambda api, v: api.set_spotlight_intensity(int(v)),
-        supported_fn=lambda d: "wtl_intensity_level" in d.get("image_switch", {}),
-    ),
+
     VIGINumberDescription(
         key="alarm_sound_times",
         name="Alarm Sound Repetitions",

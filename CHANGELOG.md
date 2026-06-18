@@ -14,6 +14,23 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b2] - 2026-06-18
+
+### Added
+- **Spotlight light entity** — the camera spotlight is now a proper HA `light`
+  entity with brightness control, replacing the separate Spotlight Intensity
+  number entity. Use it in automations with `light.turn_on(brightness=200)`,
+  include it in scenes, and control it from the default light card on dashboards.
+  Brightness maps the camera's 1–4 internal scale to HA's 0–255 range.
+
+### Removed
+- **Spotlight Intensity** number entity — superseded by the spotlight light
+  entity's brightness control. Existing automations using the number entity
+  should be updated to use `light.turn_on` with `brightness:` instead.
+  The entity is removed from the registry automatically on first load.
+
+---
+
 ## [0.6.0b1] - 2026-06-18
 
 ### Added

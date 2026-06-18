@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_FEATURE_CAMERA_STREAM,
     DEFAULT_FEATURE_DETECTION_EVENTS,
     DEFAULT_FEATURE_IMAGE_CONTROLS,
+    DEPRECATED_SUFFIXES,
     DETECTION_EVENT_SUFFIXES,
     DOMAIN,
     IMAGE_CONTROL_SUFFIXES,
@@ -77,8 +78,8 @@ def _cleanup_stale_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
     if not options.get(CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS):
         remove_suffixes |= IMAGE_CONTROL_SUFFIXES
 
-    if not remove_suffixes:
-        return
+    # Always remove deprecated entities regardless of feature flags.
+    remove_suffixes |= DEPRECATED_SUFFIXES
 
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         # Unique IDs are "{device_id}_{suffix}" — extract the suffix part.

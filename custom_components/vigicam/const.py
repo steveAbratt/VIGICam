@@ -57,6 +57,12 @@ IMAGE_CONTROL_SUFFIXES: frozenset[str] = frozenset({
 
 REPAIRS_SD_CARD_MISSING = "sd_card_missing"
 
+# Unique-ID suffixes for entities that have been superseded and should be
+# removed from the registry on the next setup (one-time migration).
+DEPRECATED_SUFFIXES: frozenset[str] = frozenset({
+    "spotlight_intensity",  # replaced by the spotlight light entity brightness
+})
+
 # Unique-ID suffixes for all SD card sensor entities — used by the repair fix
 # flow to remove stale entities when the user confirms the card is gone.
 SD_ENTITY_SUFFIXES: frozenset[str] = frozenset({
