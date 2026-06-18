@@ -14,6 +14,18 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b8] - 2026-06-18
+
+### Fixed
+- Capability summary now appears as hint text **below the Camera Stream toggle** instead
+  of in the step description. The step description is not rendered by all HA frontend
+  versions; `data_description` (toggle hint text) always renders.
+- Frigate note moved into the hint text below the Detection Events toggle.
+- Capability line is now compact and single-line:
+  `SD card ✓  ·  PTZ ✗  ·  OpenAPI ✓  ·  Smart Frame ✓  ·  Frigate ✗`
+
+---
+
 ## [0.6.0b7] - 2026-06-18
 
 ### Added

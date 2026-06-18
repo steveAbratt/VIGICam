@@ -41,8 +41,8 @@
           "feature_image_controls": "Image controls (brightness, contrast, WDR, flip, and other camera tuning — disabled by default)"
         },
         "data_description": {
-          "feature_camera_stream": "Disable if Frigate or another integration already provides the camera stream.",
-          "feature_detection_events": "Disable if Frigate handles detection — this also stops ONVIF event subscriptions.",
+          "feature_camera_stream": "Detected: {capabilities}\n\nDisable if Frigate or another integration already provides the camera stream.",
+          "feature_detection_events": "{note}Disable if Frigate handles detection — this also stops ONVIF event subscriptions.",
           "feature_image_controls": "Adds camera tuning controls to the Configuration section of the device. Entities are disabled by default — enable them individually from the device page. Most users leave this off."
         }
       }

@@ -137,16 +137,19 @@ def _enabled_entities_being_removed(
 
 
 def _capabilities_text(entry_data: dict, has_frigate: bool) -> str:
-    """Return a markdown bullet list of detected camera capabilities."""
-    def _row(detected: bool, label: str) -> str:
-        return f"- {label}: {'✓' if detected else '✗'}"
+    """Return a compact single-line capability summary for use in data_description."""
+    def _item(detected: bool, label: str) -> str:
+        return f"{label} {'✓' if detected else '✗'}"
 
-    return "\n".join([
-        _row(entry_data.get("has_sd_card", False),      "SD card"),
-        _row(entry_data.get("has_ptz", False),           "PTZ controls"),
-        _row(entry_data.get("has_openapi", False),       "OpenAPI (extended sensors)"),
-        _row(entry_data.get("has_smart_frames", False),  "Smart Frame capture"),
-        _row(has_frigate,                                "Frigate integration"),
+    if not entry_data:
+        return "_(camera not loaded — reload to refresh)_"
+
+    return "  ·  ".join([
+        _item(entry_data.get("has_sd_card", False),     "SD card"),
+        _item(entry_data.get("has_ptz", False),          "PTZ"),
+        _item(entry_data.get("has_openapi", False),      "OpenAPI"),
+        _item(entry_data.get("has_smart_frames", False), "Smart Frame"),
+        _item(has_frigate,                               "Frigate"),
     ])
 
 
@@ -172,20 +175,16 @@ class VIGIOptionsFlow(config_entries.OptionsFlow):
         has_frigate = detect_frigate_camera(self.hass, ip) is not None
 
         entry_data: dict = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
-        capabilities = (
-            _capabilities_text(entry_data, has_frigate)
-            if entry_data
-            else "_(Camera not currently loaded — reload to refresh)_"
-        )
+        capabilities = _capabilities_text(entry_data, has_frigate)
 
+        # Prefix with a newline so the note reads as a separate paragraph in data_description.
         frigate_note = (
-            "Frigate is detected at this IP address. "
-            "Camera Stream and Detection Events have been pre-set to **off** to avoid "
-            "duplicate entities — adjust below if needed."
+            "Frigate detected — Camera Stream and Detection Events pre-set to off. "
+            "Adjust below if needed.\n\n"
             if (has_frigate and not self.config_entry.options)
             else (
-                "Frigate is detected at this IP address. "
-                "Consider disabling Camera Stream and Detection Events if Frigate handles those."
+                "Frigate detected at this IP — consider disabling Camera Stream and "
+                "Detection Events.\n\n"
                 if has_frigate
                 else ""
             )
