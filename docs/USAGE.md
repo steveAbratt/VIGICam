@@ -7,11 +7,14 @@ For installation instructions see the [README](../README.md).
 
 ## Contents
 
+- [Feature groups — configuring what entities are created](#feature-groups)
 - [OpenAPI — unlocking additional sensors](#openapi--unlocking-additional-sensors)
 - [Switches — what they control](#switches)
 - [Buttons — what they trigger](#buttons)
 - [Numbers — adjustable settings](#numbers)
+- [Light entities — spotlight](#light-entities)
 - [Select entities](#select-entities)
+- [Image controls — advanced camera tuning](#image-controls)
 - [Sensors & diagnostics](#sensors--diagnostics)
 - [Binary sensors — detection events](#binary-sensors--detection-events)
 - [Image entities — last detection snapshot](#image-entities--last-detection-snapshot)
@@ -20,6 +23,50 @@ For installation instructions see the [README](../README.md).
 - [Blueprint: play audio file](#blueprint-play-audio-file)
 - [Playing pre-recorded files](#playing-pre-recorded-files)
 - [Dashboard tips](#dashboard-tips)
+
+---
+
+## Feature groups
+
+VIGICam groups its entities into three feature groups that you can enable or disable
+independently. This is useful if you are also running Frigate (to avoid duplicate
+stream and detection entities) or if you only want the hardware controls without the
+full entity set.
+
+### Configuring feature groups
+
+Go to **Settings → Devices & Services → VIGI & InSight Cameras**, click **Configure**
+on the camera entry, and use the toggles. Changes take effect immediately — the
+integration reloads and creates or removes entities accordingly.
+
+| Feature group | What it includes | Default |
+|---------------|-----------------|---------|
+| **Camera Stream** | The RTSP live stream entity used in dashboards and `camera.*` services | On |
+| **Detection Events** | All binary sensors — motion, person, intrusion, line crossing, smart detection, vehicle, audio anomaly, and all OpenAPI detection sensors. Also controls the ONVIF event subscription. | On |
+| **Image Controls** | Camera tuning entities (brightness, contrast, WDR, flip, etc.) in the Configuration category | Off |
+
+> **Frigate users:** If Frigate is already providing the stream and object detection,
+> disable Camera Stream and Detection Events to avoid duplicate entities. VIGICam will
+> still provide all hardware controls (alarm, spotlight, speaker, PTZ, SD card sensors,
+> etc.). See [FRIGATE_SETUP.md](FRIGATE_SETUP.md) for a step-by-step guide.
+
+### Entity cleanup
+
+When you turn a feature group off, VIGICam removes the entities for that group from the
+HA entity registry immediately. If you later turn the group back on, those entities are
+recreated. There is no manual cleanup needed.
+
+### Notifications
+
+VIGICam raises notifications in HA's **Problems** section (Settings → System → Repairs)
+for the following events:
+
+- **SD card removed** — raised when the SD card disappears at runtime. Dismiss if it is
+  temporary; use Fix to remove the stale SD card entities if you have removed the card
+  permanently.
+- **Frigate camera link lost** — raised if Frigate was previously detected at this
+  camera's IP address but is no longer present. Guides you to re-enable Camera Stream
+  and Detection Events if needed.
 
 ---
 
@@ -140,6 +187,30 @@ speaker stops both alarm sounds and any audio played via `vigicam.speak` or
 Turns the camera's front status LED on or off. Useful at night or in locations where
 you don't want a visible indicator that a camera is active.
 
+### Privacy Mask
+
+Activates the camera's lens mask — the entire camera image is replaced with a black
+screen. The camera continues to operate normally (recording, events) but no image is
+transmitted or displayed. Turns off to restore the full image.
+
+Useful for scheduled periods when you do not want the camera recording a room
+(bedtime, when trusted people are present, etc.).
+
+#### Example: blank the camera when the household is home
+
+```yaml
+automation:
+  alias: "Privacy mode when someone arrives home"
+  trigger:
+    - platform: state
+      entity_id: person.your_name
+      to: "home"
+  action:
+    - service: switch.turn_on
+      target:
+        entity_id: switch.vigi_c540v_privacy_mask
+```
+
 ---
 
 ## Buttons
@@ -189,12 +260,6 @@ Controls how sensitive motion detection is (0–100). At low values the camera i
 small movements (animals, foliage in wind). At high values it triggers on minor
 changes. Tune this to reduce false positives.
 
-### Spotlight Intensity
-
-Adjusts the brightness of the white-light spotlight (levels 1–4). Only relevant when
-Night Vision Mode is set to Spotlight Always On or when the camera auto-switches to
-spotlight mode at night.
-
 ### Alarm Sound Repetitions
 
 Controls how many times the alarm sound plays each time the alarm fires. Default is 5
@@ -229,6 +294,133 @@ the camera's web UI — this integration reads them automatically on startup.
 
 For automations, use the `vigicam.goto_preset` service (which accepts a preset name)
 rather than `select.select_option` (which requires an entity ID).
+
+---
+
+## Light Entities
+
+### Spotlight
+
+Controls the camera's white-light spotlight. Turning it on switches Night Vision Mode
+to Spotlight Always On. Turning it off switches Night Vision Mode to IR Always On (not
+off — the camera still needs a night vision mode active).
+
+The brightness slider maps the spotlight's 4 intensity levels (1–4) to the HA range
+(1–255) so standard HA light controls work as expected.
+
+> **Night Vision Mode:** The spotlight and IR mode are managed together via Night Vision
+> Mode. Setting the Spotlight entity to on forces spotlight mode; turning it off returns
+> to IR mode. If you want a different off behaviour (e.g. Auto), change Night Vision Mode
+> directly using the Night Vision Mode select entity.
+
+#### Example: turn spotlight on at sunset, off at sunrise
+
+```yaml
+automation:
+  alias: "Spotlight on at sunset"
+  trigger:
+    - platform: sun
+      event: sunset
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.vigi_c540v_spotlight
+      data:
+        brightness: 200   # ~level 3 of 4
+
+automation:
+  alias: "Spotlight off at sunrise"
+  trigger:
+    - platform: sun
+      event: sunrise
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.vigi_c540v_spotlight
+```
+
+#### Example: dim spotlight for motion, bright on alarm
+
+```yaml
+automation:
+  alias: "Dim spotlight on person detection, then brighten on alarm trigger"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_person_detected
+      to: "on"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.vigi_c540v_spotlight
+      data:
+        brightness: 80    # level 1 — minimal illumination
+    - delay: "00:00:05"
+    - service: light.turn_on
+      target:
+        entity_id: light.vigi_c540v_spotlight
+      data:
+        brightness: 255   # level 4 — full brightness
+```
+
+---
+
+## Image Controls
+
+Image controls are a set of advanced camera tuning entities — brightness, contrast,
+WDR, lens correction, and others. They are **disabled by default** and must be enabled
+in the integration options.
+
+### Enabling image controls
+
+1. Go to **Settings → Devices & Services → VIGI & InSight Cameras**
+2. Click **Configure** on the camera entry
+3. Enable **Image Controls**
+4. Click **Submit**
+
+After enabling, the new entities appear in the **Configuration** category on the device
+page. Each entity is hidden by default and must be individually enabled via the entity's
+settings gear if you want it on a dashboard.
+
+### Number entities (0–100 sliders)
+
+| Entity | What it controls |
+|--------|-----------------|
+| **Image Brightness** | Overall image brightness |
+| **Contrast** | Difference between light and dark areas |
+| **Saturation** | Colour intensity — 0 is greyscale, 100 is vivid |
+| **Chroma** | Colour balance adjustment |
+| **Sharpness** | Edge sharpening — higher values increase perceived detail but can introduce noise |
+| **WDR Gain** | Wide Dynamic Range gain — controls how aggressively WDR flattens highlights and shadows |
+| **Exposure Gain** | Manual gain boost for low-light conditions |
+
+### Switch entities
+
+| Entity | What it controls |
+|--------|-----------------|
+| **WDR** | Wide Dynamic Range — balances bright and dark areas in the same frame. Useful for cameras facing windows or doorways |
+| **HLC** | High Light Compensation — reduces glare from headlights, spotlights, and other strong light sources |
+| **Dehaze** | Reduces atmospheric haze in the image. Useful for outdoor cameras in foggy or misty conditions |
+| **EIS** | Electronic Image Stabilisation — reduces camera shake. Useful if the camera vibrates |
+| **Auto Exposure Anti-flicker** | Prevents flicker caused by artificial lighting at 50 or 60 Hz |
+| **Backlight Compensation** | Improves visibility of subjects in front of bright backgrounds |
+| **Lens Distortion Correction** | Corrects the barrel distortion from wide-angle lenses |
+| **Full Colour People Enhance** | AI enhancement for person subjects in full-colour (spotlight) night mode |
+| **Full Colour Vehicle Enhance** | AI enhancement for vehicle subjects in full-colour (spotlight) night mode |
+
+### Select entities
+
+| Entity | Options | What it controls |
+|--------|---------|-----------------|
+| **Flip** | off, center, flip, mirror | Vertical/horizontal image orientation |
+| **Rotate** | off, 90, 180, 270 | Image rotation in degrees |
+| **Flicker** | 50hz, 60hz | Sets the anti-flicker frequency to match your mains power frequency |
+| **White Balance** | auto, nature, manual, lock | Colour temperature correction mode |
+| **Exposure Type** | auto, manual | Whether the camera manages exposure automatically or uses manual exposure gain |
+
+> **Tip:** Most users only need to change Flicker (set to match your country's mains
+> frequency — 50 Hz for most of Europe and Asia, 60 Hz for North America) and
+> occasionally Flip or Rotate if the camera is mounted upside down. The rest can be
+> left at their camera defaults unless you have a specific image quality issue to solve.
 
 ---
 

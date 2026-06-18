@@ -14,6 +14,25 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.6.0b5] - 2026-06-18
+
+### Added
+- **`docs/FRIGATE_SETUP.md`** — step-by-step guide for running VIGICam alongside
+  Frigate: recommended architecture, which feature groups to disable, automation
+  examples combining both integrations.
+- **`docs/MOVING_TO_FRIGATE.md`** — migration checklist for existing standalone
+  VIGICam users adding Frigate: what changes, how to update automations, how to
+  reverse the change.
+- **`docs/USAGE.md` additions:**
+  - Feature Groups section — explains the three feature groups, how to configure
+    them, and the Repairs notifications.
+  - Spotlight light entity — replaces the removed Spotlight Intensity number entity.
+  - Privacy Mask switch — blanks the camera feed on demand; includes automation example.
+  - Image Controls section — full reference for all image tuning numbers, switches,
+    and selects added in v0.6.0b3.
+
+---
+
 ## [0.6.0b4] - 2026-06-18
 
 ### Added
