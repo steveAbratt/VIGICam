@@ -8,6 +8,7 @@ For installation instructions see the [README](../README.md).
 ## Contents
 
 - [Feature groups — configuring what entities are created](#feature-groups)
+  - [Stream quality — sub-stream vs main HD stream](#stream-quality)
 - [OpenAPI — unlocking additional sensors](#openapi--unlocking-additional-sensors)
 - [Switches — what they control](#switches)
 - [Buttons — what they trigger](#buttons)
@@ -40,9 +41,10 @@ Go to **Settings → Devices & Services → VIGI & InSight Cameras**, click **Co
 on the camera entry, and use the toggles. Changes take effect immediately — the
 integration reloads and creates or removes entities accordingly.
 
-| Feature group | What it includes | Default |
-|---------------|-----------------|---------|
+| Feature group / option | What it controls | Default |
+|------------------------|-----------------|---------|
 | **Camera Stream** | The RTSP live stream entity used in dashboards and `camera.*` services | On |
+| **Use main stream (HD, stream1)** | Which RTSP stream is used for live view — see [Stream quality](#stream-quality) below | Off (sub-stream) |
 | **Detection Events** | All binary sensors — motion, person, intrusion, line crossing, smart detection, vehicle, audio anomaly, and all OpenAPI detection sensors. Also controls the ONVIF event subscription. | On |
 | **Image Controls** | Camera tuning entities (brightness, contrast, WDR, flip, etc.) in the Configuration category | Off |
 
@@ -50,6 +52,34 @@ integration reloads and creates or removes entities accordingly.
 > disable Camera Stream and Detection Events to avoid duplicate entities. VIGICam will
 > still provide all hardware controls (alarm, spotlight, speaker, PTZ, SD card sensors,
 > etc.). See [FRIGATE_SETUP.md](FRIGATE_SETUP.md) for a step-by-step guide.
+
+### Stream quality
+
+VIGI cameras expose two RTSP streams:
+
+| Stream | Path | Resolution | Bitrate | Best for |
+|--------|------|-----------|---------|---------|
+| **Sub-stream** | `stream2` | Typically 640×360 or 1280×720 | Low | Raspberry Pi and other low-powered HA hosts; dashboard live view; fast startup |
+| **Main stream** | `stream1` | Full sensor resolution (e.g. 4 MP / 2560×1440) | High | Powerful hardware; maximum image detail |
+
+**The default is the sub-stream.** HA transcodes the RTSP stream to HLS to serve it to the browser, and on a Raspberry Pi the main stream's high bitrate can cause slow startup, stuttering, and buffering. The sub-stream starts in under a second and plays without interruption on any hardware.
+
+**To switch to the main HD stream:**
+1. Go to **Settings → Devices & Services → VIGI & InSight Cameras**
+2. Click **Configure** on the camera entry
+3. Enable **Use main stream (HD, stream1)**
+4. Click **Submit**
+
+The integration reloads immediately and the live view will use stream1.
+
+> **Dashboard tip:** Regardless of which stream is selected, dashboard camera cards show a
+> static snapshot by default. To see a true live feed, edit the card and set
+> **Camera View** to **Live**. This tells HA to render the HLS stream directly
+> in the card rather than polling for a new image every ~10 seconds.
+
+> **Snapshots are always from the sub-stream.** The still image grabbed for notifications
+> and the `camera.snapshot` service always uses stream2, regardless of this setting.
+> This keeps snapshot grabs fast and lightweight on all hardware.
 
 ### Entity cleanup
 

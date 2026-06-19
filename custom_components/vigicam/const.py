@@ -27,10 +27,12 @@ LOGGER = logging.getLogger(f"custom_components.{DOMAIN}")
 CONF_FEATURE_CAMERA_STREAM = "feature_camera_stream"
 CONF_FEATURE_DETECTION_EVENTS = "feature_detection_events"
 CONF_FEATURE_IMAGE_CONTROLS = "feature_image_controls"
+CONF_STREAM_USE_MAIN = "stream_use_main"
 
 DEFAULT_FEATURE_CAMERA_STREAM = True
 DEFAULT_FEATURE_DETECTION_EVENTS = True
 DEFAULT_FEATURE_IMAGE_CONTROLS = False
+DEFAULT_STREAM_USE_MAIN = False  # sub-stream (stream2) by default — fast startup, Pi-friendly
 
 # Unique-ID suffixes that belong to each feature group.
 # Used by the entity cleanup function to remove stale entries when a
