@@ -17,10 +17,12 @@ from .const import (
     CONF_FEATURE_CAMERA_STREAM,
     CONF_FEATURE_DETECTION_EVENTS,
     CONF_FEATURE_IMAGE_CONTROLS,
+    CONF_STREAM_USE_MAIN,
     CONF_VERIFY_SSL,
     DEFAULT_FEATURE_CAMERA_STREAM,
     DEFAULT_FEATURE_DETECTION_EVENTS,
     DEFAULT_FEATURE_IMAGE_CONTROLS,
+    DEFAULT_STREAM_USE_MAIN,
     DEFAULT_USERNAME,
     DETECTION_EVENT_SUFFIXES,
     DOMAIN,
@@ -91,6 +93,10 @@ def _options_schema(current: dict, suggest_frigate_defaults: bool = False) -> vo
 
     return vol.Schema({
         vol.Required(CONF_FEATURE_CAMERA_STREAM, default=stream_default): bool,
+        vol.Required(
+            CONF_STREAM_USE_MAIN,
+            default=current.get(CONF_STREAM_USE_MAIN, DEFAULT_STREAM_USE_MAIN),
+        ): bool,
         vol.Required(CONF_FEATURE_DETECTION_EVENTS, default=detection_default): bool,
         vol.Required(
             CONF_FEATURE_IMAGE_CONTROLS,

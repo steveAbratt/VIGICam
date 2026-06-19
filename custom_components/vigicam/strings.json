@@ -37,11 +37,13 @@
         "description": "Enable or disable feature groups for this camera. Changes take effect immediately after saving.\n\n**Detected capabilities**\n{capabilities}\n\n{note}",
         "data": {
           "feature_camera_stream": "Camera stream (RTSP live feed entity)",
+          "stream_use_main": "Use main stream (HD, stream1)",
           "feature_detection_events": "Detection events (motion, person, intrusion, and other binary sensors)",
           "feature_image_controls": "Image controls (brightness, contrast, WDR, flip, and other camera tuning — disabled by default)"
         },
         "data_description": {
           "feature_camera_stream": "Detected: {capabilities}\n\nDisable if Frigate or another integration already provides the camera stream.",
+          "stream_use_main": "When off (default), the sub-stream (stream2) is used for live view — lower resolution but fast startup and smooth playback on Raspberry Pi and other low-powered hardware.\n\nWhen on, the main HD stream (stream1) is used — full resolution but requires more CPU and network headroom to transcode without buffering. Recommended only on more powerful hardware.",
           "feature_detection_events": "{note}Disable if Frigate handles detection — this also stops ONVIF event subscriptions.",
           "feature_image_controls": "Adds camera tuning controls to the Configuration section of the device. Entities are disabled by default — enable them individually from the device page. Most users leave this off."
         }

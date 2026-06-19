@@ -10,7 +10,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM, DOMAIN
+from .const import (
+    CONF_FEATURE_CAMERA_STREAM,
+    CONF_STREAM_USE_MAIN,
+    DEFAULT_FEATURE_CAMERA_STREAM,
+    DEFAULT_STREAM_USE_MAIN,
+    DOMAIN,
+)
 from .coordinator import VIGICoordinator
 from .entity import VIGIEntity
 
@@ -23,26 +29,29 @@ async def async_setup_entry(
     if not entry.options.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM):
         return
     data = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([VIGIRTSPCamera(data["coordinator"], data)])
+    use_main = entry.options.get(CONF_STREAM_USE_MAIN, DEFAULT_STREAM_USE_MAIN)
+    async_add_entities([VIGIRTSPCamera(data["coordinator"], data, use_main)])
 
 
 class VIGIRTSPCamera(VIGIEntity, Camera):
     """Live RTSP stream from the camera.
 
-    stream_source  → stream1 (HD main stream, used for live view).
-    async_camera_image → stream2 (sub-stream, lower bitrate dashboard thumbnails).
+    stream_source uses stream1 (HD) or stream2 (sub-stream) based on the
+    stream_use_main option. async_camera_image always uses stream2 for
+    lightweight dashboard snapshots.
     """
 
     _attr_name = "Stream"
     _attr_supported_features = CameraEntityFeature.STREAM
 
-    def __init__(self, coordinator: VIGICoordinator, entry_data: dict) -> None:
+    def __init__(self, coordinator: VIGICoordinator, entry_data: dict, use_main: bool = False) -> None:
         VIGIEntity.__init__(self, coordinator, entry_data)
         Camera.__init__(self)
         ip = entry_data["ip"]
         user = entry_data["username"]
         password = entry_data["password"]
-        self._stream_url = f"rtsp://{user}:{password}@{ip}:554/stream1"
+        live_stream = "stream1" if use_main else "stream2"
+        self._stream_url = f"rtsp://{user}:{password}@{ip}:554/{live_stream}"
         self._snapshot_url = f"rtsp://{user}:{password}@{ip}:554/stream2"
         self._redacted_snapshot_url = f"rtsp://{user}:***@{ip}:554/stream2"
 

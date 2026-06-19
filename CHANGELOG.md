@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.1] - 2026-06-19
+
+### Added
+- **Stream quality option** — new toggle in Configure: "Use main stream (HD, stream1)". Off by default, which uses the sub-stream (stream2) for fast startup and smooth playback on Raspberry Pi and low-powered hardware. Enable for full HD resolution on more powerful hosts.
+- Dashboard camera cards now show a live feed (not just a snapshot) when Camera View is set to **Live** in the card editor — documented in USAGE.md.
+
+### Changed
+- Default live stream is now stream2 (sub-stream) instead of stream1. Existing installs are unaffected — the option defaults to off, preserving the previous sub-stream behaviour. Users who were relying on stream1 can re-enable it via Configure.
+
+---
+
 ## [0.7.0] - 2026-06-18
 
 ### Added
