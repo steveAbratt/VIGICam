@@ -14,6 +14,21 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.2] - 2026-07-06
+
+### Fixed
+- **Driveway camera RTSP connection storm** — `async_camera_image()` opened a brand-new
+  ffmpeg/RTSP connection to `stream2` on every single snapshot request (dashboard
+  thumbnails, notification snapshots), with no caching or lock against overlapping
+  calls. On a camera that only tolerates a handful of concurrent RTSP sessions, this
+  routinely piled up alongside the live-view stream and pushed it past its limit,
+  causing the camera to start rejecting connections (`429 Too Many Requests`) and the
+  live view to fail entirely, including from the camera's own local web UI. Snapshot
+  requests are now cached for 10 seconds and serialized behind a lock, so overlapping
+  requests share one ffmpeg call instead of each opening a new connection.
+
+---
+
 ## [0.7.1] - 2026-06-19
 
 ### Added

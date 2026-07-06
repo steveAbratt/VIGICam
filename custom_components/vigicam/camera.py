@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.components.ffmpeg import get_ffmpeg_manager
@@ -21,6 +22,12 @@ from .coordinator import VIGICoordinator
 from .entity import VIGIEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+# The camera only tolerates a handful of concurrent RTSP sessions on the
+# substream; without this, every dashboard/notification snapshot request
+# opened its own ffmpeg connection on top of the live-view stream and
+# overloaded the camera.
+_SNAPSHOT_CACHE_SECONDS = 10
 
 
 async def async_setup_entry(
@@ -54,6 +61,9 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
         self._stream_url = f"rtsp://{user}:{password}@{ip}:554/{live_stream}"
         self._snapshot_url = f"rtsp://{user}:{password}@{ip}:554/stream2"
         self._redacted_snapshot_url = f"rtsp://{user}:***@{ip}:554/stream2"
+        self._snapshot_lock = asyncio.Lock()
+        self._cached_image: bytes | None = None
+        self._cached_image_time: float = 0.0
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -65,22 +75,34 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                ffmpeg_bin,
-                "-rtsp_transport", "tcp",
-                "-i", self._snapshot_url,
-                "-frames:v", "1",
-                "-f", "image2", "-vcodec", "mjpeg",
-                "pipe:1",
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
-            return stdout if proc.returncode == 0 and stdout else None
-        except Exception as exc:
-            safe = str(exc).replace(self._snapshot_url, self._redacted_snapshot_url)
-            _LOGGER.debug("Snapshot grab failed: %s", safe)
-            return None
+        async with self._snapshot_lock:
+            now = time.monotonic()
+            if (
+                self._cached_image is not None
+                and (now - self._cached_image_time) < _SNAPSHOT_CACHE_SECONDS
+            ):
+                return self._cached_image
+
+            ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    ffmpeg_bin,
+                    "-rtsp_transport", "tcp",
+                    "-i", self._snapshot_url,
+                    "-frames:v", "1",
+                    "-f", "image2", "-vcodec", "mjpeg",
+                    "pipe:1",
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+                if proc.returncode == 0 and stdout:
+                    self._cached_image = stdout
+                    self._cached_image_time = now
+                    return stdout
+                return self._cached_image
+            except Exception as exc:
+                safe = str(exc).replace(self._snapshot_url, self._redacted_snapshot_url)
+                _LOGGER.debug("Snapshot grab failed: %s", safe)
+                return self._cached_image
