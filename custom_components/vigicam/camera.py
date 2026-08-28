@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import urllib.parse
 
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.components.ffmpeg import get_ffmpeg_manager
@@ -55,8 +56,10 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
         VIGIEntity.__init__(self, coordinator, entry_data)
         Camera.__init__(self)
         ip = entry_data["ip"]
-        user = entry_data["username"]
-        password = entry_data["password"]
+        raw_user = entry_data["username"]
+        raw_password = entry_data["password"]
+        user = urllib.parse.quote(raw_user, safe="")
+        password = urllib.parse.quote(raw_password, safe="")
         live_stream = "stream1" if use_main else "stream2"
         self._stream_url = f"rtsp://{user}:{password}@{ip}:554/{live_stream}"
         self._snapshot_url = f"rtsp://{user}:{password}@{ip}:554/stream2"

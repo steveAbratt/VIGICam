@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import urllib.parse
 from datetime import datetime, timezone
 
 from homeassistant.components.ffmpeg import get_ffmpeg_manager
@@ -150,8 +151,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         except Exception:
             ffmpeg_bin = "ffmpeg"
         ip = self._entry_data["ip"]
-        user = self._entry_data["username"]
-        pw = self._entry_data["password"]
+        user = urllib.parse.quote(self._entry_data["username"], safe="")
+        pw = urllib.parse.quote(self._entry_data["password"], safe="")
         stream_url = f"rtsp://{user}:{pw}@{ip}:554/stream1"
         proc = await asyncio.create_subprocess_exec(
             ffmpeg_bin,
