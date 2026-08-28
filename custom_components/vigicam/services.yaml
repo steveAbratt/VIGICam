@@ -6,13 +6,15 @@ ptz:
     to stop it.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera entity to move (e.g. camera.vigi_c540v_stream).
+      name: Camera entities
+      description: >
+        One or more camera entities to move (e.g. camera.vigi_c540v_stream).
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
     direction:
       name: Direction
       description: Movement direction.
@@ -51,26 +53,28 @@ ptz_stop:
   description: Stop all camera movement immediately.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera entity to stop.
+      name: Camera entities
+      description: One or more camera entities to stop.
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
 
 goto_preset:
   name: Go to Preset
   description: Move a PTZ camera to a named preset position.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera entity to move.
+      name: Camera entities
+      description: One or more camera entities to move.
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
     preset:
       name: Preset name
       description: >
@@ -89,13 +93,14 @@ speak:
     Requires HA 2024.6+ for tts.get_tts_audio response support.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera to speak through.
+      name: Camera entities
+      description: One or more cameras to speak through.
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
     message:
       name: Message
       description: >
@@ -152,13 +157,14 @@ play_file:
     The camera hard limit is 15 seconds / 256 KB — files longer than this will fail.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera to play the file on.
+      name: Camera entities
+      description: One or more cameras to play the file on.
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
     url:
       name: Audio URL or path
       description: >
@@ -205,13 +211,14 @@ upload_audio:
     Typical use: generate TTS audio, upload to camera, play back on-site.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera to upload audio to.
+      name: Camera entities
+      description: One or more cameras to upload audio to.
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
     url:
       name: Audio URL
       description: >
@@ -250,13 +257,14 @@ play_audio:
     Alarm Sound Repetitions number entity.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera to play audio on.
+      name: Camera entities
+      description: One or more cameras to play audio on.
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
     slot:
       name: Slot
       description: Audio slot to play. Custom slots 101–103 or built-in 0/1.
@@ -291,13 +299,14 @@ delete_audio:
     uploading new content, or to clear a slot no longer in use.
   fields:
     entity_id:
-      name: Camera entity
-      description: The camera to delete audio from.
+      name: Camera entities
+      description: One or more cameras to delete audio from.
       required: true
       selector:
         entity:
           domain: camera
           integration: vigicam
+          multiple: true
     slot:
       name: Slot
       description: Custom slot to delete (101, 102, or 103).

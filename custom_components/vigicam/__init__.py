@@ -150,8 +150,10 @@ async def _clear_frigate_repair(hass: HomeAssistant, entry: ConfigEntry) -> None
 
 _DIRECTIONS = ("left", "right", "up", "down", "zoom_in", "zoom_out")
 
+_ENTITY_IDS = vol.Any(cv.entity_id, [cv.entity_id])
+
 _PTZ_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("direction"): vol.In(_DIRECTIONS),
     vol.Optional("speed", default=DEFAULT_SPEED): vol.All(
         vol.Coerce(float), vol.Range(min=0.0, max=1.0)
@@ -160,16 +162,16 @@ _PTZ_SCHEMA = vol.Schema({
 })
 
 _PTZ_STOP_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
 })
 
 _GOTO_PRESET_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("preset"): cv.string,
 })
 
 _UPLOAD_AUDIO_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("url"): cv.string,
     vol.Optional("slot", default=101): vol.In([101, 102, 103]),
     vol.Optional("name", default="custom"): cv.string,
@@ -177,19 +179,19 @@ _UPLOAD_AUDIO_SCHEMA = vol.Schema({
 })
 
 _PLAY_AUDIO_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Optional("slot", default=101): vol.All(vol.Coerce(int), vol.Range(min=0, max=103)),
     vol.Optional("times", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
     vol.Optional("pause", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=30.0)),
 })
 
 _DELETE_AUDIO_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("slot"): vol.In([101, 102, 103]),
 })
 
 _SPEAK_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("message"): cv.string,
     vol.Optional("tts_engine", default="tts.cloud"): cv.string,
     vol.Optional("language", default=""): cv.string,
@@ -199,7 +201,7 @@ _SPEAK_SCHEMA = vol.Schema({
 })
 
 _PLAY_FILE_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("url"): cv.string,
     vol.Optional("slot", default=101): vol.In([101, 102, 103]),
     vol.Optional("times", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
@@ -207,20 +209,20 @@ _PLAY_FILE_SCHEMA = vol.Schema({
 })
 
 _PTZ_MOVE_TO_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("pan"): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
     vol.Required("tilt"): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
     vol.Optional("zoom", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
 })
 
 _PTZ_SAVE_PRESET_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("name"): cv.string,
     vol.Optional("id"): vol.All(vol.Coerce(int), vol.Range(min=1, max=8)),
 })
 
 _PTZ_DELETE_PRESET_SCHEMA = vol.Schema({
-    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("name"): cv.string,
 })
 
@@ -235,6 +237,77 @@ _DIRECTION_VECTORS: dict[str, tuple[float, float, float]] = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+_WAV_HEADER_BYTES = 44
+_WAV_BYTES_PER_SECOND = 8000 * 2  # 8 kHz mono 16-bit PCM
+
+
+def _wav_duration(wav: bytes) -> float:
+    """Duration in seconds of an 8 kHz mono 16-bit PCM WAV."""
+    return (len(wav) - _WAV_HEADER_BYTES) / _WAV_BYTES_PER_SECOND
+
+
+def _iter_targets(
+    hass: HomeAssistant, call: ServiceCall, service: str
+) -> list[tuple[str, dict]]:
+    """Return [(entity_id, entry_data), ...] for every camera the call targets.
+
+    entity_id accepts a single id or a list, so one service call can address
+    several cameras. Entities we do not own are logged and skipped rather than
+    aborting the whole call.
+    """
+    raw = call.data["entity_id"]
+    targets: list[tuple[str, dict]] = []
+    for eid in (raw if isinstance(raw, list) else [raw]):
+        data = _entry_data_for_entity(hass, eid)
+        if data is None:
+            _LOGGER.error("vigicam.%s: cannot find camera for %s", service, eid)
+            continue
+        targets.append((eid, data))
+    return targets
+
+
+async def _fetch_audio_bytes(hass: HomeAssistant, url: str) -> tuple[bytes, str]:
+    """Load audio from *url*, returning (raw_bytes, resolved_source).
+
+    HA's own /media/local/ and /local/ URLs are rewritten to filesystem paths —
+    those endpoints require auth the shared client session does not carry. On
+    HA OS the media dir is /media/ rather than /config/media/, so the base path
+    comes from hass.config.media_dirs["local"].
+    """
+    from pathlib import Path
+
+    if url.startswith(("http://", "https://")):
+        media_base = getattr(hass.config, "media_dirs", {}).get(
+            "local", str(Path(hass.config.config_dir) / "media")
+        )
+        www_base = str(Path(hass.config.config_dir) / "www")
+        for seg, base in (("/media/local/", media_base), ("/local/", www_base)):
+            if seg in url:
+                url = str(Path(base) / url.split(seg, 1)[1].split("?")[0])
+                _LOGGER.debug("vigicam: resolved media URL to path %s", url)
+                break
+
+    if url.startswith(("http://", "https://")):
+        session = async_get_clientsession(hass)
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            return await resp.read(), url
+
+    return await hass.async_add_executor_job(Path(url).read_bytes), url
+
+
+async def _replace_and_play(
+    api, slot: int, name: str, wav: bytes, duration: float, times: int, pause: float
+) -> None:
+    """Overwrite custom audio *slot* with *wav* and play it back."""
+    try:
+        await api.delete_audio(slot)
+    except Exception:
+        pass  # slot may already be empty — clearing it is best-effort
+    await api.upload_audio(slot, name, wav)
+    await api.play_audio(slot, times=times, pause=pause, audio_duration=duration)
+
 
 def _entry_data_for_entity(hass: HomeAssistant, entity_id: str) -> dict | None:
     """Return entry_data for the config entry that owns *entity_id*, or None."""
@@ -267,96 +340,104 @@ def _register_services(hass: HomeAssistant) -> None:
         return
 
     async def handle_ptz(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data or not data.get("onvif_ptz"):
-            _LOGGER.error(
-                "vigicam.ptz: no PTZ support for %s", call.data["entity_id"]
-            )
-            return
-        ptz: VIGIOnvifPtz = data["onvif_ptz"]
-        direction = call.data["direction"]
         speed = call.data["speed"]
         duration = call.data.get("duration")
-        pan_v, tilt_v, zoom_v = _DIRECTION_VECTORS[direction]
-        data["coordinator"].last_preset = None
-        data["coordinator"].async_update_listeners()
-        await ptz.continuous_move(pan_v * speed, tilt_v * speed, zoom_v * speed)
-        if duration:
+        pan_v, tilt_v, zoom_v = _DIRECTION_VECTORS[call.data["direction"]]
+
+        moving: list[VIGIOnvifPtz] = []
+        for eid, data in _iter_targets(hass, call, "ptz"):
+            if not data.get("onvif_ptz"):
+                _LOGGER.error("vigicam.ptz: no PTZ support for %s", eid)
+                continue
+            ptz: VIGIOnvifPtz = data["onvif_ptz"]
+            data["coordinator"].last_preset = None
+            data["coordinator"].async_update_listeners()
+            try:
+                await ptz.continuous_move(pan_v * speed, tilt_v * speed, zoom_v * speed)
+            except Exception as exc:
+                _LOGGER.error("vigicam.ptz failed for %s: %s", eid, exc)
+                continue
+            moving.append(ptz)
+
+        # One shared sleep, then stop every camera that started moving.
+        if duration and moving:
             await asyncio.sleep(duration)
-            await ptz.stop()
+            for ptz in moving:
+                await ptz.stop()
 
     async def handle_ptz_stop(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data or not data.get("onvif_ptz"):
-            return
-        await data["onvif_ptz"].stop()
+        for eid, data in _iter_targets(hass, call, "ptz_stop"):
+            if not data.get("onvif_ptz"):
+                continue
+            try:
+                await data["onvif_ptz"].stop()
+            except Exception as exc:
+                _LOGGER.error("vigicam.ptz_stop failed for %s: %s", eid, exc)
 
     async def handle_goto_preset(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data:
-            _LOGGER.error(
-                "vigicam.goto_preset: cannot find camera for %s",
-                call.data["entity_id"],
-            )
-            return
         preset_name = call.data["preset"]
-        presets: list[dict] = data.get("presets", [])
-        preset = next((p for p in presets if p["name"] == preset_name), None)
-        if not preset:
-            _LOGGER.error(
-                "vigicam.goto_preset: preset '%s' not found (available: %s)",
-                preset_name, [p["name"] for p in presets],
-            )
-            return
-        await data["api"].goto_preset(preset["id"])
-        data["coordinator"].last_preset = preset_name
-        data["coordinator"].async_update_listeners()
+        for eid, data in _iter_targets(hass, call, "goto_preset"):
+            presets: list[dict] = data.get("presets", [])
+            preset = next((p for p in presets if p["name"] == preset_name), None)
+            if not preset:
+                _LOGGER.error(
+                    "vigicam.goto_preset: preset '%s' not found on %s (available: %s)",
+                    preset_name, eid, [p["name"] for p in presets],
+                )
+                continue
+            try:
+                await data["api"].goto_preset(preset["id"])
+            except Exception as exc:
+                _LOGGER.error("vigicam.goto_preset failed for %s: %s", eid, exc)
+                continue
+            data["coordinator"].last_preset = preset_name
+            data["coordinator"].async_update_listeners()
 
     async def handle_upload_audio(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data:
-            _LOGGER.error("vigicam.upload_audio: cannot find camera for %s", call.data["entity_id"])
+        targets = _iter_targets(hass, call, "upload_audio")
+        if not targets:
             return
-        url = call.data["url"]
         slot = call.data["slot"]
         name = call.data["name"]
         play = call.data["play"]
+
+        # Fetch and transcode once, then push the same WAV to every camera.
         try:
-            session = async_get_clientsession(hass)
-            async with session.get(url) as resp:
-                resp.raise_for_status()
-                audio_bytes = await resp.read()
-            await data["api"].upload_audio(slot, name, audio_bytes)
-            _LOGGER.debug("vigicam.upload_audio: uploaded %d bytes to slot %d", len(audio_bytes), slot)
-            if play:
-                await data["api"].play_audio(slot)
+            raw_bytes, source = await _fetch_audio_bytes(hass, call.data["url"])
+            wav = await _audio_to_camera_wav(raw_bytes, source_label=source)
         except Exception as exc:
-            _LOGGER.error("vigicam.upload_audio failed: %s", exc)
+            _LOGGER.error("vigicam.upload_audio: could not load %s: %s", call.data["url"], exc)
+            return
+        duration = _wav_duration(wav)
+        _LOGGER.debug("vigicam.upload_audio: %d B (%.1fs) to slot %d", len(wav), duration, slot)
+
+        for eid, data in targets:
+            try:
+                await data["api"].upload_audio(slot, name, wav)
+                if play:
+                    await data["api"].play_audio(slot, audio_duration=duration)
+            except Exception as exc:
+                _LOGGER.error("vigicam.upload_audio failed for %s: %s", eid, exc)
 
     async def handle_play_audio(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data:
-            _LOGGER.error("vigicam.play_audio: cannot find camera for %s", call.data["entity_id"])
-            return
-        try:
-            await data["api"].play_audio(
-                slot_id=call.data["slot"],
-                times=call.data["times"],
-                pause=call.data["pause"],
-            )
-        except Exception as exc:
-            _LOGGER.error("vigicam.play_audio failed: %s", exc)
+        for eid, data in _iter_targets(hass, call, "play_audio"):
+            try:
+                await data["api"].play_audio(
+                    slot_id=call.data["slot"],
+                    times=call.data["times"],
+                    pause=call.data["pause"],
+                )
+            except Exception as exc:
+                _LOGGER.error("vigicam.play_audio failed for %s: %s", eid, exc)
 
     async def handle_delete_audio(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data:
-            _LOGGER.error("vigicam.delete_audio: cannot find camera for %s", call.data["entity_id"])
-            return
-        try:
-            await data["api"].delete_audio(call.data["slot"])
-            _LOGGER.debug("vigicam.delete_audio: deleted slot %d", call.data["slot"])
-        except Exception as exc:
-            _LOGGER.error("vigicam.delete_audio failed: %s", exc)
+        slot = call.data["slot"]
+        for eid, data in _iter_targets(hass, call, "delete_audio"):
+            try:
+                await data["api"].delete_audio(slot)
+                _LOGGER.debug("vigicam.delete_audio: deleted slot %d on %s", slot, eid)
+            except Exception as exc:
+                _LOGGER.error("vigicam.delete_audio failed for %s: %s", eid, exc)
 
     async def _tts_to_camera_wav(tts_engine: str, message: str, language: str) -> bytes:
         """Generate TTS audio and convert it to 8 kHz mono 16-bit PCM WAV.
@@ -491,6 +572,7 @@ def _register_services(hass: HomeAssistant) -> None:
 
         proc = await asyncio.create_subprocess_exec(
             ffmpeg_bin,
+            "-t", "15",
             "-i", "pipe:0",
             "-ar", "8000", "-ac", "1",
             "-f", "s16le",
@@ -506,6 +588,12 @@ def _register_services(hass: HomeAssistant) -> None:
 
         import struct
         _sr, _ch, _bits = 8000, 1, 16
+        # Belt-and-braces cap at the camera's 256 KB limit; the -t 15 above
+        # already keeps 8 kHz mono PCM to ~240 KB, so this rarely fires.
+        _MAX_PCM = 256_000 - _WAV_HEADER_BYTES
+        if len(pcm_data) > _MAX_PCM:
+            _LOGGER.warning("vigicam: audio truncated to fit camera 256 KB limit (%s)", source_label)
+            pcm_data = pcm_data[:_MAX_PCM]
         _data_size = len(pcm_data)
         wav_bytes = struct.pack(
             "<4sI4s4sIHHIIHH4sI",
@@ -514,155 +602,121 @@ def _register_services(hass: HomeAssistant) -> None:
             b"data", _data_size,
         ) + pcm_data
 
-        if len(wav_bytes) > 256_000:
-            raise VIGIError(
-                f"Converted WAV is {len(wav_bytes) // 1024} KB — camera limit is 256 KB / 15 s. "
-                "Use a shorter audio clip."
-            )
-
         return wav_bytes
 
     async def handle_speak(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data:
-            _LOGGER.error("vigicam.speak: cannot find camera for %s", call.data["entity_id"])
+        targets = _iter_targets(hass, call, "speak")
+        if not targets:
             return
         slot = call.data["slot"]
+
+        # Generate the TTS clip once, then announce it on every camera.
         try:
             wav = await _tts_to_camera_wav(
                 call.data["tts_engine"],
                 call.data["message"],
                 call.data.get("language", ""),
             )
-            audio_duration = (len(wav) - 44) / (8000 * 2)  # PCM bytes → seconds
-            _LOGGER.debug("vigicam.speak: WAV %d B, %.1fs → slot %d", len(wav), audio_duration, slot)
-            try:
-                await data["api"].delete_audio(slot)
-            except Exception:
-                pass
-            await data["api"].upload_audio(slot, "announce", wav)
-            await data["api"].play_audio(
-                slot,
-                times=call.data["times"],
-                pause=call.data["pause"],
-                audio_duration=audio_duration,
-            )
         except Exception as exc:
-            _LOGGER.error("vigicam.speak failed: %s", exc)
+            _LOGGER.error("vigicam.speak: TTS generation failed: %s", exc)
+            return
+        duration = _wav_duration(wav)
+        _LOGGER.debug("vigicam.speak: WAV %d B, %.1fs to slot %d", len(wav), duration, slot)
+
+        for eid, data in targets:
+            try:
+                await _replace_and_play(
+                    data["api"], slot, "announce", wav, duration,
+                    call.data["times"], call.data["pause"],
+                )
+            except Exception as exc:
+                _LOGGER.error("vigicam.speak failed for %s: %s", eid, exc)
 
     async def handle_play_file(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data:
-            _LOGGER.error("vigicam.play_file: cannot find camera for %s", call.data["entity_id"])
+        targets = _iter_targets(hass, call, "play_file")
+        if not targets:
             return
-        url = call.data["url"]
         slot = call.data["slot"]
-        try:
-            from pathlib import Path as _Path
-            # Convert HA internal media/www URLs to file paths — these endpoints
-            # require auth that the shared client session doesn't carry.
-            # On HA OS the media dir is /media/ (not /config/media/), so we use
-            # hass.config.media_dirs["local"] for the correct base path.
-            if url.startswith(("http://", "https://")):
-                _media_base = getattr(hass.config, "media_dirs", {}).get(
-                    "local", str(_Path(hass.config.config_dir) / "media")
-                )
-                for _seg, _base in (("/media/local/", _media_base), ("/local/", str(_Path(hass.config.config_dir) / "www"))):
-                    if _seg in url:
-                        _rel = url.split(_seg, 1)[1].split("?")[0]
-                        url = str(_Path(_base) / _rel)
-                        _LOGGER.debug("vigicam.play_file: resolved to path %s", url)
-                        break
 
-            if url.startswith(("http://", "https://")):
-                session = async_get_clientsession(hass)
-                async with session.get(url) as resp:
-                    resp.raise_for_status()
-                    raw_bytes = await resp.read()
-            else:
-                raw_bytes = await hass.async_add_executor_job(_Path(url).read_bytes)
-            wav = await _audio_to_camera_wav(raw_bytes, source_label=url)
-            audio_duration = (len(wav) - 44) / (8000 * 2)  # PCM bytes → seconds
-            _LOGGER.debug("vigicam.play_file: WAV %d B, %.1fs → slot %d", len(wav), audio_duration, slot)
-            try:
-                await data["api"].delete_audio(slot)
-            except Exception:
-                pass
-            await data["api"].upload_audio(slot, f"file_{slot}", wav)
-            await data["api"].play_audio(
-                slot,
-                times=call.data["times"],
-                pause=call.data["pause"],
-                audio_duration=audio_duration,
-            )
+        # Fetch and transcode once, then play the same WAV on every camera.
+        try:
+            raw_bytes, source = await _fetch_audio_bytes(hass, call.data["url"])
+            wav = await _audio_to_camera_wav(raw_bytes, source_label=source)
         except Exception as exc:
-            _LOGGER.error("vigicam.play_file failed: %s", exc)
+            _LOGGER.error("vigicam.play_file: could not load %s: %s", call.data["url"], exc)
+            return
+        duration = _wav_duration(wav)
+        _LOGGER.debug("vigicam.play_file: WAV %d B, %.1fs to slot %d", len(wav), duration, slot)
+
+        for eid, data in targets:
+            try:
+                await _replace_and_play(
+                    data["api"], slot, f"file_{slot}", wav, duration,
+                    call.data["times"], call.data["pause"],
+                )
+            except Exception as exc:
+                _LOGGER.error("vigicam.play_file failed for %s: %s", eid, exc)
 
     async def handle_ptz_move_to(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data or not data.get("has_ptz") or not data.get("openapi"):
-            _LOGGER.error(
-                "vigicam.ptz_move_to: requires PTZ + OpenAPI for %s",
-                call.data["entity_id"],
-            )
-            return
-        try:
-            await data["openapi"].call("motorMove", {
-                "x_coord": call.data["pan"],
-                "y_coord": call.data["tilt"],
-                "z_coord": call.data["zoom"],
-            })
-            data["coordinator"].last_preset = None
-            data["coordinator"].async_update_listeners()
-        except Exception as exc:
-            _LOGGER.error("vigicam.ptz_move_to failed: %s", exc)
+        coords = {
+            "x_coord": call.data["pan"],
+            "y_coord": call.data["tilt"],
+            "z_coord": call.data["zoom"],
+        }
+        for eid, data in _iter_targets(hass, call, "ptz_move_to"):
+            if not data.get("has_ptz") or not data.get("openapi"):
+                _LOGGER.error("vigicam.ptz_move_to: requires PTZ + OpenAPI for %s", eid)
+                continue
+            try:
+                await data["openapi"].call("motorMove", coords)
+                data["coordinator"].last_preset = None
+                data["coordinator"].async_update_listeners()
+            except Exception as exc:
+                _LOGGER.error("vigicam.ptz_move_to failed for %s: %s", eid, exc)
 
     async def handle_ptz_save_preset(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data or not data.get("has_ptz") or not data.get("openapi"):
-            _LOGGER.error(
-                "vigicam.ptz_save_preset: requires PTZ + OpenAPI for %s",
-                call.data["entity_id"],
-            )
-            return
-        openapi = data["openapi"]
         name = call.data["name"]
-        preset_id = call.data.get("id")
-        try:
-            if preset_id is None:
-                existing = await _openapi_get_presets(openapi)
-                used_ids = {int(p["id"]) for p in existing if p["id"].isdigit()}
-                preset_id = next((i for i in range(1, 9) if i not in used_ids), 1)
-            await openapi.call("setPresetPoint", {"id": str(preset_id), "name": name})
-            data["coordinator"].presets = []  # invalidate cache; select refreshes on next poll
-            _LOGGER.debug("vigicam.ptz_save_preset: saved '%s' as id %d", name, preset_id)
-        except Exception as exc:
-            _LOGGER.error("vigicam.ptz_save_preset failed: %s", exc)
+        for eid, data in _iter_targets(hass, call, "ptz_save_preset"):
+            if not data.get("has_ptz") or not data.get("openapi"):
+                _LOGGER.error("vigicam.ptz_save_preset: requires PTZ + OpenAPI for %s", eid)
+                continue
+            openapi = data["openapi"]
+            # Re-read per camera: an auto-allocated id depends on that camera's presets.
+            preset_id = call.data.get("id")
+            try:
+                if preset_id is None:
+                    existing = await _openapi_get_presets(openapi)
+                    used_ids = {int(p["id"]) for p in existing if p["id"].isdigit()}
+                    preset_id = next((i for i in range(1, 9) if i not in used_ids), 1)
+                await openapi.call("setPresetPoint", {"id": str(preset_id), "name": name})
+                data["coordinator"].presets = []  # invalidate cache; select refreshes on next poll
+                _LOGGER.debug(
+                    "vigicam.ptz_save_preset: saved '%s' as id %d on %s", name, preset_id, eid
+                )
+            except Exception as exc:
+                _LOGGER.error("vigicam.ptz_save_preset failed for %s: %s", eid, exc)
 
     async def handle_ptz_delete_preset(call: ServiceCall) -> None:
-        data = _entry_data_for_entity(hass, call.data["entity_id"])
-        if not data or not data.get("has_ptz") or not data.get("openapi"):
-            _LOGGER.error(
-                "vigicam.ptz_delete_preset: requires PTZ + OpenAPI for %s",
-                call.data["entity_id"],
-            )
-            return
-        openapi = data["openapi"]
         name = call.data["name"]
-        try:
-            presets = await _openapi_get_presets(openapi)
-            preset = next((p for p in presets if p["name"] == name), None)
-            if not preset:
-                _LOGGER.error(
-                    "vigicam.ptz_delete_preset: preset '%s' not found (available: %s)",
-                    name, [p["name"] for p in presets],
-                )
-                return
-            await openapi.call("removePresetPoint", {"id": preset["id"]})
-            data["coordinator"].presets = []
-            _LOGGER.debug("vigicam.ptz_delete_preset: deleted preset '%s'", name)
-        except Exception as exc:
-            _LOGGER.error("vigicam.ptz_delete_preset failed: %s", exc)
+        for eid, data in _iter_targets(hass, call, "ptz_delete_preset"):
+            if not data.get("has_ptz") or not data.get("openapi"):
+                _LOGGER.error("vigicam.ptz_delete_preset: requires PTZ + OpenAPI for %s", eid)
+                continue
+            openapi = data["openapi"]
+            try:
+                presets = await _openapi_get_presets(openapi)
+                preset = next((p for p in presets if p["name"] == name), None)
+                if not preset:
+                    _LOGGER.error(
+                        "vigicam.ptz_delete_preset: preset '%s' not found on %s (available: %s)",
+                        name, eid, [p["name"] for p in presets],
+                    )
+                    continue
+                await openapi.call("removePresetPoint", {"id": preset["id"]})
+                data["coordinator"].presets = []
+                _LOGGER.debug("vigicam.ptz_delete_preset: deleted preset '%s' on %s", name, eid)
+            except Exception as exc:
+                _LOGGER.error("vigicam.ptz_delete_preset failed for %s: %s", eid, exc)
 
     hass.services.async_register(DOMAIN, "ptz", handle_ptz, schema=_PTZ_SCHEMA)
     hass.services.async_register(DOMAIN, "ptz_stop", handle_ptz_stop, schema=_PTZ_STOP_SCHEMA)
