@@ -14,6 +14,27 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.4b1] - 2026-08-28
+
+### Changed
+- **Audio and PTZ services accept multiple cameras** — `entity_id` on every `vigicam.*`
+  service now takes either a single entity or a list, so one call can address several
+  cameras at once. For `speak`, `play_file` and `upload_audio` the audio is fetched or
+  generated once and reused for every camera. A camera that fails is logged and skipped
+  rather than aborting the whole call.
+
+### Fixed
+- **`upload_audio` rejected Home Assistant media URLs and unconverted files** — the
+  service now resolves `/media/local/` and `/local/` URLs to file paths and transcodes
+  the source through ffmpeg to the 8 kHz mono WAV the camera requires, matching what
+  `play_file` already did. Previously it uploaded the raw bytes untouched, so anything
+  that was not already a conforming WAV failed on the camera.
+- **Audio longer than 15 seconds failed instead of being trimmed** — clips are now cut
+  to the camera's 15 s / 256 KB limit with a warning, rather than raising an error and
+  playing nothing.
+
+---
+
 ## [0.7.3] - 2026-08-28
 
 ### Fixed
