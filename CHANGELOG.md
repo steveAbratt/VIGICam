@@ -14,6 +14,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.3] - 2026-08-28
+
+### Fixed
+- **RTSP streams failed when credentials contained special characters** — usernames
+  and passwords are now percent-encoded before being placed in the RTSP URL. Previously
+  a password containing `@`, `:`, `#`, `%`, `/` or `?` made Home Assistant parse the
+  URL wrongly, giving `invalid port` or `404 Not Found` when starting the stream.
+  Thanks to @tlazarski for the report and fix. (#80, #81)
+
+---
+
 ## [0.7.2] - 2026-07-06
 
 ### Fixed
