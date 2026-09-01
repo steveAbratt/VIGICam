@@ -3,8 +3,16 @@
 Replaces the separate spotlight_intensity number entity. The camera's 1–4
 intensity scale is mapped linearly to HA's 1–255 brightness range.
 
-Turn on  → sets night_vision_mode to "wtl_night_vision"
-Turn off → sets night_vision_mode back to "inf_night_vision" (IR auto)
+Turn on  → white light on; turn off → back to IR.
+
+Which field carries that depends on firmware. Older cameras take it on the
+writable `night_vision_mode` ("wtl_night_vision" / "inf_night_vision"). Newer
+C340/C350-class firmware demotes `night_vision_mode` to a read-only status and
+takes the setting on `pre_night_vision_mode` instead ("white_led_always_on" /
+"auto_ir") — writing the status field there is rejected by the camera.
+
+Either way `night_vision_mode` remains the honest readback for whether the
+white light is currently lit, so is_on reads it on both firmwares.
 
 The night_vision select entity remains available for switching between all IR
 and colour modes; both entities reflect the same underlying camera state.
@@ -19,7 +27,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    PRE_SPOTLIGHT_OFF_MODE,
+    PRE_SPOTLIGHT_ON_MODE,
+)
 from .entity import VIGIEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -88,6 +100,14 @@ class VIGISpotlight(VIGIEntity, LightEntity):
         except (TypeError, ValueError):
             return 255
 
+    async def _set_mode(self, api, legacy_mode: str, pre_mode: str) -> None:
+        """Write whichever night-vision field this camera's firmware accepts."""
+        image_switch = (self.coordinator.data or {}).get("image_switch", {})
+        if "pre_night_vision_mode" in image_switch:
+            await api.set_pre_night_vision_mode(pre_mode)
+        else:
+            await api.set_night_vision_mode(legacy_mode)
+
     def _clear_optimistic(self) -> None:
         self._optimistic_on = None
         self._optimistic_brightness = None
@@ -103,7 +123,7 @@ class VIGISpotlight(VIGIEntity, LightEntity):
 
         try:
             api = self._entry_data["api"]
-            await api.set_night_vision_mode(_SPOTLIGHT_MODE)
+            await self._set_mode(api, _SPOTLIGHT_MODE, PRE_SPOTLIGHT_ON_MODE)
             if cam_level is not None:
                 await api.set_spotlight_intensity(cam_level)
         except Exception as exc:
@@ -117,7 +137,9 @@ class VIGISpotlight(VIGIEntity, LightEntity):
         self.async_write_ha_state()
 
         try:
-            await self._entry_data["api"].set_night_vision_mode(_FALLBACK_MODE)
+            await self._set_mode(
+                self._entry_data["api"], _FALLBACK_MODE, PRE_SPOTLIGHT_OFF_MODE
+            )
         except Exception as exc:
             _LOGGER.error("Spotlight turn off failed: %s", exc)
         finally:

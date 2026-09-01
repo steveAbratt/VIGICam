@@ -205,7 +205,16 @@ class VIGICamera:
         return resp.get("switch", resp)
 
     async def set_night_vision_mode(self, mode: str) -> None:
+        """Older firmware: night_vision_mode is the writable setting."""
         await self.set("image", {"switch": {"night_vision_mode": mode}})
+
+    async def set_pre_night_vision_mode(self, mode: str) -> None:
+        """Newer firmware: pre_night_vision_mode is the writable setting.
+
+        On C340/C350-class cameras `night_vision_mode` is a read-only status
+        field and writing it is rejected; the preference lives here instead.
+        """
+        await self.set("image", {"switch": {"pre_night_vision_mode": mode}})
 
     async def set_spotlight_intensity(self, level: int) -> None:
         await self.set("image", {"switch": {"wtl_intensity_level": level}})
