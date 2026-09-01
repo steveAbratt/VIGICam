@@ -12,6 +12,11 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Added
+- **`docs/PROTOCOL.md`** — reverse-engineered notes on the VIGI local protocol (login
+  crypto, recording catalogue, the `:8443` media daemon and its flow control), contributed
+  by @AdrianEddy under the WTFPL. Reference material only; no code changes.
+
 ---
 
 ## [0.7.4b2] - 2026-09-01
