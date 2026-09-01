@@ -1,5 +1,9 @@
 # VIGICam — TP-Link VIGI & InSight Cameras for Home Assistant
 
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
+[![Release](https://img.shields.io/github/v/release/steveAbratt/VIGICam?display_name=tag)](https://github.com/steveAbratt/VIGICam/releases)
+[![License](https://img.shields.io/github/license/steveAbratt/VIGICam)](LICENSE)
+
 Full local control of TP-Link VIGI and InSight cameras — real-time smart detection, PTZ,
 two-way audio announcements, image configuration, and deep camera management.
 No cloud account. No subscription. No dependency on TP-Link servers.
@@ -102,11 +106,18 @@ feature set competes with cameras three times the price.
 
 ## Installation via HACS
 
+VIGICam is in the **HACS default store**, so there is no custom repository to add.
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=steveAbratt&repository=VIGICam&category=integration)
+
 1. Open **HACS** in Home Assistant
-2. Click **⋮** → **Custom repositories**
-3. Enter `https://github.com/steveAbratt/VIGICam` — type: Integration
-4. Find **VIGI & InSight Cameras** in HACS and click **Download**
-5. Restart Home Assistant
+2. Search for **VIGI** and open **VIGI & InSight Cameras**
+3. Click **Download**
+4. Restart Home Assistant
+
+> **Beta releases:** new features land in a beta first. To opt in, go to
+> HACS → **VIGI & InSight Cameras** → **⋮** → **Enable Beta Versions**, then update as
+> normal. Betas are marked as pre-releases and are skipped unless you opt in.
 
 ## Manual Installation
 
@@ -117,9 +128,11 @@ and restart.
 
 ## Adding a Camera
 
+[![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=vigicam)
+
 1. **Settings → Devices & Services → + Add Integration**
 2. Search for **VIGI**
-3. Enter the camera's IP address, username (`admin`), and password
+3. Enter the camera's IP address, username (`admin`), password, and optionally a name
 4. Click **Submit** — credentials are validated before saving
 
 Repeat for each camera. Each appears as a separate HA device.
