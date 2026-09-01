@@ -198,6 +198,27 @@ class VIGICamera:
             {"motion_det": {"vehicle_enabled": "on" if enabled else "off"}},
         )
 
+    async def check_ptz_support(self) -> bool:
+        """Return True if the camera exposes PTZ, however many presets are saved.
+
+        Preset count is not a capability test — a PTZ camera with none saved returns an
+        empty list, which previously disabled the jog buttons, the PTZ services and the
+        target-tracking switch on a perfectly capable camera.
+
+        Fixed cameras instead reject the whole module with error -40106 ("method not
+        supported"), and that is the real signal. Verified against a C540V (both modules
+        answer) and an InSight S245 (both return -40106).
+        """
+        for module, name in (("preset", "preset"), ("target_track", "target_track_info")):
+            try:
+                await self.get(module, name)
+                return True
+            except VIGIError:
+                continue        # this module is unsupported; try the other
+            except Exception:   # noqa: BLE001
+                return False    # unreachable — don't claim PTZ we could not verify
+        return False
+
     # ── Night vision / spotlight ──────────────────────────────────────────────
 
     async def get_image_switch(self) -> dict:

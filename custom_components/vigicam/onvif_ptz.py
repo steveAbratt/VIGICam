@@ -40,6 +40,9 @@ class VIGIOnvifPtz:
     """On-demand ONVIF PTZ client — no background task, session reused per instance."""
 
     def __init__(self, ip: str, username: str, password: str) -> None:
+        # A jog's auto-stop timer lives here, not in the caller: two buttons pressed in
+        # quick succession used to have the first press's stop cancel the second move.
+        self._stop_task: asyncio.Task | None = None
         self._ip = ip
         self._username = username
         self._password = password
@@ -118,6 +121,21 @@ class VIGIOnvifPtz:
             f'<tt:Zoom x="{zoom:.4f}"/>'
             f'</tptz:Velocity>'
             f'</tptz:ContinuousMove>')
+
+    async def jog(self, pan: float, tilt: float, zoom: float, duration: float) -> None:
+        """Move for *duration* seconds, then stop — superseding any jog already running."""
+        if self._stop_task and not self._stop_task.done():
+            self._stop_task.cancel()
+        await self.continuous_move(pan, tilt, zoom)
+
+        async def _delayed_stop() -> None:
+            try:
+                await asyncio.sleep(duration)
+                await self.stop()
+            except asyncio.CancelledError:
+                pass            # a newer jog took over; it owns the stop now
+
+        self._stop_task = asyncio.create_task(_delayed_stop())
 
     async def stop(self) -> None:
         await self._soap("Stop",

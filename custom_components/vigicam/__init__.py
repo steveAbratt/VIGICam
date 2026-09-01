@@ -294,6 +294,10 @@ async def _fetch_audio_bytes(hass: HomeAssistant, url: str) -> tuple[bytes, str]
             resp.raise_for_status()
             return await resp.read(), url
 
+    # A local path must sit inside HA's allowlist (allowlist_external_dirs, media dirs,
+    # www). Without this a service call could read any file the HA process can.
+    if not hass.config.is_allowed_path(url):
+        raise VIGIError(f"path not allowed by Home Assistant configuration: {url}")
     return await hass.async_add_executor_job(Path(url).read_bytes), url
 
 
@@ -307,6 +311,29 @@ async def _replace_and_play(
         pass  # slot may already be empty — clearing it is best-effort
     await api.upload_audio(slot, name, wav)
     await api.play_audio(slot, times=times, pause=pause, audio_duration=duration)
+
+
+async def communicate_or_kill(proc, timeout: float, *, input: bytes | None = None):
+    """proc.communicate() with a timeout that actually kills the child.
+
+    asyncio.wait_for only cancels the *waiting* task — the ffmpeg process keeps running,
+    holding its RTSP session open. VIGI cameras allow only a handful of concurrent RTSP
+    sessions, so orphans accumulate until streams and snapshots fail camera-wide.
+
+    Returns (stdout, stderr), or (None, None) if it had to be killed.
+    """
+    try:
+        return await asyncio.wait_for(proc.communicate(input=input), timeout=timeout)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass          # already gone
+        try:
+            await proc.wait()   # reap it, so it does not linger as a zombie
+        except ProcessLookupError:
+            pass
+        return None, None
 
 
 def _entry_data_for_entity(hass: HomeAssistant, entity_id: str) -> dict | None:
@@ -759,7 +786,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except VIGIError as exc:
         raise ConfigEntryNotReady(str(exc)) from exc
 
-    has_ptz = len(presets) > 0
+    # Presets alone are not a PTZ test: a PTZ camera with none saved would look fixed.
+    has_ptz = bool(presets) or await camera_api.check_ptz_support()
     onvif_ptz = VIGIOnvifPtz(ip, username, password) if has_ptz else None
 
     # Probe OpenAPI before the first coordinator refresh so smart-detection

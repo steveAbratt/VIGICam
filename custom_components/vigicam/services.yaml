@@ -12,7 +12,9 @@ ptz:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
     direction:
@@ -58,7 +60,9 @@ ptz_stop:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
 
@@ -72,7 +76,9 @@ goto_preset:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
     preset:
@@ -98,7 +104,9 @@ speak:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
     message:
@@ -162,7 +170,9 @@ play_file:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
     url:
@@ -216,7 +226,9 @@ upload_audio:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
     url:
@@ -262,7 +274,9 @@ play_audio:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
     slot:
@@ -304,7 +318,9 @@ delete_audio:
       required: true
       selector:
         entity:
-          domain: camera
+          # No domain filter: a service only needs any entity of this
+          # integration to resolve the camera, and filtering to `camera`
+          # left the picker empty when the camera-stream feature is off.
           integration: vigicam
           multiple: true
     slot:

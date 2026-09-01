@@ -33,6 +33,7 @@ ONVIF_SERVICE_URL = "http://{}:80/onvif/service"
 PULL_TIMEOUT_S = 8          # camera holds connection this long if no events
 SUBSCRIPTION_DURATION = "PT1H"
 RENEW_MARGIN_S = 300        # renew 5 min before expiry
+RESUBSCRIBE_DELAY_S = 15   # backoff between subscribe attempts
 AUTO_CLEAR_S = 15           # seconds before a detected state auto-resets
 
 SIGNAL_VIGICAM_EVENT = "vigicam_event_{}"  # format with entry_id
@@ -93,18 +94,23 @@ class VIGIOnvifEvents:
         )
 
     async def async_start(self) -> None:
-        """Create subscription and start background polling loop."""
+        """Start the polling loop, which subscribes and keeps re-subscribing.
+
+        The task is always created, even if the first subscribe fails. Previously a camera
+        that was rebooting when HA started left events dead until the integration was
+        reloaded by hand; the loop now simply retries.
+        """
         self._session = aiohttp.ClientSession()
-        if await self._subscribe():
-            self._task = self._hass.async_create_background_task(
-                self._poll_loop(),
-                f"vigicam_onvif_{self._entry_id}",
-            )
-        else:
+        if not await self._subscribe():
             _LOGGER.warning(
-                "ONVIF events unavailable for %s — binary sensors will not update in real time",
+                "ONVIF subscribe failed for %s — retrying in the background; "
+                "binary sensors will not update in real time until it succeeds",
                 self._ip,
             )
+        self._task = self._hass.async_create_background_task(
+            self._poll_loop(),
+            f"vigicam_onvif_{self._entry_id}",
+        )
 
     async def async_stop(self) -> None:
         """Stop polling and release resources."""
@@ -241,14 +247,24 @@ class VIGIOnvifEvents:
     async def _poll_loop(self) -> None:
         while True:
             try:
+                # Without a subscription there is nothing to pull from: _pull() would post
+                # to a None address and raise on every pass. Re-subscribe first instead.
+                if not self._sub_address:
+                    if self._session is None or self._session.closed:
+                        self._session = aiohttp.ClientSession()
+                    if not await self._subscribe():
+                        await asyncio.sleep(RESUBSCRIBE_DELAY_S)
+                        continue
+
                 if (
                     self._sub_expiry
                     and (self._sub_expiry - datetime.now(timezone.utc)).total_seconds()
                     < RENEW_MARGIN_S
                 ):
                     await self._renew()
-                    if not self._sub_address:
-                        await self._subscribe()
+                    if not self._sub_address and not await self._subscribe():
+                        await asyncio.sleep(RESUBSCRIBE_DELAY_S)
+                        continue
 
                 events = await self._pull()
                 for event in events:
@@ -262,11 +278,13 @@ class VIGIOnvifEvents:
                 return
             except Exception as exc:
                 _LOGGER.warning(
-                    "ONVIF poll error for %s: %s — re-subscribing in 15 s", self._ip, exc
+                    "ONVIF poll error for %s: %s — re-subscribing in %s s",
+                    self._ip, exc, RESUBSCRIBE_DELAY_S,
                 )
+                # Drop the subscription and let the top of the loop rebuild it, so a
+                # failed re-subscribe backs off instead of falling straight into _pull().
                 self._sub_address = None
-                await asyncio.sleep(15)
-                await self._subscribe()
+                await asyncio.sleep(RESUBSCRIBE_DELAY_S)
 
     def _dispatch(self, event: dict[str, Any]) -> None:
         topic = event["topic"]

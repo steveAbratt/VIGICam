@@ -1,7 +1,6 @@
 """Button entities — PTZ direction jog controls and alarm trigger/stop."""
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -101,9 +100,7 @@ class VIGIPTZButton(VIGIEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         ptz = self._entry_data["onvif_ptz"]
-        await ptz.continuous_move(self._desc.pan, self._desc.tilt, self._desc.zoom)
-        await asyncio.sleep(BUTTON_MOVE_S)
-        await ptz.stop()
+        await ptz.jog(self._desc.pan, self._desc.tilt, self._desc.zoom, BUTTON_MOVE_S)
 
 
 class VIGIAlarmButton(VIGIEntity, ButtonEntity):

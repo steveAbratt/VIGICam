@@ -1,6 +1,7 @@
 """Select entities for VIGI cameras — night vision mode, PTZ preset, image controls."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -20,6 +21,8 @@ from .const import (
     PRE_NIGHT_VISION_WHITE_LED_MODES,
 )
 from .entity import VIGIEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -202,7 +205,10 @@ class VIGIPTZPresetSelect(VIGIEntity, SelectEntity):
         return None
 
     async def async_select_option(self, option: str) -> None:
-        preset = next(p for p in self.coordinator.presets if p["name"] == option)
+        preset = next((p for p in self.coordinator.presets if p["name"] == option), None)
+        if preset is None:
+            _LOGGER.warning("PTZ preset '%s' is not on the camera; ignoring", option)
+            return
         await self._entry_data["api"].goto_preset(preset["id"])
         self.coordinator.last_preset = option
         self.async_write_ha_state()

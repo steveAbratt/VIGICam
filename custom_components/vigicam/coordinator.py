@@ -19,6 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 # How many coordinator ticks between OpenAPI re-checks when has_openapi=False.
 # 10 ticks × 30 s = 5 minutes.
 _OPENAPI_RECHECK_TICKS = 10
+_PRESET_REFRESH_TICKS = 10   # ~5 min at the default 30 s scan interval
 
 
 class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -46,6 +47,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.presets: list[dict] = []
         self.last_preset: str | None = None  # last preset selected from HA; None = unknown
         self._openapi_recheck_counter: int = 0
+        self._preset_refresh_counter: int = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -82,11 +84,15 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await safe_get("lens_mask", self.camera.get_lens_mask())
 
         if self.has_ptz:
-            if not self.presets:
+            # Refresh periodically, not just once: presets added or renamed in the camera's
+            # own web UI or the VIGI app would otherwise never reach HA.
+            self._preset_refresh_counter += 1
+            if not self.presets or self._preset_refresh_counter >= _PRESET_REFRESH_TICKS:
+                self._preset_refresh_counter = 0
                 try:
                     self.presets = await self.camera.get_presets()
                 except VIGIError:
-                    self.presets = []
+                    self.presets = self.presets or []
             results["presets"] = self.presets
             await safe_get("target_track", self.camera.get_target_track())
 

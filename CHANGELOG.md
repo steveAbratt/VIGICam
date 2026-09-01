@@ -12,6 +12,47 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.4b3] - 2026-09-01
+
+### Fixed
+- **Orphaned ffmpeg processes exhausted the camera's RTSP sessions** — `asyncio.wait_for`
+  cancels the *wait*, not the subprocess, so a timed-out snapshot left ffmpeg running with
+  its RTSP connection open. VIGI cameras allow only a handful of concurrent sessions, so
+  these accumulated until streams and snapshots failed camera-wide. All three call sites
+  (live snapshot, event snapshot, event-image decode) now kill and reap the process.
+- **PTZ was disabled on any PTZ camera with no presets saved** — support was inferred from
+  the preset count, so a camera with none looked fixed: no jog buttons, no PTZ services, no
+  target-tracking switch. Capability is now probed directly; fixed cameras reject the PTZ
+  modules with error `-40106`, which is the real signal.
+- **A malformed OpenAPI reply could break every coordinator listener** — the person and
+  vehicle detection switches indexed `["enabled"]` on the raw result, so an error reply that
+  was a non-empty dict without that key raised `KeyError` mid-update.
+- **ONVIF events stayed dead if the camera was offline at Home Assistant start** — the poll
+  loop was only created when the first subscribe succeeded, so a camera that was rebooting
+  needed a manual reload. The loop now always starts and re-subscribes with a backoff, and
+  no longer polls an address it does not have.
+- **Selecting a PTZ preset that no longer exists raised `StopIteration`**; it is now logged
+  and ignored.
+- **Rapid PTZ jog presses cut each other short** — the first press's auto-stop fired during
+  the second move. The stop timer now belongs to the PTZ client and is superseded.
+- **Service entity pickers were empty when the camera-stream feature was off** — the
+  selectors filtered to the `camera` domain, but a service only needs any entity of the
+  integration to resolve the camera.
+- **Spotlight toggle bounced back to off before settling** — the optimistic state was
+  cleared as soon as the write returned rather than when fresh data arrived.
+- **PTZ presets added or renamed on the camera never reached HA** — they were fetched once
+  and cached forever; they now refresh about every 5 minutes.
+
+### Changed
+- **Local file paths passed to the audio services are checked against Home Assistant's
+  allowlist** before being read.
+- The **uptime** sensor gains `device_class: duration`, and the **`native_value`** type hint
+  now includes `datetime`.
+
+---
+
 ### Added
 - **`docs/PROTOCOL.md`** — reverse-engineered notes on the VIGI local protocol (login
   crypto, recording catalogue, the `:8443` media daemon and its flow control), contributed
