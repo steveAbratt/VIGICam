@@ -16,6 +16,8 @@ from .const import (
     DEFAULT_FEATURE_IMAGE_CONTROLS,
     DOMAIN,
     NIGHT_VISION_MODES,
+    PRE_NIGHT_VISION_MODES,
+    PRE_NIGHT_VISION_WHITE_LED_MODES,
 )
 from .entity import VIGIEntity
 
@@ -112,27 +114,71 @@ async def async_setup_entry(
 
 
 class VIGINightVisionSelect(VIGIEntity, SelectEntity):
-    """Select between IR, spotlight, and auto night-vision modes."""
+    """Select between IR, spotlight, and auto night-vision modes.
+
+    Newer firmware (C340/C350-class) exposes `pre_night_vision_mode` as the
+    writable preference and demotes `night_vision_mode` to a read-only status
+    of which emitter is lit. Where that field is present we read and write it;
+    otherwise we fall back to the older single-field behaviour.
+    """
 
     _attr_name = "Night Vision Mode"
-    _attr_options = list(NIGHT_VISION_MODES.values())
 
     @property
     def _unique_id_suffix(self) -> str:
         return "night_vision"
 
     @property
-    def current_option(self) -> str | None:
-        mode = (self.coordinator.data or {}).get("image_switch", {}).get(
-            "night_vision_mode"
+    def _image_switch(self) -> dict:
+        return (self.coordinator.data or {}).get("image_switch", {})
+
+    @property
+    def _modes(self) -> dict[str, str]:
+        """The value→label map this camera's firmware uses."""
+        switch = self._image_switch
+        if "pre_night_vision_mode" not in switch:
+            return NIGHT_VISION_MODES
+
+        modes = dict(PRE_NIGHT_VISION_MODES)
+        # Models without a white LED (e.g. C340i) offer only the IR-side modes.
+        # They report no white-light intensity control, which is the tell.
+        if "wtl_intensity_level" not in switch:
+            for key in PRE_NIGHT_VISION_WHITE_LED_MODES:
+                modes.pop(key, None)
+        # Never hide the mode the camera is actually in — if the capability
+        # probe is wrong, showing an extra option beats a blank dropdown.
+        current = switch.get("pre_night_vision_mode")
+        if current in PRE_NIGHT_VISION_MODES:
+            modes.setdefault(current, PRE_NIGHT_VISION_MODES[current])
+        return modes
+
+    @property
+    def _mode_key(self) -> str:
+        return (
+            "pre_night_vision_mode"
+            if "pre_night_vision_mode" in self._image_switch
+            else "night_vision_mode"
         )
-        return NIGHT_VISION_MODES.get(mode)
+
+    @property
+    def options(self) -> list[str]:
+        return list(self._modes.values())
+
+    @property
+    def current_option(self) -> str | None:
+        return self._modes.get(self._image_switch.get(self._mode_key))
 
     async def async_select_option(self, option: str) -> None:
-        mode = next((k for k, v in NIGHT_VISION_MODES.items() if v == option), None)
-        if mode:
-            await self._entry_data["api"].set_night_vision_mode(mode)
-            await self.coordinator.async_request_refresh()
+        modes = self._modes
+        mode = next((k for k, v in modes.items() if v == option), None)
+        if not mode:
+            return
+        api = self._entry_data["api"]
+        if self._mode_key == "pre_night_vision_mode":
+            await api.set_pre_night_vision_mode(mode)
+        else:
+            await api.set_night_vision_mode(mode)
+        await self.coordinator.async_request_refresh()
 
 
 class VIGIPTZPresetSelect(VIGIEntity, SelectEntity):

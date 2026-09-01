@@ -11,7 +11,9 @@ CONF_VERIFY_SSL = "verify_ssl"
 # Password hash prefix required by the VIGI/Tapo local API
 TAPO_PASSWORD_PREFIX = "TPCQ75NF2Y:"
 
-# night_vision_mode values → human-readable labels for the Select entity
+# Night vision comes in two flavours depending on firmware.
+#
+# Older cameras expose a single writable `night_vision_mode`.
 NIGHT_VISION_MODES = {
     "md_night_vision": "Auto (motion-triggered)",
     "inf_night_vision": "IR Always On",
@@ -19,6 +21,37 @@ NIGHT_VISION_MODES = {
     "human_triggered_color": "Colour (motion-triggered)",
     "auto_switch_night_vision": "Auto Switch",
 }
+
+# Newer C340/C350-class firmware splits it in two:
+#   pre_night_vision_mode — the writable user preference
+#   night_vision_mode     — read-only status of which emitter is currently lit
+#
+# The mapping is many-to-one — auto_ir, ir_always_on, off and custom all report
+# `inf_night_vision` — so the chosen mode cannot be recovered from the status
+# field. Writing `night_vision_mode` on these cameras is rejected outright.
+# Labels are the camera's own GUI wording so the dropdown matches the web UI.
+PRE_NIGHT_VISION_MODES = {
+    "human_triggered_color": "Human/Vehicle-Triggered Full-Color",
+    "auto_color": "Auto Color",
+    "auto_ir": "Auto IR",
+    "white_led_always_on": "White LED Always On",
+    "ir_always_on": "IR Always On",
+    "off": "Off",
+    "custom": "Custom",
+}
+
+# Modes that need a white LED. Models without one (e.g. C340i) offer only the
+# remaining four, so they are filtered out when the camera reports no
+# white-light intensity control.
+PRE_NIGHT_VISION_WHITE_LED_MODES = frozenset({
+    "human_triggered_color",
+    "auto_color",
+    "white_led_always_on",
+})
+
+# pre_night_vision_mode written by the spotlight light entity on newer firmware.
+PRE_SPOTLIGHT_ON_MODE = "white_led_always_on"
+PRE_SPOTLIGHT_OFF_MODE = "auto_ir"
 
 LOGGER = logging.getLogger(f"custom_components.{DOMAIN}")
 

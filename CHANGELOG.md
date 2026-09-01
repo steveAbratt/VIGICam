@@ -14,6 +14,28 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.4b2] - 2026-09-01
+
+### Fixed
+- **Night Vision Mode failed to set on C340 / C350 / C340i cameras** — newer firmware
+  splits the setting in two: `pre_night_vision_mode` holds the writable preference, while
+  `night_vision_mode` became a read-only status of which emitter is lit. VIGICam wrote and
+  read the status field, so the camera rejected every change and the dropdown showed the
+  wrong mode. It now detects `pre_night_vision_mode` and uses it where present, falling
+  back to the old single-field behaviour on cameras without it.
+
+  The status field could not have worked: `auto_ir`, `ir_always_on`, `off` and `custom`
+  all report `inf_night_vision`, so four different selections were indistinguishable.
+
+  The dropdown now offers the camera's own seven GUI modes, reduced to the four IR-side
+  modes on models with no white LED (e.g. C340i). Thanks to @bcdaus for the report and for
+  enumerating every mode across three cameras. (#78)
+- **Spotlight light entity was broken the same way** on those cameras — turning it on or
+  off wrote the read-only status field and was rejected. It now writes
+  `pre_night_vision_mode` (`white_led_always_on` / `auto_ir`) on firmware that expects it.
+
+---
+
 ## [0.7.4b1] - 2026-08-28
 
 ### Changed
