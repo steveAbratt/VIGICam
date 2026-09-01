@@ -14,6 +14,18 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.4b4] - 2026-09-01
+
+### Added
+- **Download diagnostics** — Settings → Devices & Services → VIGICam → ⋮ → *Download
+  diagnostics* now produces a report containing the model, firmware, detected capabilities
+  and the full raw payload every entity is built from. Most bugs in this integration turn
+  out to be model differences, and this replaces a round-trip of "please open DevTools on
+  your camera and paste the JSON". Credentials, network addresses, hardware identifiers and
+  the camera's own alias are redacted.
+
+---
+
 ## [0.7.4b3] - 2026-09-01
 
 ### Fixed
