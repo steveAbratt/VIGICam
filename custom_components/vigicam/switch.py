@@ -39,8 +39,11 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
     VIGISwitchDescription(
         key="person_detection",
         name="Detection Person",
+        # OpenAPI results are stored raw, so an error reply can be a non-empty dict with
+        # no "enabled" key — indexing it directly raised KeyError inside a coordinator
+        # listener and broke the whole update.
         is_on_fn=lambda d: (
-            d["openapi_people"]["enabled"] == "on"
+            d["openapi_people"].get("enabled") == "on"
             if d.get("openapi_people")
             else d.get("motion", {}).get("people_enabled") == "on"
         ),
@@ -56,7 +59,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
         key="vehicle_detection",
         name="Detection Vehicle",
         is_on_fn=lambda d: (
-            d["openapi_vehicle"]["enabled"] == "on"
+            d["openapi_vehicle"].get("enabled") == "on"
             if d.get("openapi_vehicle")
             else d.get("motion", {}).get("vehicle_enabled") == "on"
         ),

@@ -278,6 +278,8 @@ async def _ws_download_h264(
 
 
 async def _h264_to_jpeg(h264: bytes, ffmpeg_bin: str) -> bytes | None:
+    from . import communicate_or_kill   # local: avoids a circular import
+
     try:
         proc = await asyncio.create_subprocess_exec(
             ffmpeg_bin,
@@ -290,8 +292,8 @@ async def _h264_to_jpeg(h264: bytes, ffmpeg_bin: str) -> bytes | None:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(input=h264), timeout=10)
-        return stdout if proc.returncode == 0 and stdout else None
+        stdout, _ = await communicate_or_kill(proc, 10, input=h264)
+        return stdout if stdout and proc.returncode == 0 else None
     except Exception:
         return None
 

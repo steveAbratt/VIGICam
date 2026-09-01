@@ -20,6 +20,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import VIGICoordinator
+from . import communicate_or_kill
 from .entity import VIGIEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -99,7 +100,10 @@ class VIGIRTSPCamera(VIGIEntity, Camera):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+                stdout, _ = await communicate_or_kill(proc, 15)
+                if stdout is None:
+                    _LOGGER.debug("Snapshot grab timed out after 15s; killed ffmpeg")
+                    return self._cached_image
                 if proc.returncode == 0 and stdout:
                     self._cached_image = stdout
                     self._cached_image_time = now

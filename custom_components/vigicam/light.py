@@ -127,9 +127,12 @@ class VIGISpotlight(VIGIEntity, LightEntity):
             if cam_level is not None:
                 await api.set_spotlight_intensity(cam_level)
         except Exception as exc:
+            self._clear_optimistic()   # the write failed, so drop the pretence immediately
             _LOGGER.error("Spotlight turn on failed: %s", exc)
         finally:
-            self._clear_optimistic()
+            # Deliberately NOT clearing on success: _handle_coordinator_update does that
+            # when fresh data lands. Clearing here made is_on fall back to the stale value
+            # for one frame, which the UI showed as the toggle bouncing back off.
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
@@ -141,9 +144,9 @@ class VIGISpotlight(VIGIEntity, LightEntity):
                 self._entry_data["api"], _FALLBACK_MODE, PRE_SPOTLIGHT_OFF_MODE
             )
         except Exception as exc:
+            self._clear_optimistic()
             _LOGGER.error("Spotlight turn off failed: %s", exc)
         finally:
-            self._clear_optimistic()
             await self.coordinator.async_request_refresh()
 
     def _handle_coordinator_update(self) -> None:

@@ -189,7 +189,10 @@ OPENAPI_DEVICE_SENSORS: tuple[VIGISensorDescription, ...] = (
     VIGISensorDescription(
         key="uptime",
         name="Uptime",
+        device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.HOURS,
+        # Kept: uptime resets to zero on reboot, which is exactly what TOTAL_INCREASING
+        # models. Dropping it would lose long-term statistics for no gain.
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:timer-outline",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -237,5 +240,5 @@ class VIGISensor(VIGIEntity, SensorEntity):
         return self.entity_description.key
 
     @property
-    def native_value(self) -> float | str | None:
+    def native_value(self) -> datetime | float | str | None:
         return self.entity_description.value_fn(self.coordinator.data or {})

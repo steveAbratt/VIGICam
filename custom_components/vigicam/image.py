@@ -29,6 +29,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS, DOMAIN
+from . import communicate_or_kill
 from .entity import VIGIEntity
 from .onvif_events import SIGNAL_VIGICAM_EVENT
 from .event_image import fetch_latest_event_image
@@ -165,7 +166,10 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+        stdout, _ = await communicate_or_kill(proc, 15)
+        if stdout is None:
+            _LOGGER.debug("RTSP snapshot timed out after 15s; killed ffmpeg")
+            return
         if stdout and proc.returncode == 0:
             self._cached_image = stdout
             self._image_last_updated = datetime.now(timezone.utc)
