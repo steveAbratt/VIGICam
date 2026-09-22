@@ -29,13 +29,22 @@ tuning, announcements, and alarms. Entities merge onto the Frigate device automa
 
 ## Tested Cameras
 
-| Model | Type | Notes |
-|-------|------|-------|
-| VIGI C540V | Outdoor PTZ, 4MP, spotlight + IR | Full feature set including PTZ |
-| InSight S245 | Fixed outdoor, 4MP, spotlight + IR, tamper | InSight higher-spec line |
+| Model | Notes | Confirmed by |
+|-------|-------|--------------|
+| VIGI C540V | Outdoor PTZ, 4MP, spotlight + IR — full feature set including PTZ | maintainer |
+| InSight S245 | Fixed outdoor, 4MP, spotlight + IR, tamper — InSight higher-spec line | maintainer |
+| VIGI C435 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
+| VIGI C340S-1 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
+| InSight S385PI | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
+| VIGI C350 | Working. Needs **v0.7.4b2 or later** for night vision, spotlight and status LED — earlier versions wrote a field this firmware treats as read-only | [@ILikeSleeping000](https://github.com/steveAbratt/VIGICam/discussions/76), [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
+| VIGI C340 / C340i | Working, same night-vision caveat as the C350 | [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
 
 Other VIGI and InSight models using the same local HTTPS API should work. Entities are
 created dynamically — only capabilities the camera actually reports appear in HA.
+
+**Tested a model that isn't listed?** Please say so in
+[the discussion](https://github.com/steveAbratt/VIGICam/discussions/76) — and if something
+misbehaves, a diagnostics download (⋮ → *Download diagnostics*) makes it far quicker to fix.
 
 ---
 

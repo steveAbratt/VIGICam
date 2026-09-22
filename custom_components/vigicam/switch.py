@@ -22,9 +22,11 @@ class VIGISwitchDescription(SwitchEntityDescription):
     turn_off_fn: Callable[[VIGICamera], Any]
     # Return False if the camera doesn't support this feature (field absent from data)
     supported_fn: Callable[[dict], bool] = lambda _: True
-    # Optional OpenAPI handlers — used in preference to JSON API when openapi is available
+    # Optional OpenAPI handlers — preferred over the JSON API, but only when the state is
+    # also READ from OpenAPI. openapi_data_key names the coordinator key that holds it.
     openapi_turn_on_fn: Callable[[Any], Any] | None = None
     openapi_turn_off_fn: Callable[[Any], Any] | None = None
+    openapi_data_key: str | None = None
 
 
 SWITCHES: tuple[VIGISwitchDescription, ...] = (
@@ -54,6 +56,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
         ),
         openapi_turn_on_fn=lambda oapi: oapi.call("setPeopleDetectionSwitch", {"enabled": "on"}),
         openapi_turn_off_fn=lambda oapi: oapi.call("setPeopleDetectionSwitch", {"enabled": "off"}),
+        openapi_data_key="openapi_people",
     ),
     VIGISwitchDescription(
         key="vehicle_detection",
@@ -70,6 +73,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
         ),
         openapi_turn_on_fn=lambda oapi: oapi.call("setVehicleDetectionSwitch", {"enabled": "on"}),
         openapi_turn_off_fn=lambda oapi: oapi.call("setVehicleDetectionSwitch", {"enabled": "off"}),
+        openapi_data_key="openapi_vehicle",
     ),
     VIGISwitchDescription(
         key="tamper_detection",
@@ -240,18 +244,35 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
     def is_on(self) -> bool | None:
         return self.entity_description.is_on_fn(self.coordinator.data or {})
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    def _openapi_writable(self, fn: Callable[[Any], Any] | None) -> Any | None:
+        """Return the OpenAPI client only if state is also read from OpenAPI.
+
+        The camera exposes these toggles through two independent subsystems. Writing via
+        OpenAPI while is_on_fn falls back to the JSON API sends the change somewhere the
+        read never looks, so the toggle flips and then springs back on the next poll —
+        which is exactly what a camera with OpenAPI enabled but the detection methods
+        unsupported (an empty openapi_people / openapi_vehicle) would do.
+        """
         openapi = self._entry_data.get("openapi")
-        if openapi and self.entity_description.openapi_turn_on_fn:
-            await self.entity_description.openapi_turn_on_fn(openapi)
+        key = self.entity_description.openapi_data_key
+        if openapi is None or fn is None or not key:
+            return None
+        return openapi if (self.coordinator.data or {}).get(key) else None
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        desc = self.entity_description
+        openapi = self._openapi_writable(desc.openapi_turn_on_fn)
+        if openapi is not None:
+            await desc.openapi_turn_on_fn(openapi)
         else:
-            await self.entity_description.turn_on_fn(self._entry_data["api"])
+            await desc.turn_on_fn(self._entry_data["api"])
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        openapi = self._entry_data.get("openapi")
-        if openapi and self.entity_description.openapi_turn_off_fn:
-            await self.entity_description.openapi_turn_off_fn(openapi)
+        desc = self.entity_description
+        openapi = self._openapi_writable(desc.openapi_turn_off_fn)
+        if openapi is not None:
+            await desc.openapi_turn_off_fn(openapi)
         else:
-            await self.entity_description.turn_off_fn(self._entry_data["api"])
+            await desc.turn_off_fn(self._entry_data["api"])
         await self.coordinator.async_request_refresh()

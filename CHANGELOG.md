@@ -14,6 +14,24 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.4b5] - 2026-09-22
+
+### Fixed
+- **Person and Vehicle detection toggles sprang back to their previous state** on cameras
+  with OpenAPI enabled but the detection methods unsupported. These switches are exposed
+  through two independent subsystems: the write always preferred OpenAPI when an OpenAPI
+  client existed, while the state was read from OpenAPI *only if it had returned data* and
+  otherwise fell back to the JSON API. When those disagreed the change was written somewhere
+  the read never looked, so the toggle flipped and reverted on the next poll. The write now
+  uses OpenAPI only when the state is read from it too. Reported by @ILikeSleeping000 on a
+  VIGI C350 (discussion #76).
+
+### Changed
+- **Tested Cameras** now lists the models the community has confirmed — VIGI C435, C340S-1,
+  C350, C340/C340i and InSight S385PI — with credit and links to the reports.
+
+---
+
 ## [0.7.4b4] - 2026-09-01
 
 ### Added
