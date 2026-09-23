@@ -14,9 +14,41 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
-## [0.7.4b5] - 2026-09-22
+## [0.7.4] - 2026-09-23
+
+Everything from the 0.7.4 beta series (b1–b5), now stable.
+
+### Added
+
+- **Download diagnostics** — Settings → Devices & Services → VIGICam → ⋮ → *Download
+  diagnostics* now produces a report containing the model, firmware, detected capabilities
+  and the full raw payload every entity is built from. Most bugs in this integration turn
+  out to be model differences, and this replaces a round-trip of "please open DevTools on
+  your camera and paste the JSON". Credentials, network addresses, hardware identifiers and
+  the camera's own alias are redacted.
+
+- **`docs/PROTOCOL.md`** — reverse-engineered notes on the VIGI local protocol (login
+  crypto, recording catalogue, the `:8443` media daemon and its flow control), contributed
+  by @AdrianEddy under the WTFPL. Reference material only; no code changes.
+
+### Changed
+
+- **Tested Cameras** now lists the models the community has confirmed — VIGI C435, C340S-1,
+  C350, C340/C340i and InSight S385PI — with credit and links to the reports.
+
+- **Local file paths passed to the audio services are checked against Home Assistant's
+  allowlist** before being read.
+- The **uptime** sensor gains `device_class: duration`, and the **`native_value`** type hint
+  now includes `datetime`.
+
+- **Audio and PTZ services accept multiple cameras** — `entity_id` on every `vigicam.*`
+  service now takes either a single entity or a list, so one call can address several
+  cameras at once. For `speak`, `play_file` and `upload_audio` the audio is fetched or
+  generated once and reused for every camera. A camera that fails is logged and skipped
+  rather than aborting the whole call.
 
 ### Fixed
+
 - **Person and Vehicle detection toggles sprang back to their previous state** on cameras
   with OpenAPI enabled but the detection methods unsupported. These switches are exposed
   through two independent subsystems: the write always preferred OpenAPI when an OpenAPI
@@ -26,27 +58,6 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   uses OpenAPI only when the state is read from it too. Reported by @ILikeSleeping000 on a
   VIGI C350 (discussion #76).
 
-### Changed
-- **Tested Cameras** now lists the models the community has confirmed — VIGI C435, C340S-1,
-  C350, C340/C340i and InSight S385PI — with credit and links to the reports.
-
----
-
-## [0.7.4b4] - 2026-09-01
-
-### Added
-- **Download diagnostics** — Settings → Devices & Services → VIGICam → ⋮ → *Download
-  diagnostics* now produces a report containing the model, firmware, detected capabilities
-  and the full raw payload every entity is built from. Most bugs in this integration turn
-  out to be model differences, and this replaces a round-trip of "please open DevTools on
-  your camera and paste the JSON". Credentials, network addresses, hardware identifiers and
-  the camera's own alias are redacted.
-
----
-
-## [0.7.4b3] - 2026-09-01
-
-### Fixed
 - **Orphaned ffmpeg processes exhausted the camera's RTSP sessions** — `asyncio.wait_for`
   cancels the *wait*, not the subprocess, so a timed-out snapshot left ffmpeg running with
   its RTSP connection open. VIGI cameras allow only a handful of concurrent sessions, so
@@ -75,24 +86,6 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 - **PTZ presets added or renamed on the camera never reached HA** — they were fetched once
   and cached forever; they now refresh about every 5 minutes.
 
-### Changed
-- **Local file paths passed to the audio services are checked against Home Assistant's
-  allowlist** before being read.
-- The **uptime** sensor gains `device_class: duration`, and the **`native_value`** type hint
-  now includes `datetime`.
-
----
-
-### Added
-- **`docs/PROTOCOL.md`** — reverse-engineered notes on the VIGI local protocol (login
-  crypto, recording catalogue, the `:8443` media daemon and its flow control), contributed
-  by @AdrianEddy under the WTFPL. Reference material only; no code changes.
-
----
-
-## [0.7.4b2] - 2026-09-01
-
-### Fixed
 - **Night Vision Mode failed to set on C340 / C350 / C340i cameras** — newer firmware
   splits the setting in two: `pre_night_vision_mode` holds the writable preference, while
   `night_vision_mode` became a read-only status of which emitter is lit. VIGICam wrote and
@@ -110,18 +103,6 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   off wrote the read-only status field and was rejected. It now writes
   `pre_night_vision_mode` (`white_led_always_on` / `auto_ir`) on firmware that expects it.
 
----
-
-## [0.7.4b1] - 2026-08-28
-
-### Changed
-- **Audio and PTZ services accept multiple cameras** — `entity_id` on every `vigicam.*`
-  service now takes either a single entity or a list, so one call can address several
-  cameras at once. For `speak`, `play_file` and `upload_audio` the audio is fetched or
-  generated once and reused for every camera. A camera that fails is logged and skipped
-  rather than aborting the whole call.
-
-### Fixed
 - **`upload_audio` rejected Home Assistant media URLs and unconverted files** — the
   service now resolves `/media/local/` and `/local/` URLs to file paths and transcodes
   the source through ffmpeg to the 8 kHz mono WAV the camera requires, matching what
