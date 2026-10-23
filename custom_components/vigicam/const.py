@@ -1,5 +1,3 @@
-from datetime import timedelta
-import logging
 
 DOMAIN = "vigicam"
 BRAND = "TP-Link"
@@ -53,7 +51,6 @@ PRE_NIGHT_VISION_WHITE_LED_MODES = frozenset({
 PRE_SPOTLIGHT_ON_MODE = "white_led_always_on"
 PRE_SPOTLIGHT_OFF_MODE = "auto_ir"
 
-LOGGER = logging.getLogger(f"custom_components.{DOMAIN}")
 
 # ── Feature group options ──────────────────────────────────────────────────────
 
@@ -105,12 +102,4 @@ REPAIRS_FRIGATE_GONE = "frigate_camera_gone"
 # removed from the registry on the next setup (one-time migration).
 DEPRECATED_SUFFIXES: frozenset[str] = frozenset({
     "spotlight_intensity",  # replaced by the spotlight light entity brightness
-})
-
-# Unique-ID suffixes for all SD card sensor entities — used by the repair fix
-# flow to remove stale entities when the user confirms the card is gone.
-SD_ENTITY_SUFFIXES: frozenset[str] = frozenset({
-    "sd_used_percent", "sd_total", "sd_free", "sd_status",
-    "sd_record_duration", "sd_oldest_recording", "sd_record_capacity",
-    "sd_video_free", "loop_recording",
 })

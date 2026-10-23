@@ -11,7 +11,7 @@ the sensors are still created but will remain Off until events arrive.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 from homeassistant.components.binary_sensor import (

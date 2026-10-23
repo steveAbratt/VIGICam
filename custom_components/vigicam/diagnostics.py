@@ -87,7 +87,8 @@ async def async_get_config_entry_diagnostics(
                 "has_event_capture": bool(data.get("has_event_capture")),
                 "has_sd_card": bool(data.get("has_sd_card")),
                 "has_frigate": bool(data.get("has_frigate")),
-                "preset_count": len(data.get("presets") or []),
+                # The coordinator's refreshed copy, not entry_data's setup-time snapshot.
+                "preset_count": len(getattr(coordinator, "presets", None) or []) if coordinator else 0,
             },
             "options": dict(entry.options),
             "device_info": {k: _clean(v) for k, v in device_info.items()},

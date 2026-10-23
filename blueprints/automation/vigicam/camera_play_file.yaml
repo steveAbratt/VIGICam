@@ -15,7 +15,7 @@ blueprint:
     **Getting the URL from the media browser:**
 
     Open the file in the media browser, click the three-dot menu → Copy URL.
-    It will look like: `http://192.168.1.73:8123/media/local/alert.wav`
+    It will look like: `http://192.168.1.x:8123/media/local/alert.wav`
 
 
     **Supported formats:** WAV, MP3, OGG, or any format ffmpeg can read. The integration
@@ -49,9 +49,9 @@ blueprint:
       description: >
         URL or path of the audio file to play. Examples:
 
-        - Media browser URL: `http://192.168.1.73:8123/media/local/alert.wav`
+        - Media browser URL: `http://192.168.1.x:8123/media/local/alert.wav`
 
-        - HA www folder: `http://192.168.1.73:8123/local/alert.wav`
+        - HA www folder: `http://192.168.1.x:8123/local/alert.wav`
 
         - File path on HA host: `/media/alert.wav`
 

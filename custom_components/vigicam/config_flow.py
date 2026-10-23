@@ -253,7 +253,10 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except VIGIAuthError as exc:
                 _LOGGER.debug("Authentication failed for %s: %s", ip, exc)
                 errors["base"] = "invalid_auth"
-            except (VIGIError, aiohttp.ClientError, Exception) as exc:
+            except Exception as exc:  # noqa: BLE001
+                # Deliberately broad: the config flow must never crash on an unexpected
+                # exception type, and the user has nothing to act on beyond "cannot connect".
+                # The traceback is logged because it is what a bug report needs.
                 _LOGGER.debug("Connection failed for %s: %s", ip, exc, exc_info=True)
                 errors["base"] = "cannot_connect"
             else:

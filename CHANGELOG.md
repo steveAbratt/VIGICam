@@ -12,6 +12,58 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b2] - 2026-10-23
+
+Findings from a multi-persona review of the whole integration. Nothing in this release
+touches the detection-toggle write path, so the v0.7.5b1 testing still stands.
+
+### Fixed
+
+- **The Documentation and Report-an-issue links inside Home Assistant were dead.** The
+  manifest pointed at `github.com/stevebratt/VIGICam` — a real but unrelated account — so
+  both links 404'd for every user since the first release, and `codeowners` credited the
+  wrong person. Hassfest validates URL shape, not reachability, which is why CI never
+  caught it.
+
+- **Re-inserting an SD card raised a `TypeError` instead of reloading.**
+  `hass.async_create_task()` was wrapping `async_schedule_reload`, which is a callback
+  returning `None`. The reload never happened, and because this ran inside a coordinator
+  listener the exception also skipped every listener registered after it for that refresh.
+
+- **`vigicam.speak` and `vigicam.play_file` could hang forever.** The audio conversion
+  step called `proc.communicate()` directly instead of the `communicate_or_kill` helper
+  written for exactly this problem — a stalled ffmpeg left the service call awaiting with
+  no timeout and the child process holding its pipes.
+
+- **`vigicam.goto_preset` could not find presets created after Home Assistant started.**
+  The 0.7.4 fix that refreshes presets every five minutes updated the coordinator's copy,
+  but this service and the diagnostics preset count still read a snapshot captured once at
+  setup. Both now use the refreshed copy.
+
+- **A detection type could be silently disabled on some firmware.** The msg_push setup
+  check and the preset lookup treated a reply carrying no status field as a *failure*,
+  while the OpenAPI client deliberately treats it as success — several getters return their
+  payload with no status at all. On such firmware `msg_push_enabled` was never set and the
+  affected OpenAPI detection sensors never fired.
+
+- **The SD card Repairs notice told users to press a Fix button that does not exist.**
+  The issue is raised with `is_fixable=False` and there is no repair flow, so the
+  instruction described a button Home Assistant never rendered.
+
+### Changed
+
+- Removed dead code: a frozenset of SD card entity suffixes whose comment described a
+  repair flow that was never built, an unused module-level logger, two unused imports, and
+  a coordinator field written on every poll and read by nothing.
+
+- Two `except` clauses that listed exception types already covered by a bare `Exception`
+  now say what they actually do, with a comment explaining why the breadth is deliberate.
+
+- Replaced a real LAN address with `192.168.1.x` in the play-file blueprint. The
+  sanitisation pass that cleaned the README, `USAGE.md` and `services.yaml` missed it.
+
 ### Documentation
 
 - **New Troubleshooting section in `docs/USAGE.md`** covering the integration's most common
@@ -38,6 +90,13 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 - **Tested Cameras** gains the C540S, per-model caveats with the versions that address them,
   and a pointer to Troubleshooting. Fixed a dead link in the USAGE contents list.
+
+- **`docs/TESTING.md`** — a written-up plan for the test suite this project does not yet have.
+  Phase 1 is roughly a dozen pure functions that need nothing but `pytest` — no Home Assistant
+  harness, no network — and covers the firmware-returns-anything parsing surface where most of
+  this integration's real bugs have lived. It also records eight known-unfixed issues, so a
+  test written against today's behaviour does not enshrine them. It is a proposal to revise,
+  not a specification.
 
 ---
 
