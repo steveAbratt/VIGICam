@@ -29,7 +29,6 @@ from .const import (
     IMAGE_CONTROL_SUFFIXES,
     REPAIRS_FRIGATE_GONE,
     REPAIRS_SD_CARD_MISSING,
-    SD_ENTITY_SUFFIXES,
 )
 from .frigate import detect_frigate_camera
 from .coordinator import VIGICoordinator, _detect_sd_card
@@ -351,7 +350,7 @@ async def _openapi_get_presets(openapi) -> list[dict]:
     # A camera with no presets replies with an error rather than an empty list, so this
     # inspects errCode itself instead of treating a rejection as a failure.
     result = await openapi.call("getPresetPoint", raise_on_error=False)
-    if result.get("errCode") != 0:
+    if openapi.err_code(result) != 0:
         return []
     ids = result.get("id", [])
     names = result.get("name", [])
@@ -406,7 +405,11 @@ def _register_services(hass: HomeAssistant) -> None:
     async def handle_goto_preset(call: ServiceCall) -> None:
         preset_name = call.data["preset"]
         for eid, data in _iter_targets(hass, call, "goto_preset"):
-            presets: list[dict] = data.get("presets", [])
+            # The coordinator's copy, not entry_data["presets"]: the latter is captured
+            # once at setup and never refreshed, so a preset added or renamed on the
+            # camera after HA started was never found here. The 0.7.4 refresh fix landed
+            # on the coordinator only, leaving this service on the stale snapshot.
+            presets: list[dict] = data["coordinator"].presets or []
             preset = next((p for p in presets if p["name"] == preset_name), None)
             if not preset:
                 _LOGGER.error(
@@ -510,7 +513,7 @@ def _register_services(hass: HomeAssistant) -> None:
                 _ext, audio_bytes = await _tts_fn(
                     hass, tts_engine, message, language=language or None,
                 )
-            except (ImportError, Exception):
+            except Exception:  # noqa: BLE001  — any failure falls through to the next approach
                 audio_bytes = None
 
         # Approach 3: tts.get_tts_audio service (available in some HA builds).
@@ -611,7 +614,12 @@ def _register_services(hass: HomeAssistant) -> None:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        pcm_data, stderr = await proc.communicate(input=audio_bytes)
+        # communicate_or_kill, not proc.communicate: a stalled ffmpeg on malformed input
+        # would otherwise hang the service call forever and leave the child holding its pipes.
+        pcm_data, stderr = await communicate_or_kill(proc, 20, input=audio_bytes)
+        if pcm_data is None:
+            # Killed on timeout — stderr is None too, so this must precede the check below.
+            raise VIGIError(f"ffmpeg timed out converting {source_label}")
         if proc.returncode != 0 or not pcm_data:
             raise VIGIError(f"ffmpeg conversion failed for {source_label}: {stderr.decode()[:200]}")
 
@@ -898,9 +906,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         else:
             _LOGGER.info("VIGICam: SD card reinserted in %s — scheduling reload", ip)
             hass.async_create_task(_clear_sd_card_repair(hass, entry))
-            hass.async_create_task(
-                hass.config_entries.async_schedule_reload(entry.entry_id)
-            )
+            # async_schedule_reload is a @callback returning None, so wrapping it in
+            # async_create_task raised TypeError here — inside a coordinator listener,
+            # which meant the reload never happened AND the exception took out every
+            # listener registered after this one for that refresh.
+            hass.config_entries.async_schedule_reload(entry.entry_id)
 
     entry_data["_sd_unsub"] = coordinator.async_add_listener(_on_coordinator_update)
 

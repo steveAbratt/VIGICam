@@ -147,6 +147,18 @@ class VIGIOpenAPI:
         return result
 
     @staticmethod
+    def err_code(result: dict) -> Any:
+        """Public alias — callers that inspect errCode themselves must use this.
+
+        Two call sites pass raise_on_error=False because a rejection there means "none"
+        or "unsupported" rather than "broken". They previously read result["errCode"]
+        directly, which treats a reply carrying no status field as a FAILURE — the
+        opposite of the convention below, and enough to silently disable msg_push on
+        firmware whose getters omit the field.
+        """
+        return VIGIOpenAPI._err_code(result)
+
+    @staticmethod
     def _err_code(result: dict) -> Any:
         """Normalise the error field. Firmware uses errCode; some replies use error_code.
 

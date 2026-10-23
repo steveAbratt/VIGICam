@@ -93,7 +93,6 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.presets = await self.camera.get_presets()
                 except VIGIError:
                     self.presets = self.presets or []
-            results["presets"] = self.presets
             await safe_get("target_track", self.camera.get_target_track())
 
         if self.has_openapi and self.openapi:

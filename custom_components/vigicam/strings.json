@@ -53,7 +53,7 @@
   "issues": {
     "sd_card_missing": {
       "title": "SD card no longer detected — {camera_name}",
-      "description": "The SD card was previously present in **{camera_name}** but is no longer detected. SD card sensor entities are still in Home Assistant.\n\nIf you have removed the card temporarily, dismiss this — the entities will keep working once the card is reinserted.\n\nIf you are no longer using an SD card in this camera, use **Fix** to remove the stale SD card entities."
+      "description": "The SD card was previously present in **{camera_name}** but is no longer detected. SD card sensor entities are still in Home Assistant.\n\nIf you have removed the card temporarily, dismiss this — the entities will keep working once the card is reinserted.\n\nIf you are no longer using an SD card in this camera, delete the unwanted SD card entities from the device page, then dismiss this notice."
     },
     "frigate_camera_gone": {
       "title": "Frigate camera link lost — {camera_name}",

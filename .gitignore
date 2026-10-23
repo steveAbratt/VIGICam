@@ -8,6 +8,7 @@ secrets.yaml
 # Local Claude workflow files — not for the public repo
 CLAUDE.md
 rituals/
+.claude/
 
 # Python
 __pycache__/
