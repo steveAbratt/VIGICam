@@ -121,7 +121,7 @@ class VIGIOpenAPIEventListener:
         """Enable msg_push_enabled for each detection type we handle."""
         for getter, setter in _MSG_PUSH_METHODS:
             try:
-                result = await self._openapi.call(getter)
+                result = await self._openapi.call(getter, raise_on_error=False)
                 if result.get("errCode", -1) != 0:
                     continue  # method not supported on this model (-10030 etc.)
                 # Response may nest under a key; search top level first, then one level deep.

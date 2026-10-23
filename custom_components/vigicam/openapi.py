@@ -38,6 +38,15 @@ class VIGIOpenAPIAuthError(VIGIOpenAPIError):
     pass
 
 
+class VIGIOpenAPICallError(VIGIOpenAPIError):
+    """A method returned a non-zero errCode — the camera rejected the call."""
+
+    def __init__(self, method_name: str, err_code: Any) -> None:
+        super().__init__(f"{method_name} failed (errCode={err_code})")
+        self.method_name = method_name
+        self.err_code = err_code
+
+
 class VIGIOpenAPI:
     """Async client for the TP-Link VIGI IPC OpenAPI on port 20443."""
 
@@ -102,19 +111,52 @@ class VIGIOpenAPI:
         _LOGGER.debug("OpenAPI: new stok for %s (expires in %ds)", self._ip, _STOK_TTL)
         return self._stok
 
-    async def call(self, method_name: str, params: dict[str, Any] | None = None) -> dict:
-        """Call an OpenAPI method. Re-authenticates automatically on -10002."""
+    async def call(
+        self,
+        method_name: str,
+        params: dict[str, Any] | None = None,
+        *,
+        raise_on_error: bool = True,
+    ) -> dict:
+        """Call an OpenAPI method. Re-authenticates automatically on -10002.
+
+        Raises VIGIOpenAPICallError when the camera replies with a non-zero errCode.
+        A rejected call used to return normally, so a write that the firmware refused
+        looked like a success — the entity showed the new state and then sprang back on
+        the next poll. Pass raise_on_error=False to inspect the reply yourself.
+        """
         stok = await self._ensure_stok()
         result = await self._call_raw(stok, method_name, params)
 
-        if result.get("errCode") == -10002:
+        if self._err_code(result) == -10002:
             _LOGGER.debug("OpenAPI: stok expired on %s, re-authenticating", self._ip)
             self._stok = None
             self._stok_expiry = 0.0
             stok = await self._ensure_stok()
             result = await self._call_raw(stok, method_name, params)
 
+        err = self._err_code(result)
+        if err != 0:
+            _LOGGER.debug(
+                "OpenAPI: %s rejected by %s (errCode=%s, params=%s)",
+                method_name, self._ip, err, params,
+            )
+            if raise_on_error:
+                raise VIGIOpenAPICallError(method_name, err)
+
         return result
+
+    @staticmethod
+    def _err_code(result: dict) -> Any:
+        """Normalise the error field. Firmware uses errCode; some replies use error_code.
+
+        A reply that carries neither is treated as success — several getters return their
+        payload with no status field at all.
+        """
+        for key in ("errCode", "error_code"):
+            if key in result:
+                return result[key]
+        return 0
 
     async def _call_raw(
         self, stok: str, method_name: str, params: dict[str, Any] | None
