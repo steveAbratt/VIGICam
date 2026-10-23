@@ -91,6 +91,13 @@ touches the detection-toggle write path, so the v0.7.5b1 testing still stands.
 - **Tested Cameras** gains the C540S, per-model caveats with the versions that address them,
   and a pointer to Troubleshooting. Fixed a dead link in the USAGE contents list.
 
+- **`docs/TESTING.md`** — a written-up plan for the test suite this project does not yet have.
+  Phase 1 is roughly a dozen pure functions that need nothing but `pytest` — no Home Assistant
+  harness, no network — and covers the firmware-returns-anything parsing surface where most of
+  this integration's real bugs have lived. It also records eight known-unfixed issues, so a
+  test written against today's behaviour does not enshrine them. It is a proposal to revise,
+  not a specification.
+
 ---
 
 ## [0.7.5b1] - 2026-10-23
