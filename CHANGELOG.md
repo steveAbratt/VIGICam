@@ -14,6 +14,29 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.5b1] - 2026-10-23
+
+### Fixed
+
+- **A camera that refused an OpenAPI write used to look like it had accepted it.** The
+  OpenAPI client only ever inspected the reply's error code to detect an expired session
+  token — every other rejection returned as though the call had succeeded. So the entity
+  reported success, Home Assistant showed the new state, and the next poll read the
+  unchanged value back off the camera and reverted it, with nothing logged at any level.
+
+  Rejected calls now raise and are logged with the method, error code and parameters. This
+  is the second layer of the bug fixed in #90: that fix corrected *where* a write was sent,
+  but a write that arrived and was refused was still indistinguishable from one that worked.
+
+- **Detection Person and Detection Vehicle no longer spring back on firmware that answers
+  the getter but refuses the setter.** Reported on a VIGI C350 (#92) still failing after
+  the #90 fix — that camera returns real data from `getPeopleDetectionSwitch`, so reads and
+  writes both went through OpenAPI and the write was silently refused. When an OpenAPI
+  write is rejected, the change is now retried through the camera's JSON API rather than
+  leaving a toggle that does nothing.
+
+---
+
 ## [0.7.4] - 2026-09-23
 
 Everything from the 0.7.4 beta series (b1–b5), now stable.

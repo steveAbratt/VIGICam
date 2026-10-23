@@ -348,7 +348,9 @@ def _entry_data_for_entity(hass: HomeAssistant, entity_id: str) -> dict | None:
 async def _openapi_get_presets(openapi) -> list[dict]:
     """Return [{id, name}, ...] from OpenAPI getPresetPoint."""
     import urllib.parse as _up
-    result = await openapi.call("getPresetPoint")
+    # A camera with no presets replies with an error rather than an empty list, so this
+    # inspects errCode itself instead of treating a rejection as a failure.
+    result = await openapi.call("getPresetPoint", raise_on_error=False)
     if result.get("errCode") != 0:
         return []
     ids = result.get("id", [])

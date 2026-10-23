@@ -1,6 +1,7 @@
 """Switch entities for VIGI cameras — detection toggles, LED, alarm, audio mute, image controls."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -13,6 +14,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .api import VIGICamera
 from .const import CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS, DOMAIN
 from .entity import VIGIEntity
+from .openapi import VIGIOpenAPIError
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -259,20 +263,36 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
             return None
         return openapi if (self.coordinator.data or {}).get(key) else None
 
+    async def _write(
+        self,
+        openapi_fn: Callable[[Any], Any] | None,
+        api_fn: Callable[[VIGICamera], Any],
+    ) -> None:
+        """Write via OpenAPI when it is the authority, falling back to the JSON API.
+
+        Some firmware answers getPeopleDetectionSwitch but rejects the matching setter, so
+        preferring OpenAPI on the strength of the read alone is not enough — the rejection
+        has to be caught and the change retried through the JSON API, or the toggle flips
+        and springs back with nothing in the log.
+        """
+        openapi = self._openapi_writable(openapi_fn)
+        if openapi is not None:
+            try:
+                await openapi_fn(openapi)
+                return
+            except VIGIOpenAPIError as exc:
+                _LOGGER.warning(
+                    "%s: OpenAPI write failed (%s) — retrying via the JSON API",
+                    self.entity_id, exc,
+                )
+        await api_fn(self._entry_data["api"])
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         desc = self.entity_description
-        openapi = self._openapi_writable(desc.openapi_turn_on_fn)
-        if openapi is not None:
-            await desc.openapi_turn_on_fn(openapi)
-        else:
-            await desc.turn_on_fn(self._entry_data["api"])
+        await self._write(desc.openapi_turn_on_fn, desc.turn_on_fn)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         desc = self.entity_description
-        openapi = self._openapi_writable(desc.openapi_turn_off_fn)
-        if openapi is not None:
-            await desc.openapi_turn_off_fn(openapi)
-        else:
-            await desc.turn_off_fn(self._entry_data["api"])
+        await self._write(desc.openapi_turn_off_fn, desc.turn_off_fn)
         await self.coordinator.async_request_refresh()
