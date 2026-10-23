@@ -16,6 +16,14 @@
         "data": {
           "name": "Camera name"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate camera",
+        "description": "Home Assistant could not sign in to **{name}** at `{host}` with the stored credentials.\n\nThis usually means the camera's password was changed. Enter the current one below — the camera keeps its existing entities, history and automations.\n\nUse the camera's **local** admin password, not your TP-Link ID / VIGI cloud account password.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -23,7 +31,8 @@
       "invalid_auth": "Invalid username or password."
     },
     "abort": {
-      "already_configured": "This camera is already configured."
+      "already_configured": "This camera is already configured.",
+      "reauth_successful": "Credentials updated — the camera has been reconnected."
     }
   },
   "options": {

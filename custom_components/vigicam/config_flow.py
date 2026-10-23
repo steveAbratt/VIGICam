@@ -278,6 +278,70 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reauth(self, entry_data):
+        """Start re-authentication when the camera rejects the stored credentials.
+
+        Home Assistant calls this after ConfigEntryAuthFailed. Without it the user who
+        changes a camera password gets an UnknownStep traceback and no way to enter the
+        new one short of deleting and re-adding the camera — which would assign new
+        entity unique IDs and orphan their automations.
+        """
+        self._host = entry_data[CONF_HOST]
+        self._username = entry_data.get(CONF_USERNAME, DEFAULT_USERNAME)
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Ask for the new password and update the existing entry in place."""
+        errors: dict[str, str] = {}
+        # Not _get_reauth_entry(): that helper only exists on newer Home Assistant, and
+        # this lookup has been stable for far longer.
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+
+        if user_input is not None:
+            username = user_input.get(CONF_USERNAME, self._username).strip()
+            password = user_input[CONF_PASSWORD]
+            try:
+                info, verify_ssl = await _test_credentials(
+                    self.hass, self._host, username, password
+                )
+            except VIGIAuthError as exc:
+                _LOGGER.debug("Reauth failed for %s: %s", self._host, exc)
+                errors["base"] = "invalid_auth"
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Reauth connection failed for %s: %s", self._host, exc, exc_info=True
+                )
+                errors["base"] = "cannot_connect"
+            else:
+                # Deliberately NOT touching unique_id. Entity unique IDs derive from it,
+                # so changing it here would create a duplicate device and orphan every
+                # automation the user has — the exact harm reauth exists to avoid.
+                # Explicit merged data rather than data_updates=, which is only
+                # supported on newer Home Assistant. CONF_HOST is carried over
+                # unchanged — reauth replaces credentials, never the address.
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                        CONF_VERIFY_SSL: verify_ssl,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({
+                vol.Required(CONF_USERNAME, default=self._username): str,
+                vol.Required(CONF_PASSWORD): str,
+            }),
+            errors=errors,
+            description_placeholders={
+                "host": self._host,
+                "name": entry.title if entry else self._host,
+            },
+        )
+
     async def async_step_name(self, user_input=None):
         """Confirm or edit the name for this camera in Home Assistant."""
         if user_input is not None:
