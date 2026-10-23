@@ -12,6 +12,33 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Documentation
+
+- **New Troubleshooting section in `docs/USAGE.md`** covering the integration's most common
+  complaint — a control that shows the right state but won't change it. It separates the three
+  causes that produce that symptom (the camera refused the write, accepted but ignores the
+  field, or the setting is read-only on that firmware), lists which version fixed which model,
+  and gives the steps for capturing both a diagnostics report and a debug log.
+
+- **Microphone Mute and Speaker Mute now document their polarity.** `on` means muted. The VIGI
+  app shows the same setting as an enable toggle, so the two read as opposites while both being
+  correct — this has been reported as a bug more than once.
+
+- **Night Vision Mode documents both firmware generations.** The option list differs between
+  older cameras and C340/C350-class firmware, and only the older set was written down. Also
+  notes that models without a white LED offer a reduced list.
+
+- **Corrected the Spotlight entity's documented off behaviour.** It returns to *Auto IR* on
+  C340/C350-class firmware, not *IR Always On* as stated — the docs described only the legacy
+  path.
+
+- **Known model limitations are now recorded where people look for them**: the master Alarm
+  switch not holding on C540S and C350 (#79), Status LED appearing on models with no physical
+  LED, and the dual-subsystem behaviour behind the Person and Vehicle detection toggles.
+
+- **Tested Cameras** gains the C540S, per-model caveats with the versions that address them,
+  and a pointer to Troubleshooting. Fixed a dead link in the USAGE contents list.
+
 ---
 
 ## [0.7.5b1] - 2026-10-23

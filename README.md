@@ -36,8 +36,9 @@ tuning, announcements, and alarms. Entities merge onto the Frigate device automa
 | VIGI C435 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | VIGI C340S-1 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | InSight S385PI | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
-| VIGI C350 | Working. Needs **v0.7.4b2 or later** for night vision, spotlight and status LED — earlier versions wrote a field this firmware treats as read-only | [@ILikeSleeping000](https://github.com/steveAbratt/VIGICam/discussions/76), [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
-| VIGI C340 / C340i | Working, same night-vision caveat as the C350 | [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
+| VIGI C350 | Working. Needs **v0.7.4b2 or later** for night vision, spotlight and status LED, and **v0.7.5b1 or later** for the Person / Vehicle detection toggles. The master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead. No physical status LED, though the camera reports the setting | [@ILikeSleeping000](https://github.com/steveAbratt/VIGICam/discussions/76), [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
+| VIGI C340 / C340i | Working, same night-vision caveat as the C350. The C340i has no white LED, so it offers only the four non-spotlight night vision modes | [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
+| VIGI C540S | Streams and reads correctly; the master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead | [@domdulez](https://github.com/steveAbratt/VIGICam/issues/79) |
 
 Other VIGI and InSight models using the same local HTTPS API should work. Entities are
 created dynamically — only capabilities the camera actually reports appear in HA.
@@ -45,6 +46,10 @@ created dynamically — only capabilities the camera actually reports appear in 
 **Tested a model that isn't listed?** Please say so in
 [the discussion](https://github.com/steveAbratt/VIGICam/discussions/76) — and if something
 misbehaves, a diagnostics download (⋮ → *Download diagnostics*) makes it far quicker to fix.
+
+**A control that shows the right state but won't change it** is nearly always a model
+difference with a known fix or workaround — see
+[Troubleshooting](docs/USAGE.md#troubleshooting).
 
 ---
 
@@ -285,6 +290,10 @@ For a plain-language explanation of every entity, button, switch, sensor, and se
 including what they actually do, automation examples, and dashboard tips — see:
 
 **[docs/USAGE.md](docs/USAGE.md)**
+
+Also in there: [Troubleshooting](docs/USAGE.md#troubleshooting), covering controls that read
+correctly but won't change, which version fixed which model, and how to capture the
+diagnostics report and debug log that make a bug report actionable.
 
 ---
 

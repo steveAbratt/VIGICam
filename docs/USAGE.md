@@ -23,8 +23,9 @@ For installation instructions see the [README](../README.md).
 - [Services — automation and scripting](#services)
 - [Blueprint: camera announcements](#blueprint-camera-announcements)
 - [Blueprint: play audio file](#blueprint-play-audio-file)
-- [Playing pre-recorded files](#playing-pre-recorded-files)
+- [Playing pre-recorded files](#vigicamplay_file--play-a-pre-recorded-audio-file)
 - [Dashboard tips](#dashboard-tips)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -163,6 +164,12 @@ detection events according to the Alarm Light and Alarm Sound switches below.
 > This does **not** prevent detection events from firing binary sensors in HA — it only
 > controls the camera's own on-device response.
 
+> **Known issue on some firmware** ([#79](https://github.com/steveAbratt/VIGICam/issues/79)):
+> on the C540S and C350 this switch flickers and does not change the camera's behaviour, while
+> **Alarm Light** and **Alarm Sound** work correctly. The field appears to be accepted and
+> stored but ignored by those firmware versions. Use the two output switches as the real
+> control — turning both off disables the alarm as effectively as the master switch would.
+
 ### Alarm Light
 
 When on, the camera's spotlight flashes when an alarm is triggered. Requires Alarm to
@@ -196,6 +203,17 @@ general motion — the Person Detected binary sensor will fire when a person is 
 Same as Detection Person but for vehicles. On some cameras this is not available (the
 entity won't be created).
 
+> **These two are special, and are the most common source of "it reverts when I toggle it".**
+> Unlike every other switch, Person and Vehicle detection are exposed through *two*
+> independent subsystems — the camera's JSON API and [OpenAPI](#openapi--unlocking-additional-sensors).
+> VIGICam writes to whichever one it is reading the state from, and if that write is refused
+> it retries through the other. Some firmware answers the OpenAPI *getter* while rejecting
+> the matching *setter*, which is what made these toggles spring back on earlier versions.
+>
+> Needs **v0.7.5b1 or later**. If a toggle still reverts after updating, see
+> [Troubleshooting](#troubleshooting) — a debug log is the only way to see the camera's
+> reason for refusing.
+
 ### Detection Tamper
 
 Enables or disables tamper detection. The camera fires an event when its field of view
@@ -207,16 +225,26 @@ is covered, moved significantly, or the lens is obscured. Requires camera suppor
 Silences the camera's microphone input. Audio from the camera will not be captured in
 recordings or the live stream.
 
+> **These are *mute* switches, so `on` means muted — silent.** The VIGI app shows the same
+> setting the other way round, as an *enable* toggle, so the app being off is this switch
+> being on. The two look inverted side by side; they are not. If you want "audio is working"
+> semantics in a dashboard, use a template switch rather than expecting this one to flip.
+
 ### Speaker Mute
 
-Silences the camera's speaker output. This overrides all other audio — muting the
-speaker stops both alarm sounds and any audio played via `vigicam.speak` or
-`vigicam.play_audio`.
+Silences the camera's speaker output. **On = muted**, as above. This overrides all other
+audio — muting the speaker stops both alarm sounds and any audio played via `vigicam.speak`
+or `vigicam.play_audio`.
 
 ### Status LED
 
 Turns the camera's front status LED on or off. Useful at night or in locations where
 you don't want a visible indicator that a camera is active.
+
+> **Not every model that reports this field has a visible LED.** The entity is created
+> whenever the camera exposes the setting, and some models (the C350 among them) expose it
+> without having the hardware. There is no capability flag that distinguishes them, so on
+> those cameras the switch is harmless but does nothing observable.
 
 ### Privacy Mask
 
@@ -307,15 +335,41 @@ always play once per call.
 
 ### Night Vision Mode
 
-Switches how the camera handles low-light conditions:
+Switches how the camera handles low-light conditions. **The options you see depend on your
+camera's firmware** — there are two generations, and VIGICam builds the list from what your
+camera actually reports.
+
+**Older firmware** (C540V, S245 and similar — a single writable `night_vision_mode`):
 
 | Option | What it does |
 |--------|-------------|
-| IR Auto | Camera decides when to switch to IR (night vision); default for most scenarios |
+| Auto (motion-triggered) | Camera decides when to switch to IR, triggered by motion |
 | IR Always On | Infrared always active — black and white image at all times |
 | Spotlight Always On | White-light spotlight always on — colour image in the dark |
-| Colour | Forces colour mode without spotlight (low-light performance degrades) |
+| Auto Switch | Camera switches automatically between day and night profiles |
+
+**Newer firmware** (C340, C340i, C350 and similar — a writable `pre_night_vision_mode`
+alongside a read-only status field):
+
+| Option | What it does |
+|--------|-------------|
+| Auto IR | Camera decides when to switch to IR; the usual default |
+| IR Always On | Infrared always active — black and white image at all times |
+| White LED Always On | Spotlight always on — colour image in the dark |
+| Auto Color | Camera keeps colour, using the spotlight as needed |
+| Human/Vehicle-Triggered Full-Color | Spotlight and colour only when a person or vehicle is seen |
 | Off | No IR or spotlight — camera image in available light only |
+| Custom | Whatever schedule is configured in the camera's own web UI |
+
+Models with no white LED (the C340i, for instance) show only the four options that don't
+need one: Auto IR, IR Always On, Off and Custom.
+
+> **Why the split matters.** On the newer firmware the camera reports *two* night-vision
+> fields: the writable preference and a read-only status saying which emitter is currently
+> lit. The mapping between them is many-to-one — Auto IR, IR Always On, Off and Custom all
+> report the same status — so the selected mode cannot be recovered from the status field.
+> Versions before **v0.7.4b2** wrote the read-only one, which the camera silently ignored.
+> If night vision, spotlight or status LED changes don't take effect, update first.
 
 ### PTZ Preset *(PTZ cameras only)*
 
@@ -332,17 +386,24 @@ rather than `select.select_option` (which requires an entity ID).
 
 ### Spotlight
 
-Controls the camera's white-light spotlight. Turning it on switches Night Vision Mode
-to Spotlight Always On. Turning it off switches Night Vision Mode to IR Always On (not
-off — the camera still needs a night vision mode active).
+Controls the camera's white-light spotlight. **The spotlight is not an independent output —
+it *is* a night vision mode**, so this entity works by changing Night Vision Mode, and the
+two always move together.
+
+| | Older firmware | Newer firmware (C340 / C350 class) |
+|---|---|---|
+| Spotlight **on** | Spotlight Always On | White LED Always On |
+| Spotlight **off** | IR Always On | **Auto IR** |
+
+Off deliberately returns to an IR mode rather than disabling night vision, so you keep a
+working camera in the dark instead of a blind one. Note the difference between the two
+columns: on newer firmware, off lands on *Auto IR*, not *IR Always On*.
 
 The brightness slider maps the spotlight's 4 intensity levels (1–4) to the HA range
 (1–255) so standard HA light controls work as expected.
 
-> **Night Vision Mode:** The spotlight and IR mode are managed together via Night Vision
-> Mode. Setting the Spotlight entity to on forces spotlight mode; turning it off returns
-> to IR mode. If you want a different off behaviour (e.g. Auto), change Night Vision Mode
-> directly using the Night Vision Mode select entity.
+> If you want a different off behaviour, set [Night Vision Mode](#night-vision-mode)
+> directly instead of using this entity — it has the full list of modes your camera supports.
 
 #### Example: turn spotlight on at sunset, off at sunrise
 
@@ -1727,3 +1788,69 @@ entities:
   - entity: button.vigi_c540v_alarm_stop
     name: Stop alarm
 ```
+
+---
+
+## Troubleshooting
+
+### A control shows the right state but won't change it
+
+This is the most common complaint, and it is almost always a **model difference** rather than
+something wrong with your setup. The entity reads the camera correctly, you toggle it, and a
+few seconds later it springs back to where it was.
+
+Three different causes produce that same symptom, and they are worth telling apart:
+
+| What's happening | How to recognise it |
+|---|---|
+| The camera **refused** the write | The toggle settles **back to the old value** after the next poll |
+| The camera **accepted but ignores** the field | The toggle settles on the **new value**, but the camera's behaviour never changes |
+| The setting is **read-only** on your firmware | Same as refused, and the camera's own web UI shows the setting greyed out or absent |
+
+**First, update.** Several of these have been fixed, and each fix needed a specific version:
+
+- Night vision, spotlight, status LED on C340/C350-class firmware — **v0.7.4b2**
+- Person and Vehicle detection — **v0.7.4b5**, then **v0.7.5b1** for firmware that answers
+  the getter but refuses the setter
+
+**Then check the one case that isn't a bug.** Microphone Mute and Speaker Mute are *mute*
+switches: `on` means silent. The VIGI app shows the same setting as an enable toggle, so the
+two read as opposites while both being correct. See [Microphone Mute](#microphone-mute).
+
+**Known and still open:** the master [Alarm](#alarm) switch on C540S and C350 firmware
+([#79](https://github.com/steveAbratt/VIGICam/issues/79)).
+
+### Getting a diagnostics report
+
+Every model-specific bug in this integration has been solved the same way — by reading what
+the camera actually returns. If something misbehaves, this is the single most useful thing you
+can attach to an issue:
+
+> Settings → **Devices & Services** → **VIGICam** → ⋮ → **Download diagnostics**
+
+It contains your model, firmware, the detected capabilities and the full raw payload every
+entity is built from. **Credentials, IP and MAC addresses, serial numbers and the camera's own
+alias are redacted automatically**, so it is safe to paste into a public issue.
+
+### Getting a debug log as well
+
+When a control won't change, the diagnostics report shows the *state* but not the camera's
+*reason* for refusing. For that, capture a log of the failing action:
+
+1. Settings → **Devices & Services** → **VIGICam** → ⋮ → **Enable debug logging**
+2. Toggle the entity that misbehaves, once
+3. ⋮ → **Disable debug logging** — Home Assistant downloads the log automatically
+
+A refused OpenAPI call is logged with the method name, the camera's error code and the
+parameters sent, and a write that fell back to the other API is logged as a warning. Those
+lines are usually enough to fix the problem without any further back-and-forth.
+
+### Where to report
+
+- **A model that works** — add it to
+  [the tested-cameras discussion](https://github.com/steveAbratt/VIGICam/discussions/76)
+- **Something broken** — [open an issue](https://github.com/steveAbratt/VIGICam/issues) with
+  the diagnostics report attached
+
+The most useful reports separate "reads the right state" from "actually applies the change",
+entity by entity. That distinction is what pinned down both detection-toggle bugs.
