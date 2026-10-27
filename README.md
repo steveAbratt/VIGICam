@@ -23,7 +23,9 @@ the camera and Home Assistant.
 **Alongside Frigate:** When you add Frigate for recording and advanced detection,
 VIGICam steps back gracefully — streams and detection hand off to Frigate while VIGICam
 retains exclusive control over the functions Frigate can't reach: PTZ, spotlight, image
-tuning, announcements, and alarms. Entities merge onto the Frigate device automatically.
+tuning, announcements, and alarms. Turn off **Camera Stream** and **Detection Events** in
+VIGICam's Configure dialog and it keeps only the hardware controls — see
+[Setting up with Frigate](docs/FRIGATE_SETUP.md).
 
 ---
 
@@ -36,8 +38,8 @@ tuning, announcements, and alarms. Entities merge onto the Frigate device automa
 | VIGI C435 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | VIGI C340S-1 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | InSight S385PI | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
-| VIGI C350 | Working. Needs **v0.7.4b2 or later** for night vision, spotlight and status LED, The Person / Vehicle detection toggles are **still not fixed** on this model — the camera rejects the write with error `-10009` ([#92](https://github.com/steveAbratt/VIGICam/issues/92)); **v0.7.5b4** attempts it but is unconfirmed. The master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead. No physical status LED, though the camera reports the setting | [@ILikeSleeping000](https://github.com/steveAbratt/VIGICam/discussions/76), [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
-| VIGI C340 / C340i | Working, same night-vision caveat as the C350. The C340i has no white LED, so it offers only the four non-spotlight night vision modes | [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
+| VIGI C350 | Working. Needs **v0.7.4b2 or later** for night vision, spotlight and status LED. The Person / Vehicle detection toggles are **still not fixed** on this model — the camera rejects the write with error `-10009` ([#92](https://github.com/steveAbratt/VIGICam/issues/92)); **v0.7.5b4** and later attempt it but are unconfirmed. The master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead. No physical status LED, though the camera reports the setting | [@ILikeSleeping000](https://github.com/steveAbratt/VIGICam/discussions/76), [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
+| VIGI C340 / C340i | Working, same night-vision caveat as the C350. The C340i has no white LED; a C340i owner reports it still shows all seven night vision modes and a Spotlight it can't use ([#78](https://github.com/steveAbratt/VIGICam/issues/78)) — pick only Auto IR, IR Always On, Off or Custom | [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
 | VIGI C540S | Streams and reads correctly; the master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead | [@domdulez](https://github.com/steveAbratt/VIGICam/issues/79) |
 
 Other VIGI and InSight models using the same local HTTPS API should work. Entities are
@@ -232,7 +234,7 @@ data:
 **From a file path on the HA host:**
 
 ```yaml
-url: /config/media/alert.wav
+url: /media/alert.wav   # /config/media/ on a Core (venv) install
 ```
 
 Media browser URLs (`/media/local/`) and HA www URLs (`/local/`) are resolved to file
@@ -263,7 +265,7 @@ data:
 service: vigicam.goto_preset
 data:
   entity_id: camera.vigi_c540v_stream
-  preset: "Full Stable Yard"
+  preset: "Front Gate"
 ```
 
 The following require [OpenAPI enabled](#openapi--extended-detection--sensors):
@@ -272,9 +274,9 @@ The following require [OpenAPI enabled](#openapi--extended-detection--sensors):
 service: vigicam.ptz_move_to
 data:
   entity_id: camera.vigi_c540v_stream
-  pan: 120.0
-  tilt: -10.0
-  zoom: 1.0
+  pan: 0.5     # -1.0 to 1.0 across the camera's range — not degrees
+  tilt: -0.1
+  zoom: 0.0
 ```
 
 ```yaml

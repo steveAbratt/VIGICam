@@ -66,6 +66,14 @@ disable those in VIGICam to avoid duplicates:
 2. Find your camera entry and click **Configure**
 3. Set the options as follows:
 
+> **Before turning off Camera Stream:** it removes `camera.*_stream`, and every `vigicam.*`
+> example in these docs targets that entity. `vigicam.*` services accept **any** entity from
+> the camera, so point your `speak`, `play_file` and `ptz` calls at one that always exists —
+> for example `sensor.<camera>_ip_address` — before you change this. Otherwise those calls
+> find no camera, log an error, and do nothing, while the automation trace still looks fine.
+>
+> Frigate auto-detection is best-effort and may not recognise your Frigate setup — set the feature groups yourself rather than relying on it.
+
 | Feature group | Frigate users — recommended setting |
 |---------------|-------------------------------------|
 | **Camera Stream** | **Off** — Frigate's stream entity is sufficient |
@@ -83,7 +91,8 @@ disable those in VIGICam to avoid duplicates:
 
 ### 4. Verify there are no duplicate entities
 
-After saving:
+After clicking **Submit**, VIGICam shows a second **Confirm entity removal** dialog listing
+the entities that will be deleted. Confirm it, then:
 - Check **Settings → Devices & Services → VIGI & InSight Cameras → [your camera]**
 - With Camera Stream off, there should be no `camera.*_stream` entity from VIGICam
 - Frigate's camera and object detection entities remain under Frigate's own device
@@ -131,17 +140,17 @@ automation:
         entity_id: button.vigi_c540v_alarm_trigger
     - service: vigicam.speak
       data:
-        entity_id: camera.vigi_c540v_stream
+        entity_id: sensor.vigi_c540v_ip_address   # any VIGICam entity of the camera works
         message: "Person detected at the front gate"
         tts_engine: tts.cloud
 ```
 
 ---
 
-## Automation example: use camera's zone events to tag Frigate clips
+## Automation example: notify with Frigate's picture when a camera zone fires
 
-VIGICam's intrusion and line crossing sensors know *which zone* was triggered. Combine
-them with Frigate for richer notification context:
+VIGICam's intrusion and line crossing sensors come from the camera's own zone rules.
+Pair them with Frigate's camera entity for a notification with a current picture:
 
 ```yaml
 automation:
@@ -157,7 +166,7 @@ automation:
         title: "Intrusion Alert"
         message: "Zone intrusion detected"
         data:
-          image: /api/frigate/notifications/{{ trigger.entity_id.split('.')[1] }}/snapshot.jpg
+          image: /api/camera_proxy/camera.front_gate   # your Frigate camera entity
 ```
 
 ---
@@ -167,7 +176,8 @@ automation:
 **VIGICam shows a "Frigate camera link lost" repair notice after this setup**
 
 This notice appears if VIGICam previously detected Frigate at this IP but no longer sees
-it (e.g. after a Frigate reinstall or config change). Once Frigate is running again, the
+it (e.g. after a Frigate reinstall or config change). Detection is best-effort, so it may
+also never appear at all — that does not mean anything is wrong. Once Frigate is running again, the
 notice clears automatically on the next HA restart or VIGICam reload.
 
 If you removed Frigate entirely, dismiss the notice and re-enable Camera Stream and
@@ -182,5 +192,5 @@ VIGI & InSight Cameras → [your camera] → Configure** and turn Camera Stream 
 
 Detection Events is still on in VIGICam. Disable it in the Configure options if you
 do not need the camera's own zone-based sensors. If you want zone events (intrusion,
-line crossing) but not generic motion/person, you cannot selectively disable individual
-binary sensors — either all detection events are on, or all are off.
+line crossing) but not generic motion/person, leave Detection Events on and disable just
+those two entities individually: open the entity → ⚙ → turn **Enabled** off.

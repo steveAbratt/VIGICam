@@ -12,6 +12,40 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Documentation
+
+Documentation and user-facing text only; no behaviour changes.
+
+- **`vigicam.ptz_move_to` examples used degrees** (`pan: 120.0`), which the service rejects —
+  all three values are -1.0 to 1.0. Corrected everywhere, and the tip suggesting you could
+  read coordinates back from a preset (you can't) is replaced.
+- **Six automation examples used entity IDs that don't exist** (`..._audio_anomaly_detected`
+  and similar); a state trigger on a missing entity never fires and never errors. They now
+  match the entities actually created.
+- **The PTZ preset and move services now have proper forms** in Developer Tools and the
+  automation editor (`ptz_move_to`, `ptz_save_preset`, `ptz_delete_preset` had none).
+  `ptz_save_preset` documents that without an `id`, a full set of eight presets overwrites
+  slot 1.
+- **Both blueprints' camera pickers were empty for Frigate users** with Camera Stream off; the
+  same filter was already removed from the services in 0.7.4. Their pause minimum now matches
+  the service (0.5 s), so the slider can no longer pick a value that errors.
+- **The Frigate guides broke every speak, play-file and PTZ example**: turning off Camera
+  Stream removes the entity those examples target. The guides now say to repoint `vigicam.*`
+  calls first, that Detection Events also removes Loop Recording and Last Detection, and that
+  individual sensors can be disabled. Frigate auto-detection is described as best-effort, and
+  the README no longer claims entities merge onto the Frigate device.
+- **Long audio is trimmed, not refused** — the docs, `services.yaml` and blueprints said it
+  would fail and play nothing.
+- **Media paths**: `/media/` on HA OS, Supervised and Container, `/config/media/` only on Core;
+  local paths must be inside an allowed folder.
+- `play_audio`'s repeat slider now stops at 10, the service's limit, and no longer claims to
+  play once per call; the `ptz` duration slider allows the full 60 s.
+- Smaller corrections: spotlight brightness levels, IP Address and Connection Type are not
+  hidden by default, Intrusion is always created, a missing older-firmware night vision mode,
+  the C340i white-LED claim, the setup name step, the SD repair's non-existent Fix button, and
+  example location names.
+- `docs/TESTING.md` known-gaps list brought up to date.
+
 ---
 
 ## [0.7.5b5] - 2026-10-27
@@ -1261,7 +1295,7 @@ Everything from the 0.7.4 beta series (b1–b5), now stable.
     with configurable `speed` (0.0–1.0) and optional `duration` (auto-stops after N seconds).
     If no duration is given, call `vigicam.ptz_stop` to stop.
   - `vigicam.ptz_stop` — stop all camera movement immediately.
-  - `vigicam.goto_preset` — move to a named preset by name (e.g. `"Full Stable Yard"`);
+  - `vigicam.goto_preset` — move to a named preset by name (e.g. `"Front Gate"`);
     cleaner alternative to `select.select_option` for automations with many presets.
 - **PTZ direction buttons** — six button entities per PTZ camera (Pan Left/Right, Tilt
   Up/Down, Zoom In/Out) that each jog the camera for 1 second then stop. Useful for
@@ -1289,7 +1323,7 @@ Everything from the 0.7.4 beta series (b1–b5), now stable.
   `[]`, causing `has_ptz = False` at startup. Preset buttons and the PTZ Preset select
   entity were therefore never registered for any camera. Now only reads `id` and `name`
   (neither buttons nor select use the position values).
-- **Preset names shown URL-encoded** — camera returns `"Zoomed%20Stable%20View"`;
+- **Preset names shown URL-encoded** — camera returns `"Zoomed%20Gate%20View"`;
   now decoded with `urllib.parse.unquote()` so entity names and select options show
   the correct human-readable name.
 

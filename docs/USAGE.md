@@ -93,12 +93,12 @@ recreated. There is no manual cleanup needed.
 VIGICam raises notifications in HA's **Problems** section (Settings → System → Repairs)
 for the following events:
 
-- **SD card removed** — raised when the SD card disappears at runtime. Dismiss if it is
-  temporary; use Fix to remove the stale SD card entities if you have removed the card
-  permanently.
+- **SD card removed** — raised when the SD card disappears at runtime. Dismiss it if the
+  removal is temporary. If you have removed the card for good, delete the unwanted SD card
+  entities from the device page, then dismiss the notice.
 - **Frigate camera link lost** — raised if Frigate was previously detected at this
   camera's IP address but is no longer present. Guides you to re-enable Camera Stream
-  and Detection Events if needed.
+  and Detection Events if needed. Frigate auto-detection is best-effort and may not recognise your Frigate setup — set the feature groups yourself rather than relying on it.
 
 ---
 
@@ -113,12 +113,12 @@ services that are not available over ONVIF.
 | Feature | Requires OpenAPI |
 |---------|-----------------|
 | Vehicle Detected binary sensor | ✓ |
-| Audio Anomaly Detected binary sensor | ✓ |
-| Loitering Detected binary sensor | ✓ |
-| Scene Change Detected binary sensor | ✓ |
+| Audio Anomaly binary sensor | ✓ |
+| Loitering binary sensor | ✓ |
+| Scene Change binary sensor | ✓ |
 | Object Left or Taken binary sensor | ✓ |
-| Area Entry Detected binary sensor | ✓ |
-| Area Exit Detected binary sensor | ✓ |
+| Area Entry binary sensor | ✓ |
+| Area Exit binary sensor | ✓ |
 | SD Card Recording Duration sensor | ✓ |
 | Oldest Recording timestamp sensor | ✓ |
 | Record Capacity Remaining sensor | ✓ |
@@ -347,6 +347,7 @@ camera actually reports.
 | Option | What it does |
 |--------|-------------|
 | Auto (motion-triggered) | Camera decides when to switch to IR, triggered by motion |
+| Colour (motion-triggered) | Colour image with the spotlight, switched on by motion |
 | IR Always On | Infrared always active — black and white image at all times |
 | Spotlight Always On | White-light spotlight always on — colour image in the dark |
 | Auto Switch | Camera switches automatically between day and night profiles |
@@ -364,7 +365,7 @@ alongside a read-only status field):
 | Off | No IR or spotlight — camera image in available light only |
 | Custom | Whatever schedule is configured in the camera's own web UI |
 
-Models with no white LED (the C340i, for instance) show only the four options that don't
+Models with no white LED should show only the four options that don't
 need one: Auto IR, IR Always On, Off and Custom.
 
 > **Why the split matters.** On the newer firmware the camera reports *two* night-vision
@@ -403,7 +404,8 @@ working camera in the dark instead of a blind one. Note the difference between t
 columns: on newer firmware, off lands on *Auto IR*, not *IR Always On*.
 
 The brightness slider maps the spotlight's 4 intensity levels (1–4) to the HA range
-(1–255) so standard HA light controls work as expected.
+(1–255) so standard HA light controls work as expected. Brightness 1–63 is level 1, 64–127 level 2, 128–191 level 3 and
+192–255 level 4.
 
 > If you want a different off behaviour, set [Night Vision Mode](#night-vision-mode)
 > directly instead of using this entity — it has the full list of modes your camera supports.
@@ -421,7 +423,7 @@ automation:
       target:
         entity_id: light.vigi_c540v_spotlight
       data:
-        brightness: 200   # ~level 3 of 4
+        brightness: 160   # level 3 of 4
 
 automation:
   alias: "Spotlight off at sunrise"
@@ -448,7 +450,7 @@ automation:
       target:
         entity_id: light.vigi_c540v_spotlight
       data:
-        brightness: 80    # level 1 — minimal illumination
+        brightness: 40    # level 1 — minimal illumination
     - delay: "00:00:05"
     - service: light.turn_on
       target:
@@ -595,12 +597,13 @@ The camera's firmware version string, cleaned to the version number only
 
 To show it: open the entity in HA, click the settings gear, and enable it.
 
-### IP Address *(diagnostic — hidden by default)*
+### IP Address *(diagnostic)*
 
 The camera's current IP address as reported by the camera itself. Useful for confirming
-the static IP assignment is active.
+the static IP assignment is active. It goes unavailable along with everything else when the
+camera can't be reached, so it can't be used to find a camera that has moved.
 
-### Connection Type *(diagnostic — hidden by default)*
+### Connection Type *(diagnostic)*
 
 Whether the camera is using `Static` or `DHCP` addressing.
 
@@ -716,8 +719,8 @@ automation:
 ### Intrusion
 
 Fires when someone enters a configured intrusion zone. Zones are drawn in the VIGI app
-or camera web UI (Active Defence → Intrusion Detection). This entity only appears once
-you have at least one intrusion zone configured and the ONVIF event is seen.
+or camera web UI (Active Defence → Intrusion Detection). The entity is always created;
+until a zone is configured it simply stays Clear.
 
 #### Example: flash the alarm light on intrusion
 
@@ -814,7 +817,7 @@ automation:
         tts_engine: tts.cloud
 ```
 
-### Audio Anomaly Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### Audio Anomaly *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Fires when the camera detects an unusual sound — e.g. breaking glass, a car alarm, or
 raised voices. The sensitivity and sound types that trigger it are configured in the
@@ -826,7 +829,7 @@ camera's web UI or VIGI app under **Event → Audio Anomaly Detection**.
 automation:
   trigger:
     - platform: state
-      entity_id: binary_sensor.vigi_c540v_audio_anomaly_detected
+      entity_id: binary_sensor.vigi_c540v_audio_anomaly
       to: "on"
   action:
     - service: notify.mobile_app_your_phone
@@ -835,7 +838,7 @@ automation:
         message: "Unusual sound detected at Front Gate"
 ```
 
-### Loitering Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### Loitering *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Fires when a person or vehicle remains in the camera's field of view longer than the
 configured loitering time threshold. The threshold is set in the camera's web UI or
@@ -847,7 +850,7 @@ VIGI app under **Event → Loitering Detection**.
 automation:
   trigger:
     - platform: state
-      entity_id: binary_sensor.vigi_c540v_loitering_detected
+      entity_id: binary_sensor.vigi_c540v_loitering
       to: "on"
   action:
     - service: light.turn_on
@@ -855,7 +858,7 @@ automation:
         entity_id: light.driveway
 ```
 
-### Scene Change Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### Scene Change *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Fires when the camera detects a significant change to its scene — typically the camera
 being moved, re-aimed, or having something large placed in front of it. Distinct from
@@ -867,7 +870,7 @@ being moved, re-aimed, or having something large placed in front of it. Distinct
 automation:
   trigger:
     - platform: state
-      entity_id: binary_sensor.vigi_c540v_scene_change_detected
+      entity_id: binary_sensor.vigi_c540v_scene_change
       to: "on"
   action:
     - service: notify.mobile_app_your_phone
@@ -888,7 +891,7 @@ defined zone for objects appearing or disappearing over time.
 automation:
   trigger:
     - platform: state
-      entity_id: binary_sensor.vigi_c540v_object_left_taken
+      entity_id: binary_sensor.vigi_c540v_object_left_or_taken
       to: "on"
   action:
     - service: notify.mobile_app_your_phone
@@ -897,7 +900,7 @@ automation:
         message: "Something left or removed at Front Gate"
 ```
 
-### Area Entry Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### Area Entry *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Fires when a person or vehicle enters a configured virtual area. Areas are drawn in
 the VIGI app or camera web UI under **Event → Area Entry Detection**. Unlike
@@ -910,7 +913,7 @@ something enters an enclosed zone.
 automation:
   trigger:
     - platform: state
-      entity_id: binary_sensor.vigi_c540v_area_entry_detected
+      entity_id: binary_sensor.vigi_c540v_area_entry
       to: "on"
   action:
     - service: vigicam.play_audio
@@ -920,7 +923,7 @@ automation:
         times: 3
 ```
 
-### Area Exit Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### Area Exit *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Fires when a person or vehicle exits a configured virtual area. Mirrors Area Entry
 Detected but triggers on departure. Useful for detecting when a vehicle leaves a
@@ -932,7 +935,7 @@ monitored zone.
 automation:
   trigger:
     - platform: state
-      entity_id: binary_sensor.vigi_c540v_area_exit_detected
+      entity_id: binary_sensor.vigi_c540v_area_exit
       to: "on"
   action:
     - service: notify.mobile_app_your_phone
@@ -1141,7 +1144,7 @@ order — changing the capture capacity allocation requires reformatting the dis
 
 > **Not all cameras support this.** Saving event images to SD card requires an SD card
 > and firmware support for a split storage partition (separate space for video and images).
-> Fixed cameras like the VIGI C540V can upload event images via FTP but cannot save them
+> Some models, the VIGI C540V among them, can upload event images via FTP but cannot save them
 > to the SD card. On those cameras the integration always uses the RTSP snapshot fallback.
 > Check the **Event Image Capture** diagnostic sensor on the device page — if it shows
 > **Off**, your camera model or SD card setup does not support this feature.
@@ -1189,7 +1192,10 @@ the camera allocates space for images but never writes them.
 ## Services
 
 Services are called from automations, scripts, or Developer Tools → Services.
-All services require an `entity_id` of a camera entity from this integration.
+All services take an `entity_id`. **Any entity belonging to the camera works** —
+`camera.<name>_stream`, `sensor.<name>_ip_address`, anything — so the services keep working
+when the Camera Stream feature group is turned off. The examples below use the stream entity;
+substitute another if you have turned it off.
 
 ---
 
@@ -1217,9 +1223,8 @@ message: "{{ now().strftime('%-I:%M %p') }} — person detected at the front doo
 ```
 
 **Limits:** Keep messages to around 10 seconds or less. The camera's hard limit is
-15 seconds / 256 KB of audio. Messages that exceed this will fail with a log error —
-`vigicam.speak` will not play anything in that case. A typical spoken sentence is
-3–5 seconds.
+15 seconds / 256 KB of audio. Longer messages are **trimmed to fit and cut off
+mid-sentence**, with a warning in the log. A typical spoken sentence is 3–5 seconds.
 
 ---
 
@@ -1243,8 +1248,9 @@ data:
   pause: 1.5      # optional — seconds between repeats (default 1.0)
 ```
 
-**Limit:** The camera hard limit is 15 seconds / 256 KB after conversion. Longer files
-will fail with a log error. A 15-second clip at 8 kHz mono 16-bit is around 240 KB.
+**Limit:** The camera hard limit is 15 seconds / 256 KB after conversion. Longer files are
+trimmed to fit and cut off, with a warning in the log. A 15-second clip at 8 kHz mono
+16-bit is around 240 KB.
 
 ---
 
@@ -1260,7 +1266,8 @@ without requiring a token — you do not need to set up authentication:
 url: http://192.168.1.x:8123/media/local/alert.wav
 ```
 
-Files uploaded via the media browser are stored at `/config/media/` on the HA host.
+Files uploaded via the media browser are stored in `/media/` on HA OS, Supervised and
+Container installs, or in `/config/media/` on a Core (Python venv) install.
 
 **2. HA `www/` folder (publicly accessible static files)**
 
@@ -1279,11 +1286,13 @@ If you know the file's path on the machine running Home Assistant, you can refer
 it directly — useful in automations templated by a script:
 
 ```yaml
-url: /config/media/alert.wav
+url: /media/alert.wav
 ```
 
-Any absolute path readable by the HA process works, including `/config/www/`, addon
-media directories, or NAS mounts.
+The path must be inside a folder Home Assistant allows: the media folder, `/config/www/`,
+or a folder you have added to `allowlist_external_dirs` in `configuration.yaml`. Anything
+else is refused with "path not allowed by Home Assistant configuration". A NAS mount works
+only if it sits under one of those, or is added to the allowlist.
 
 **4. External URL**
 
@@ -1502,7 +1511,7 @@ appear in the PTZ Preset select entity (case-sensitive).
 service: vigicam.goto_preset
 data:
   entity_id: camera.vigi_c540v_stream
-  preset: "Full Stable Yard"
+  preset: "Front Gate"
 ```
 
 #### Example: return to home position at night
@@ -1523,29 +1532,33 @@ automation:
 
 ### `vigicam.ptz_move_to` — Move to absolute position *(PTZ cameras only, requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
-Moves the camera to an absolute pan/tilt/zoom position. Useful for precise positioning
-without needing a named preset, or for building patrol automations across exact coordinates.
+Moves the camera to a pan/tilt/zoom position. Useful for positioning without a named preset,
+or for patrol automations that step through fixed positions.
+
+All three values are **normalised from -1.0 to 1.0 across the camera's range — they are not
+degrees**. Values outside that range are rejected.
 
 ```yaml
 service: vigicam.ptz_move_to
 data:
   entity_id: camera.vigi_c540v_stream
-  pan: 120.0    # horizontal angle (degrees)
-  tilt: -10.0   # vertical angle (degrees, negative = down)
-  zoom: 1.0     # zoom level (1.0 = wide)
+  pan: 0.5     # -1.0 to 1.0 across the horizontal range
+  tilt: -0.1   # -1.0 to 1.0; negative = down
+  zoom: 0.0    # -1.0 (widest) to 1.0
 ```
 
-> **Tip:** Use the VIGI app's PTZ control to move the camera to the position you want,
-> then save it as a preset with `vigicam.ptz_save_preset`. Read back the saved preset's
-> pan/tilt/zoom to find the coordinate values for future `ptz_move_to` calls.
+> **Tip:** finding the right values takes some trial and error, because presets don't expose
+> their coordinates. For a position you'll reuse, it's usually easier to frame it in the VIGI
+> app, save it as a preset, and call `vigicam.goto_preset` instead.
 
 ---
 
 ### `vigicam.ptz_save_preset` — Save current position as a preset *(PTZ cameras only, requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
-Saves the camera's current position as a named preset. The preset name appears in the
-**PTZ Preset** select entity immediately after saving and can then be used with
-`vigicam.goto_preset`.
+Saves the camera's current position as a named preset, in slot `id` (1–8). Without an `id`,
+the first free slot is used — and **if all eight are in use, slot 1 is overwritten**. The new
+preset appears in the **PTZ Preset** select entity on the next poll (within about 30 seconds)
+and can then be used with `vigicam.goto_preset`.
 
 ```yaml
 service: vigicam.ptz_save_preset
@@ -1565,9 +1578,9 @@ automation:
     - service: vigicam.ptz_move_to
       data:
         entity_id: camera.vigi_c540v_stream
-        pan: 180.0
-        tilt: -5.0
-        zoom: 1.0
+        pan: 0.9
+        tilt: -0.05
+        zoom: 0.0
     - delay: "00:00:02"
     - service: vigicam.ptz_save_preset
       data:

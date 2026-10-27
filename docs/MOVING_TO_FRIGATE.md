@@ -64,6 +64,15 @@ Anywhere you use `camera.vigi_*_stream` in an automation action (e.g. `camera.re
 `camera.snapshot`, `camera.play_stream`), update the entity_id to Frigate's camera
 entity. Frigate creates a camera entity per configured camera.
 
+**Also repoint `vigicam.*` calls.** `vigicam.speak`, `play_file`, `ptz` and the other
+VIGICam services usually target `camera.vigi_*_stream` too, and that entity disappears when
+Camera Stream is turned off. They accept any entity of the camera, so change them to one
+that always exists, such as `sensor.vigi_*_ip_address`. Otherwise they silently do nothing.
+
+**Turning off Detection Events also removes** the **Loop Recording** binary sensor and the
+**Last Detection** image entity, not only the detection sensors. Update anything that uses
+them.
+
 ### Step 3 — Update automations that use motion/person/vehicle detection
 
 Replace VIGICam binary sensor triggers with the equivalent Frigate occupancy or
@@ -111,7 +120,8 @@ or with a warning icon). Update the trigger/condition entity to the Frigate equi
 **The "Frigate camera link lost" repair notice appeared**
 
 This can happen if you later remove or reconfigure Frigate. The notice guides you to
-re-enable Camera Stream and Detection Events in VIGICam. Follow the steps in the notice,
+re-enable Camera Stream and Detection Events in VIGICam. Detection is best-effort, so
+the notice may never appear even when Frigate is in use. Follow the steps in the notice,
 or dismiss it if you intentionally removed Frigate.
 
 **I want to go back to standalone VIGICam**

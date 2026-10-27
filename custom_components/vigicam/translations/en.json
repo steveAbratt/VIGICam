@@ -12,7 +12,7 @@
       },
       "name": {
         "title": "Name this camera",
-        "description": "The name pulled from the camera is shown below. You can change it to anything you like — this is how it will appear in Home Assistant.",
+        "description": "The name pulled from the camera is shown below. This names the integration entry. The device and its entity IDs use the name set on the camera itself — to change those, rename the device in Home Assistant afterwards.",
         "data": {
           "name": "Camera name"
         }

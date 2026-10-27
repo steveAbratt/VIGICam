@@ -23,7 +23,7 @@ blueprint:
 
 
     **Audio length limit:** The camera accepts a maximum of 15 seconds / 256 KB of audio
-    after conversion. Longer files will fail — check the HA log for details.
+    after conversion. Longer files are trimmed to fit and cut off.
 
 
     **Requirements:**
@@ -42,7 +42,6 @@ blueprint:
       description: The VIGI camera to play the audio through.
       selector:
         entity:
-          domain: camera
           integration: vigicam
     media_url:
       name: Audio file URL or path
@@ -92,7 +91,7 @@ blueprint:
       default: 1
       selector:
         number:
-          min: 0
+          min: 0.5
           max: 30
           step: 0.5
           unit_of_measurement: s
