@@ -15,7 +15,7 @@ VIGICam and Frigate cover different things:
 | On-camera AI detection (person, vehicle, intrusion, line crossing) | VIGICam — events come from the camera in real time via ONVIF |
 | Frigate AI detection (object recognition, zones, masks) | Frigate |
 | Camera controls (night vision, alarm, spotlight, speaker) | VIGICam — Frigate does not control camera hardware |
-| SD card sensors and recording status | VIGICam |
+| SD card sensors | VIGICam |
 | 24/7 continuous recording with motion clips | Frigate |
 | PTZ control | VIGICam |
 
@@ -87,7 +87,8 @@ disable those in VIGICam to avoid duplicates:
 > **on** for these zone-based sensors even though they turn off Motion and Person
 > Detected (which Frigate covers more accurately).
 
-4. Click **Submit** — the integration reloads immediately with the new configuration.
+4. Click **Submit**, then confirm the **Confirm entity removal** dialog. The integration
+   reloads with the new configuration.
 
 ### 4. Verify there are no duplicate entities
 
@@ -109,7 +110,8 @@ Even with both disabled, VIGICam continues to provide:
 - **Speaker** services (`vigicam.speak`, `vigicam.play_file`) — play audio through the camera
 - **PTZ** controls (PTZ cameras only) — pan/tilt/zoom, presets, patrol automations
 - **Privacy Mask** switch — blank the camera feed on demand
-- **SD card sensors** — used %, total, free, recording status
+- **SD card sensors** — used %, total, free (the **Loop Recording** sensor and the **Last
+  Detection** image belong to Detection Events and are removed with it)
 - **Status LED** switch
 - **Microphone/Speaker Mute** switches
 - **Diagnostic sensors** — firmware, IP, uptime
@@ -154,7 +156,7 @@ Pair them with Frigate's camera entity for a notification with a current picture
 
 ```yaml
 automation:
-  alias: "Intrusion detected — notify with Frigate clip"
+  alias: "Intrusion detected — notify with Frigate picture"
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_intrusion

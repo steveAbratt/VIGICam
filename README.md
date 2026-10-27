@@ -157,7 +157,9 @@ changes later, see [Troubleshooting](docs/USAGE.md#my-cameras-ip-address-changed
 
 1. **Settings → Devices & Services → + Add Integration**
 2. Search for **VIGI**
-3. Enter the camera's IP address, username (`admin`), password, and optionally a name
+3. Enter the camera's IP address, username (`admin`) and its **local** password — not your
+   TP-Link ID. On the next screen you can name the entry; the device and its entity IDs use
+   the name set on the camera itself
 4. Click **Submit** — credentials are validated before saving
 
 Repeat for each camera. Each appears as a separate HA device.

@@ -39,7 +39,7 @@ blueprint:
         trigger: {}
     camera_entity:
       name: Camera
-      description: The VIGI camera to play the audio through.
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off.
       selector:
         entity:
           integration: vigicam

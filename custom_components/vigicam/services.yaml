@@ -6,9 +6,10 @@ ptz:
     to stop it.
   fields:
     entity_id:
-      name: Camera entities
+      name: Cameras
       description: >
-        One or more camera entities to move (e.g. camera.vigi_c540v_stream).
+        Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off.
+        Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -55,8 +56,8 @@ ptz_stop:
   description: Stop all camera movement immediately.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more camera entities to stop.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -71,8 +72,8 @@ goto_preset:
   description: Move a PTZ camera to a named preset position.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more camera entities to move.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -99,8 +100,8 @@ speak:
     Requires HA 2024.6+ for tts.get_tts_audio response support.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more cameras to speak through.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -114,7 +115,7 @@ speak:
       description: >
         Text to speak. Supports Jinja2 templates. Keep under ~10 seconds of speech —
         the camera's hard limit is 15 seconds / 256 KB. A typical sentence is 3–5 seconds.
-        Longer audio is trimmed to fit, so it plays but cuts off; keep spoken messages to about 10 seconds.
+        Longer audio is trimmed and cuts off.
       required: true
       example: "Motion detected at the front gate"
       selector:
@@ -165,8 +166,8 @@ play_file:
     The camera hard limit is 15 seconds / 256 KB; longer files are trimmed to fit and cut off.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more cameras to play the file on.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -179,8 +180,9 @@ play_file:
       name: Audio URL or path
       description: >
         URL of the audio file (e.g. http://192.168.1.x:8123/local/alert.wav for a file
-        in /config/www/) or an absolute file path on the HA host (e.g. /config/media/alert.wav).
-        Files must be ≤15 seconds when converted to 8 kHz mono — roughly 256 KB.
+        in /config/www/) or a file path on the HA host inside an allowed folder
+        (e.g. /media/alert.wav; /config/media/ on a Core install). Audio longer than
+        15 seconds is trimmed and cuts off.
       required: true
       selector:
         text:
@@ -221,8 +223,8 @@ upload_audio:
     Typical use: generate TTS audio, upload to camera, play back on-site.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more cameras to upload audio to.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -269,8 +271,8 @@ play_audio:
     number entity.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more cameras to play audio on.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -313,8 +315,8 @@ delete_audio:
     uploading new content, or to clear a slot no longer in use.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more cameras to delete audio from.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -336,13 +338,13 @@ delete_audio:
 ptz_move_to:
   name: PTZ Move To
   description: >
-    Move a PTZ camera to a pan/tilt/zoom position. All three values are normalised
-    from -1.0 to 1.0 across the camera's range — they are not degrees.
+    Move a PTZ camera to an absolute pan/tilt/zoom position. All three values run
+    from -1.0 to 1.0 — they are not degrees.
     Requires OpenAPI to be enabled on the camera.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more camera entities.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -350,7 +352,7 @@ ptz_move_to:
           multiple: true
     pan:
       name: Pan
-      description: Horizontal position, -1.0 to 1.0.
+      description: Horizontal position.
       required: true
       selector:
         number:
@@ -360,7 +362,7 @@ ptz_move_to:
           mode: box
     tilt:
       name: Tilt
-      description: Vertical position, -1.0 to 1.0 (negative is down).
+      description: Vertical position.
       required: true
       selector:
         number:
@@ -370,7 +372,7 @@ ptz_move_to:
           mode: box
     zoom:
       name: Zoom
-      description: Zoom, -1.0 (widest) to 1.0.
+      description: Zoom. Leaving it out sends 0.0, which moves the zoom.
       default: 0.0
       selector:
         number:
@@ -387,8 +389,8 @@ ptz_save_preset:
     Requires OpenAPI to be enabled on the camera.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more camera entities.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:
@@ -416,8 +418,8 @@ ptz_delete_preset:
     Delete a preset by name. Requires OpenAPI to be enabled on the camera.
   fields:
     entity_id:
-      name: Camera entities
-      description: One or more camera entities.
+      name: Cameras
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off. Several cameras can be chosen.
       required: true
       selector:
         entity:

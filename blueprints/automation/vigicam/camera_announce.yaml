@@ -21,8 +21,8 @@ blueprint:
 
     **Audio length limit:** The camera accepts a maximum of 15 seconds / 256 KB of audio.
     Keep messages to around 10 seconds or less to be safe. A typical spoken sentence is
-    3–5 seconds. Messages that exceed the limit are trimmed to fit and cut off (check the HA log for
-    details).
+    3–5 seconds. Messages that exceed the limit are trimmed at 15 seconds and cut off,
+    with no log message.
 
 
     **Example messages:**
@@ -40,7 +40,7 @@ blueprint:
         trigger: {}
     camera_entity:
       name: Camera
-      description: The VIGI camera to speak through.
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off.
       selector:
         entity:
           integration: vigicam

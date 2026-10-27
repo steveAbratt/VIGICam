@@ -347,7 +347,7 @@ camera actually reports.
 | Option | What it does |
 |--------|-------------|
 | Auto (motion-triggered) | Camera decides when to switch to IR, triggered by motion |
-| Colour (motion-triggered) | Colour image with the spotlight, switched on by motion |
+| Colour (motion-triggered) | Colour image with the spotlight when a person or vehicle is detected (newer firmware calls this Human/Vehicle-Triggered Full-Color) |
 | IR Always On | Infrared always active — black and white image at all times |
 | Spotlight Always On | White-light spotlight always on — colour image in the dark |
 | Auto Switch | Camera switches automatically between day and night profiles |
@@ -365,8 +365,10 @@ alongside a read-only status field):
 | Off | No IR or spotlight — camera image in available light only |
 | Custom | Whatever schedule is configured in the camera's own web UI |
 
-Models with no white LED should show only the four options that don't
-need one: Auto IR, IR Always On, Off and Custom.
+Models with no white LED should show only the four options that don't need one: Auto IR,
+IR Always On, Off and Custom. A C340i owner reports seeing all seven
+([#78](https://github.com/steveAbratt/VIGICam/issues/78)) — if yours does, pick one of those
+four.
 
 > **Why the split matters.** On the newer firmware the camera reports *two* night-vision
 > fields: the writable preference and a read-only status saying which emitter is currently
@@ -926,7 +928,7 @@ automation:
 ### Area Exit *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Fires when a person or vehicle exits a configured virtual area. Mirrors Area Entry
-Detected but triggers on departure. Useful for detecting when a vehicle leaves a
+but triggers on departure. Useful for detecting when a vehicle leaves a
 monitored zone.
 
 #### Example: notify when a vehicle leaves the property
@@ -1223,8 +1225,8 @@ message: "{{ now().strftime('%-I:%M %p') }} — person detected at the front doo
 ```
 
 **Limits:** Keep messages to around 10 seconds or less. The camera's hard limit is
-15 seconds / 256 KB of audio. Longer messages are **trimmed to fit and cut off
-mid-sentence**, with a warning in the log. A typical spoken sentence is 3–5 seconds.
+15 seconds / 256 KB of audio. Longer messages are **trimmed at 15 seconds and cut off
+mid-sentence**, without a log message. A typical spoken sentence is 3–5 seconds.
 
 ---
 
@@ -1249,7 +1251,7 @@ data:
 ```
 
 **Limit:** The camera hard limit is 15 seconds / 256 KB after conversion. Longer files are
-trimmed to fit and cut off, with a warning in the log. A 15-second clip at 8 kHz mono
+trimmed at 15 seconds and cut off, without a log message. A 15-second clip at 8 kHz mono
 16-bit is around 240 KB.
 
 ---
@@ -1532,24 +1534,26 @@ automation:
 
 ### `vigicam.ptz_move_to` — Move to absolute position *(PTZ cameras only, requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
-Moves the camera to a pan/tilt/zoom position. Useful for positioning without a named preset,
-or for patrol automations that step through fixed positions.
+Moves the camera to an absolute pan/tilt/zoom position. Useful for positioning without a
+named preset, or for patrol automations that step through fixed positions.
 
-All three values are **normalised from -1.0 to 1.0 across the camera's range — they are not
-degrees**. Values outside that range are rejected.
+All three values run from **-1.0 to 1.0 — they are not degrees**, and values outside that
+range are rejected. `zoom` is optional, but leaving it out sends `0.0`, which moves the zoom
+rather than leaving it where it is.
 
 ```yaml
 service: vigicam.ptz_move_to
 data:
   entity_id: camera.vigi_c540v_stream
-  pan: 0.5     # -1.0 to 1.0 across the horizontal range
-  tilt: -0.1   # -1.0 to 1.0; negative = down
-  zoom: 0.0    # -1.0 (widest) to 1.0
+  pan: 0.5     # -1.0 to 1.0
+  tilt: -0.1   # -1.0 to 1.0
+  zoom: 0.0    # -1.0 to 1.0
 ```
 
-> **Tip:** finding the right values takes some trial and error, because presets don't expose
-> their coordinates. For a position you'll reuse, it's usually easier to frame it in the VIGI
-> app, save it as a preset, and call `vigicam.goto_preset` instead.
+> **Tip:** finding the right values takes some trial and error, because VIGICam doesn't
+> currently show a preset's coordinates (the camera does report them). For a position you'll
+> reuse, it's usually easier to frame it in the VIGI app, save it as a preset, and call
+> `vigicam.goto_preset` instead.
 
 ---
 
@@ -1557,8 +1561,9 @@ data:
 
 Saves the camera's current position as a named preset, in slot `id` (1–8). Without an `id`,
 the first free slot is used — and **if all eight are in use, slot 1 is overwritten**. The new
-preset appears in the **PTZ Preset** select entity on the next poll (within about 30 seconds)
-and can then be used with `vigicam.goto_preset`.
+preset appears in the **PTZ Preset** select entity on the next poll (within about 30 seconds).
+**Until then the whole preset list is briefly empty**, so a `vigicam.goto_preset` straight after
+saving or deleting will report the preset as not found. Wait for the next poll first.
 
 ```yaml
 service: vigicam.ptz_save_preset
@@ -1586,6 +1591,7 @@ automation:
       data:
         entity_id: camera.vigi_c540v_stream
         name: "Night Watch"
+        id: 8              # a fixed slot, so a nightly run doesn't fill and then overwrite slot 1
 ```
 
 ---
@@ -1639,7 +1645,7 @@ After importing the blueprint:
 | Field | What to set |
 |-------|------------|
 | **Trigger** | Whatever should fire the announcement — a motion sensor going `on`, a time pattern, a button press, etc. |
-| **Camera** | Select your VIGI camera entity |
+| **Camera** | Any entity of the camera — its IP Address sensor works if Camera Stream is off |
 | **Announcement message** | The text to speak. Can be a fixed phrase or a Jinja2 template. **Keep under ~10 seconds of speech** (camera hard limit: 15 s / 256 KB). |
 | **TTS engine** | Your configured TTS entity (e.g. `tts.cloud` for Nabu Casa, `tts.piper` for local Piper) |
 | **Language** | Optional language code (e.g. `en-GB`). Leave blank for engine default. |
@@ -1698,8 +1704,8 @@ Copy the `blueprints/` folder from the repository into your HA config directory
 3. The URL will look like: `http://192.168.1.x:8123/media/local/alert.wav`
 4. Paste this into the **Audio file URL** field in the blueprint
 
-Files in the HA `www/` folder (`/local/` URLs) and absolute file paths on the HA host
-also work — see [vigicam.play_file](#vigicamplay_file--play-a-pre-recorded-audio-file) for all options.
+Files in the HA `www/` folder (`/local/` URLs) and file paths on the HA host inside an
+allowed folder also work — see [vigicam.play_file](#vigicamplay_file--play-a-pre-recorded-audio-file) for all options.
 
 ---
 
@@ -1714,7 +1720,7 @@ After importing the blueprint:
 | Field | What to set |
 |-------|------------|
 | **Trigger** | Whatever should fire the playback — a motion sensor, a button press, a time pattern, etc. |
-| **Camera** | Select your VIGI camera entity |
+| **Camera** | Any entity of the camera — its IP Address sensor works if Camera Stream is off |
 | **Audio file URL or path** | URL from the media browser, a `/local/` URL, or an absolute file path on the HA host |
 | **Audio slot** | Slot to upload to (101–103). Slot 101 is fine unless you need to keep a fixed sound separate from TTS. |
 | **Repeat count** | How many times to play the clip. Default 1. |

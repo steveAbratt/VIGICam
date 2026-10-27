@@ -14,37 +14,26 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ### Documentation
 
-Documentation and user-facing text only; no behaviour changes.
+No code changes. Corrections to docs, `services.yaml`, the setup dialog text and the blueprints.
 
-- **`vigicam.ptz_move_to` examples used degrees** (`pan: 120.0`), which the service rejects —
-  all three values are -1.0 to 1.0. Corrected everywhere, and the tip suggesting you could
-  read coordinates back from a preset (you can't) is replaced.
-- **Six automation examples used entity IDs that don't exist** (`..._audio_anomaly_detected`
-  and similar); a state trigger on a missing entity never fires and never errors. They now
-  match the entities actually created.
-- **The PTZ preset and move services now have proper forms** in Developer Tools and the
-  automation editor (`ptz_move_to`, `ptz_save_preset`, `ptz_delete_preset` had none).
-  `ptz_save_preset` documents that without an `id`, a full set of eight presets overwrites
-  slot 1.
-- **Both blueprints' camera pickers were empty for Frigate users** with Camera Stream off; the
-  same filter was already removed from the services in 0.7.4. Their pause minimum now matches
-  the service (0.5 s), so the slider can no longer pick a value that errors.
-- **The Frigate guides broke every speak, play-file and PTZ example**: turning off Camera
-  Stream removes the entity those examples target. The guides now say to repoint `vigicam.*`
-  calls first, that Detection Events also removes Loop Recording and Last Detection, and that
-  individual sensors can be disabled. Frigate auto-detection is described as best-effort, and
-  the README no longer claims entities merge onto the Frigate device.
-- **Long audio is trimmed, not refused** — the docs, `services.yaml` and blueprints said it
-  would fail and play nothing.
-- **Media paths**: `/media/` on HA OS, Supervised and Container, `/config/media/` only on Core;
-  local paths must be inside an allowed folder.
-- `play_audio`'s repeat slider now stops at 10, the service's limit, and no longer claims to
-  play once per call; the `ptz` duration slider allows the full 60 s.
-- Smaller corrections: spotlight brightness levels, IP Address and Connection Type are not
-  hidden by default, Intrusion is always created, a missing older-firmware night vision mode,
-  the C340i white-LED claim, the setup name step, the SD repair's non-existent Fix button, and
-  example location names.
-- `docs/TESTING.md` known-gaps list brought up to date.
+- **Examples that could never work are fixed.** `vigicam.ptz_move_to` takes -1.0 to 1.0, not
+  degrees. Six automation examples used binary-sensor entity IDs that don't exist; a trigger on
+  a missing entity never fires and never errors.
+- **The PTZ move and preset services now have forms** in Developer Tools and the automation
+  editor. `ptz_save_preset` documents that with all eight slots full, slot 1 is overwritten;
+  `ptz_move_to` that leaving `zoom` out sends 0.0.
+- **The Frigate guides no longer break your announcements.** Turning off Camera Stream removes
+  the entity every `vigicam.*` example targets; the guides now say to repoint those calls
+  first. Frigate auto-detection is described as best-effort, and the README no longer claims
+  entities merge onto the Frigate device.
+- **Blueprints:** the camera picker is no longer empty for Frigate users, and the pause slider
+  can no longer pick a value the service rejects. **Re-import the blueprints to pick this up**
+  — Home Assistant keeps the copy made when you first imported them.
+- Smaller corrections: long audio is trimmed silently at 15 seconds rather than refused; media
+  paths (`/media/` except on Core installs); slider limits matching the services; spotlight
+  brightness levels; which diagnostic sensors are hidden by default; Intrusion is always
+  created; the C340i white-LED claim; the setup name step; the SD repair's non-existent Fix
+  button; example location names; `docs/TESTING.md` known gaps.
 
 ---
 

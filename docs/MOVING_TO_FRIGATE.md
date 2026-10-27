@@ -37,7 +37,11 @@ those entities will break — you will need to update them to point at Frigate's
 instead.
 
 Common entities to check in automations:
-- `camera.vigi_*_stream` — will be replaced by Frigate's camera entity
+- `camera.vigi_*_stream` — will be replaced by Frigate's camera entity, **except** in
+  `vigicam.*` service calls (`speak`, `play_file`, `ptz`, `goto_preset` and the rest). Those
+  must point at a VIGICam entity such as `sensor.vigi_*_ip_address`, not at Frigate's camera,
+  and a broken one shows no orange warning and no failed trace — search your automations and
+  scripts for `vigicam.` to find them.
 - `binary_sensor.vigi_*_motion` — will be replaced by Frigate's occupancy sensor
 - `binary_sensor.vigi_*_person_detected` — will be replaced by Frigate's person occupancy sensor
 - `binary_sensor.vigi_*_vehicle_detected` — will be replaced by Frigate's car occupancy sensor
@@ -90,7 +94,7 @@ Once all automations have been updated:
 3. Turn off **Camera Stream** (Frigate handles this now)
 4. Turn off **Detection Events** — *only if you are not using any zone-based sensors*
    (intrusion, line crossing, loitering, audio anomaly, scene change, area entry/exit)
-5. Click **Submit**
+5. Click **Submit**, then confirm the **Confirm entity removal** dialog
 
 VIGICam reloads immediately. The stream entity and detection binary sensors are removed.
 Frigate's entities take over.
