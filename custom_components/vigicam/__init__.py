@@ -885,8 +885,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if want_detection:
         await onvif_events.async_start()
+        coordinator.stop_on_auth_failure.append(onvif_events.async_stop)
         if openapi_events:
             await openapi_events.async_start()
+            coordinator.stop_on_auth_failure.append(openapi_events.async_stop)
 
     # Watch for SD card transitions during normal operation.
     _prev_sd: dict[str, bool] = {"has_sd": has_sd_card}

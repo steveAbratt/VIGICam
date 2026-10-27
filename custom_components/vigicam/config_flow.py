@@ -7,6 +7,7 @@ import urllib.parse
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -262,7 +263,10 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 unique_id = (info.get("mac") or ip).replace(":", "").lower()
                 await self.async_set_unique_id(unique_id)
-                self._abort_if_unique_id_configured()
+                # updates= lets a camera whose DHCP address changed be fixed by adding it
+                # again at the new IP: the existing entry is updated and reloaded in place,
+                # keeping its entities, instead of aborting with "already configured".
+                self._abort_if_unique_id_configured(updates={CONF_HOST: ip})
 
                 self._host = ip
                 self._username = username
@@ -337,11 +341,6 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Explicit merged data rather than data_updates=, which is only
                 # supported on newer Home Assistant. CONF_HOST is carried over
                 # unchanged — reauth replaces credentials, never the address.
-                # async_update_entry + abort, NOT async_update_reload_and_abort: the
-                # entry already has an update listener that reloads on any change, so the
-                # combined helper reloaded twice — setup, unload, setup. On a camera that
-                # has just been unreachable that extra teardown is the one most likely to
-                # leak an ONVIF subscription, which is what #95 was about.
                 self.hass.config_entries.async_update_entry(
                     entry,
                     data={
@@ -351,6 +350,14 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL: verify_ssl,
                     },
                 )
+                # Reload explicitly when the entry is not loaded. The usual reauth case is a
+                # password changed and HA restarted, so setup failed before reaching the line
+                # that registers the update listener — relying on that listener (as an
+                # unreleased b5 draft did) left the camera "failed" after the dialog said it
+                # had reconnected. When the entry IS loaded the listener reloads it, so
+                # scheduling here too would reload twice.
+                if entry.state is not ConfigEntryState.LOADED:
+                    self.hass.config_entries.async_schedule_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
 
         return self.async_show_form(

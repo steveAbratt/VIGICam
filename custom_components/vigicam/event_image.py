@@ -184,7 +184,13 @@ async def _ws_download_h264(
 
         while True:
             line = await asyncio.wait_for(reader.readline(), timeout=5)
-            if line == b"\r\n":
+            if not line:
+                # EOF. readline() returns b"" immediately without suspending, so the
+                # timeout above never fires — without this check a camera that closed the
+                # connection mid-handshake spun this loop synchronously and froze the
+                # whole Home Assistant event loop.
+                return None
+            if line in (b"\r\n", b"\n"):
                 break
 
         chunks: list[bytes] = []

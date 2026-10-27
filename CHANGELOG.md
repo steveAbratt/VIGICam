@@ -28,9 +28,9 @@ the fixes in b4 did not work, and one of them would have passed a hardware test.
   changed while Home Assistant was running therefore retried forever in silence. It happened
   to work on PTZ models only, because the preset fetch let the error through.
 
-  An OpenAPI authentication failure now routes to the same prompt; previously it emptied four
-  readings silently, which the write path then read as "OpenAPI is not in charge" and sent
-  changes to the API that was also failing.
+  The event listeners now stop when credentials are rejected, rather than retrying the old
+  password every fifteen seconds while you are being asked for the new one — on cameras that
+  lock an account after repeated failures, that could get the correct password refused.
 
 - **Re-authentication could bind credentials to the wrong camera.** It verified the password
   against the stored address without checking the camera's identity. On a network where
@@ -38,17 +38,35 @@ the fixes in b4 did not work, and one of them would have passed a hardware test.
   succeed against a different device and silently repoint every entity. It now compares the
   camera's MAC against the one the entry was created with and refuses if they differ.
 
-- **Re-authentication reloaded the camera twice** on success, and could raise an error if the
-  camera had been removed while the prompt was open.
+- **Re-authentication now reconnects the camera after a restart.** The most common case — a
+  password changed and Home Assistant restarted — fails during setup, and the camera has to be
+  reloaded explicitly once the new password is accepted. It also no longer raises an error if
+  the camera was removed while the prompt was open.
+
+- **A camera whose IP address changed can be recovered.** Add it again at its new address:
+  Home Assistant recognises it and updates the existing entry, keeping its entities. Previously
+  this aborted with "already configured" and there was no way to change the address.
+
+- **An unreachable camera now goes unavailable.** Every switch used to read "off" — motion
+  detection, privacy mask, alarm — while the entities stayed available, so automations acted
+  on invented state. A single failed storage read also no longer raises a spurious "SD card
+  missing" notice followed by a full reload.
+
+- **A camera closing the connection mid-handshake could freeze Home Assistant** on models with
+  event-image capture: the handshake loop spun without yielding at end-of-stream.
+
+- **Diagnostics now redact the camera's name under every key it appears in** (`dev_alias`,
+  `dev_name`, `alias`), not only `device_alias`.
 
 - **The ONVIF subscription was being renewed every few seconds** instead of hourly. The renew
   never re-read the new expiry time, so once inside the renewal window every poll was preceded
   by a renewal — a reporter's log showed one every nine seconds. A renewal the camera refuses
   is also no longer logged as a success.
 
-- **The event-push setup used the single-field payload that b4 established these cameras
-  reject**, so on affected firmware push notifications were never enabled and the OpenAPI
-  detection sensors never fired. It failed invisibly, at debug level.
+- **The event-push setup now sends the whole settings object**, matching what b4 does for the
+  detection toggles. Whether these setters reject single-field payloads is still a hypothesis
+  (`-10009` has been seen, its meaning is unconfirmed), so this is consistency rather than a
+  confirmed fix.
 
 - **`ONVIF subscribe failed` named no cause.** b4 fixed two of the three log lines with this
   problem and missed the one that fires when a camera is out of subscriptions — the fault it

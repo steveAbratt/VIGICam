@@ -31,6 +31,13 @@ TO_REDACT = {
     "dev_id",
     "device_alias",
     "device_name",
+    # The same naming under other keys. OpenAPI reports it as dev_alias — a public dump
+    # in #76 showed "VIGI C350 1.0_A12C", whose suffix looks like a MAC fragment — and the
+    # JSON API as dev_name / alias, which are the fields this integration reads the
+    # camera's name from. All three were leaking while the docs called the report safe.
+    "dev_alias",
+    "dev_name",
+    "alias",
     "camera_name",
     "fw_cur_id",
     "hw_id",
