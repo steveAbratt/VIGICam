@@ -262,11 +262,29 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             else:
                 unique_id = (info.get("mac") or ip).replace(":", "").lower()
-                await self.async_set_unique_id(unique_id)
-                # updates= lets a camera whose DHCP address changed be fixed by adding it
-                # again at the new IP: the existing entry is updated and reloaded in place,
-                # keeping its entities, instead of aborting with "already configured".
-                self._abort_if_unique_id_configured(updates={CONF_HOST: ip})
+                existing = await self.async_set_unique_id(unique_id)
+                if existing is not None and existing.source != config_entries.SOURCE_IGNORE:
+                    # Same camera (by MAC) added again — most likely its IP changed. Update
+                    # the entry in place, credentials included since they were just proven,
+                    # so its entities survive. Not updates=: HA then reloads only LOADED or
+                    # SETUP_RETRY entries (missing SETUP_ERROR) and double-reloads alongside
+                    # our update listener, which it deprecates from HA 2026.12.
+                    changed = self.hass.config_entries.async_update_entry(
+                        existing,
+                        data={
+                            **existing.data,
+                            CONF_HOST: ip,
+                            CONF_USERNAME: username,
+                            CONF_PASSWORD: password,
+                            CONF_VERIFY_SSL: verify_ssl,
+                        },
+                    )
+                    # LOADED: the update listener reloads. Otherwise nothing will.
+                    if changed and existing.state is not ConfigEntryState.LOADED:
+                        self.hass.config_entries.async_schedule_reload(existing.entry_id)
+                    return self.async_abort(
+                        reason="host_updated" if changed else "already_configured"
+                    )
 
                 self._host = ip
                 self._username = username
@@ -341,7 +359,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Explicit merged data rather than data_updates=, which is only
                 # supported on newer Home Assistant. CONF_HOST is carried over
                 # unchanged — reauth replaces credentials, never the address.
-                self.hass.config_entries.async_update_entry(
+                changed = self.hass.config_entries.async_update_entry(
                     entry,
                     data={
                         **entry.data,
@@ -350,13 +368,10 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL: verify_ssl,
                     },
                 )
-                # Reload explicitly when the entry is not loaded. The usual reauth case is a
-                # password changed and HA restarted, so setup failed before reaching the line
-                # that registers the update listener — relying on that listener (as an
-                # unreleased b5 draft did) left the camera "failed" after the dialog said it
-                # had reconnected. When the entry IS loaded the listener reloads it, so
-                # scheduling here too would reload twice.
-                if entry.state is not ConfigEntryState.LOADED:
+                # The update listener reloads only a LOADED entry whose data changed. Not
+                # loaded (setup failed before the listener existed), or the same password
+                # re-entered after a lockout: nothing else will reload, so do it here.
+                if not changed or entry.state is not ConfigEntryState.LOADED:
                     self.hass.config_entries.async_schedule_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
 

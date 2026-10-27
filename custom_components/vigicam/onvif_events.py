@@ -102,6 +102,7 @@ class VIGIOnvifEvents:
         self._timeout_warned: bool = False
         self._task: asyncio.Task | None = None
         self._session: aiohttp.ClientSession | None = None
+        self._stop_task: asyncio.Future | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -132,6 +133,17 @@ class VIGIOnvifEvents:
         )
 
     async def async_stop(self) -> None:
+        """Stop polling and release resources. Safe to call concurrently.
+
+        It runs on an auth failure and again at unload; a second caller arriving while the
+        first is mid-Unsubscribe would otherwise close the session under it and orphan the
+        subscription on the camera.
+        """
+        if self._stop_task is None:
+            self._stop_task = asyncio.ensure_future(self._do_stop())
+        await asyncio.shield(self._stop_task)
+
+    async def _do_stop(self) -> None:
         """Stop polling and release resources."""
         if self._task and not self._task.done():
             self._task.cancel()

@@ -16,8 +16,15 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [0.7.5b5] - 2026-10-27
 
-Findings from a second multi-persona review, this time of the b2→b4 changes themselves. Two of
-the fixes in b4 did not work, and one of them would have passed a hardware test.
+**What you'll notice:** a camera that can't be reached now shows its entities as
+**unavailable**, instead of every switch quietly reading "off". If an automation relied on
+those switches going "off" during an outage, it will no longer fire — trigger on `unavailable`
+instead. And a camera whose IP address changed can now be recovered without losing anything:
+add it again at the new address, without deleting it first (see *My camera's IP address
+changed* in Troubleshooting).
+
+Findings from two review rounds of the b2→b4 changes. Two of b4's fixes did not work, and one
+of them would have passed a hardware test.
 
 ### Fixed
 
@@ -38,25 +45,27 @@ the fixes in b4 did not work, and one of them would have passed a hardware test.
   succeed against a different device and silently repoint every entity. It now compares the
   camera's MAC against the one the entry was created with and refuses if they differ.
 
-- **Re-authentication now reconnects the camera after a restart.** The most common case — a
-  password changed and Home Assistant restarted — fails during setup, and the camera has to be
-  reloaded explicitly once the new password is accepted. It also no longer raises an error if
-  the camera was removed while the prompt was open.
+- **Re-authentication reloads the camera once instead of twice**, still reloads when you
+  re-enter the same password (after an account lockout, for instance), and no longer raises an
+  error if the camera was removed while the prompt was open. If credentials recover without a
+  reauth, the camera reloads to restart its event listeners.
 
-- **A camera whose IP address changed can be recovered.** Add it again at its new address:
-  Home Assistant recognises it and updates the existing entry, keeping its entities. Previously
-  this aborted with "already configured" and there was no way to change the address.
+- **A camera whose IP address changed can be recovered.** Add it again at its new address —
+  without deleting it first. Home Assistant recognises it by MAC address and moves the existing
+  entry, credentials included, keeping its entities. Previously this aborted with "already
+  configured" and there was no way to change the address.
 
 - **An unreachable camera now goes unavailable.** Every switch used to read "off" — motion
   detection, privacy mask, alarm — while the entities stayed available, so automations acted
-  on invented state. A single failed storage read also no longer raises a spurious "SD card
-  missing" notice followed by a full reload.
+  on invented state. The log now names which camera stopped responding. A failed storage
+  read — during polling or at startup — no longer raises a spurious "SD card missing" notice
+  followed by a full reload.
 
 - **A camera closing the connection mid-handshake could freeze Home Assistant** on models with
   event-image capture: the handshake loop spun without yielding at end-of-stream.
 
-- **Diagnostics now redact the camera's name under every key it appears in** (`dev_alias`,
-  `dev_name`, `alias`), not only `device_alias`.
+- **Diagnostics now redact the camera's name as OpenAPI reports it** (`dev_alias`, seen leaking
+  in a public report), plus `dev_name` and `alias` as a precaution.
 
 - **The ONVIF subscription was being renewed every few seconds** instead of hourly. The renew
   never re-read the new expiry time, so once inside the renewal window every poll was preceded
@@ -97,7 +106,8 @@ the fixes in b4 did not work, and one of them would have passed a hardware test.
   intermittently, what the log looks like, that other ONVIF clients share a small fixed budget,
   and that cameras need power-cycling after updating because the stranded subscriptions cannot
   be released by the new code.
-- **A section on changing a camera's password**, and the warning not to delete and re-add.
+- **Sections on changing a camera's password and on a camera whose IP address changed**, and
+  why deleting and re-adding a camera is never the fix.
 - **The README and entity reference no longer claim v0.7.5b1 fixed the Person / Vehicle
   toggles.** It made the refusal visible; the toggles are still unconfirmed on the affected
   firmware. Both now say so and link to the issue.

@@ -1852,11 +1852,31 @@ a subscription exists, not that polling is succeeding. The log is the reliable s
 ### I changed my camera's password
 
 Home Assistant notices and asks for the new one: Settings → **Devices & Services** →
-**VIGICam**, on the camera flagged as needing attention. Enter the camera's **local** admin
-password — not your TP-Link ID. Your entities, history and automations are kept.
+**VIGI & InSight Cameras**, on the camera flagged as needing attention. Enter the camera's
+**local** admin password — not your TP-Link ID. Your entities, history and automations are
+kept.
 
-**Do not delete and re-add the camera instead.** That assigns new entity IDs and breaks every
-automation and dashboard card referencing it.
+### My camera's IP address changed
+
+If your router gave the camera a new address, all of its entities show **unavailable** and
+the log reports `Error fetching vigicam <old address> data: Camera not responding`. To fix it,
+**add the camera again at its new address — do not delete the old one first.**
+
+1. Find the new address in your router's client list or in the VIGI app.
+2. Settings → **Devices & Services** → **+ Add Integration** → **VIGI & InSight Cameras**, and
+   enter the new IP address, username and password.
+3. Home Assistant recognises the camera by its MAC address and moves the existing entry to the
+   new address. Its entities, history and automations are kept, and it reconnects within a few
+   seconds.
+
+To stop this happening again, give each camera a fixed address (a DHCP reservation) in your
+router.
+
+### Do not delete and re-add a camera to fix it
+
+Deleting a camera discards its entity customisations — renamed entity IDs, areas, disabled
+entities — and the automations and dashboard cards built on them. Both problems above have a
+fix that keeps everything.
 
 ### Getting a diagnostics report
 

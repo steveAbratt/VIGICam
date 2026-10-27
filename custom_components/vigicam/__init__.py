@@ -31,7 +31,7 @@ from .const import (
     REPAIRS_SD_CARD_MISSING,
 )
 from .frigate import detect_frigate_camera
-from .coordinator import VIGICoordinator, _detect_sd_card
+from .coordinator import VIGICoordinator
 from .onvif_events import VIGIOnvifEvents
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
 from .openapi import VIGIOpenAPI, try_openapi
@@ -817,12 +817,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         has_ptz=has_ptz,
         has_openapi=has_openapi,
         openapi=openapi,
+        config_entry=entry,
     )
     await coordinator.async_config_entry_first_refresh()
 
     # Determine SD card presence from first-refresh storage data.
-    has_sd_card = _detect_sd_card(coordinator.data.get("storage", {}))
-    coordinator.has_sd_card = has_sd_card
+    # From the refresh itself: None if the storage read failed, which the transition
+    # listener below ignores rather than treating as a removal.
+    has_sd_card = bool(coordinator.has_sd_card)
 
     # Clear any stale SD card repair issue if the card is now present.
     if has_sd_card:
@@ -891,15 +893,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinator.stop_on_auth_failure.append(openapi_events.async_stop)
 
     # Watch for SD card transitions during normal operation.
-    _prev_sd: dict[str, bool] = {"has_sd": has_sd_card}
+    _prev_sd: dict[str, bool | None] = {"has_sd": coordinator.has_sd_card}
 
     @callback
     def _on_coordinator_update() -> None:
         now_has_sd = coordinator.has_sd_card
         was_has_sd = _prev_sd["has_sd"]
-        if was_has_sd == now_has_sd:
+        if was_has_sd == now_has_sd or now_has_sd is None:
             return
         _prev_sd["has_sd"] = now_has_sd
+        if was_has_sd is None:
+            return  # first successful read after a failed one: not a transition
         if not now_has_sd:
             _LOGGER.info("VIGICam: SD card removed from %s — raising repair notice", ip)
             hass.async_create_task(
