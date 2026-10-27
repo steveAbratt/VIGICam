@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
@@ -13,6 +14,7 @@ from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
     from .openapi import VIGIOpenAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,45 +32,62 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         camera: VIGICamera,
         *,
         has_ptz: bool = False,
-        has_sd_card: bool = False,
         has_openapi: bool = False,
         openapi: "VIGIOpenAPI | None" = None,
+        config_entry: "ConfigEntry",
     ) -> None:
         super().__init__(
             hass,
             _LOGGER,
-            name=DOMAIN,
+            config_entry=config_entry,
+            name=f"{DOMAIN} {camera.host}",  # per camera, so failures name which one
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.camera = camera
         self.has_ptz = has_ptz
-        self.has_sd_card = has_sd_card
+        # None until a storage read answers (live value and diagnostics only). The setup
+        # SD listener deliberately uses a bool baseline: see _on_coordinator_update.
+        self.has_sd_card: bool | None = None
         self.has_openapi = has_openapi
         self.openapi: VIGIOpenAPI | None = openapi
         self.presets: list[dict] = []
+        # Called before raising ConfigEntryAuthFailed so the listeners stop retrying the
+        # old password (account lockout); a later successful poll reloads the entry.
+        self.stop_on_auth_failure: list[Callable[[], Awaitable[None]]] = []
+        self._auth_failed = False
         self.last_preset: str | None = None  # last preset selected from HA; None = unknown
         self._openapi_recheck_counter: int = 0
         self._preset_refresh_counter: int = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            return await self._fetch_all()
+            data = await self._fetch_all()
         except VIGIAuthError as exc:
-            # ConfigEntryAuthFailed, not UpdateFailed: this makes HA start the reauth
-            # flow and show a "needs attention" card. As UpdateFailed, a password
-            # changed while HA was running retried every 30s forever, logging a
-            # generic communication error and never telling the user their
-            # credentials were the problem.
+            self._auth_failed = True
+            for stop in self.stop_on_auth_failure:
+                self.hass.async_create_task(stop())
             raise ConfigEntryAuthFailed(f"Authentication error: {exc}") from exc
         except VIGIError as exc:
             raise UpdateFailed(f"Camera communication error: {exc}") from exc
+        if self._auth_failed:
+            self._auth_failed = False
+            # Recovered without a reauth reload: the listeners were stopped, so reload to
+            # restart them rather than leave detection sensors "off" with nothing feeding them.
+            if self.stop_on_auth_failure:
+                self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+        return data
 
     async def _fetch_all(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
+        answered: set[str] = set()
 
         async def safe_get(key: str, coro):
             try:
                 results[key] = await coro
+                answered.add(key)
+            except VIGIAuthError:
+                # Not a VIGIError subclass: must escape so the entry goes to reauth.
+                raise
             except VIGIError as exc:
                 _LOGGER.debug("Could not fetch %s: %s", key, exc)
                 results[key] = {}
@@ -77,6 +96,9 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 results[key] = {}
 
         await safe_get("device_info", self.camera.get_device_info())
+        if "device_info" not in answered:
+            # Unreachable: fail the poll so entities go unavailable instead of reading "off".
+            raise UpdateFailed("Camera not responding")
         await safe_get("motion", self.camera.get_motion_detection())
         await safe_get("image_switch", self.camera.get_image_switch())
         await safe_get("image_common", self.camera.get_image_common())
@@ -107,6 +129,9 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     raw = await self.openapi.call(method)
                     results[key] = raw.get("result", {})
                 except Exception as exc:  # noqa: BLE001
+                    # Includes VIGIOpenAPIAuthError: stok failures are often transient, and
+                    # reauth only validates the JSON API. Escalating this was tried in a b5
+                    # draft and stopped all polling on any busy or malformed reply.
                     _LOGGER.debug("OpenAPI %s failed: %s", method, exc)
                     results[key] = {}
 
@@ -115,9 +140,9 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await safe_openapi("openapi_people", "getPeopleDetectionSwitch")
             await safe_openapi("openapi_vehicle", "getVehicleDetectionSwitch")
 
-        # Update has_sd_card from live storage data on every refresh.
-        storage = results.get("storage", {})
-        self.has_sd_card = _detect_sd_card(storage)
+        # Only from a read that answered; a failed read must not look like a missing card.
+        if "storage" in answered:
+            self.has_sd_card = _detect_sd_card(results["storage"])
 
         # Periodically probe for OpenAPI becoming available.
         if not self.has_openapi:
@@ -131,7 +156,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _recheck_openapi(self) -> None:
         from .openapi import VIGIOpenAPI, try_openapi
 
-        ip = self.camera._ip
+        ip = self.camera.host
         if await try_openapi(ip, self.camera._username, self.camera._password):
             self.has_openapi = True
             self.openapi = VIGIOpenAPI(ip, self.camera._username, self.camera._password)

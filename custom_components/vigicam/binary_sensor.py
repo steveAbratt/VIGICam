@@ -223,7 +223,7 @@ class VIGICapabilityBinarySensor(VIGIEntity, BinarySensorEntity):
         return self._desc.key
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
         if self._desc.key == "cap_sd_card":
             return self.coordinator.has_sd_card
         if self._desc.key == "cap_onvif":

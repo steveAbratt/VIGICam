@@ -52,6 +52,10 @@ class VIGICamera:
         self._ha_session = session
         self._own_session: aiohttp.ClientSession | None = None
 
+    @property
+    def host(self) -> str:
+        return self._ip
+
     def _get_session(self) -> aiohttp.ClientSession:
         if self._ha_session is not None and not self._ha_session.closed:
             return self._ha_session

@@ -210,7 +210,10 @@ entity won't be created).
 > it retries through the other. Some firmware answers the OpenAPI *getter* while rejecting
 > the matching *setter*, which is what made these toggles spring back on earlier versions.
 >
-> Needs **v0.7.5b1 or later**. If a toggle still reverts after updating, see
+> **Still unresolved on some firmware.** v0.7.5b1 made the rejection visible in the log and
+> v0.7.5b4 sends the camera's whole settings object back rather than the single field, but
+> neither is confirmed to fix it — a C350 rejects the write with error `-10009`. If a toggle
+> reverts after updating, see
 > [Troubleshooting](#troubleshooting) — a debug log is the only way to see the camera's
 > reason for refusing.
 
@@ -975,7 +978,7 @@ write a single automation that works across cameras with different hardware.
 | **OpenAPI** | OpenAPI is enabled and reachable on port 20443 | OpenAPI disabled or not yet enabled on camera |
 | **Event Image Capture** | Camera saves a full-frame still to SD card at the moment of each detection event | SD card capture not configured; Last Detection will use RTSP fallback |
 | **SD Card** | An SD card is detected in the camera | No SD card fitted or card not readable |
-| **ONVIF Events** | Active ONVIF pull-point subscription running | ONVIF subscription failed or not yet established |
+| **ONVIF Events** | A pull-point subscription is currently held | No subscription — failed, or detection events are turned off. **Note this reports only that a subscription exists.** It can read `on` while polls are timing out and events are being missed, so check the log for `ONVIF poll error` / `ONVIF subscribe failed` as well |
 
 > **Note:** PTZ, OpenAPI, and Event Image Capture are detected once at startup and do not
 > change until the integration reloads. SD Card and ONVIF Events reflect live state and
@@ -1810,8 +1813,9 @@ Three different causes produce that same symptom, and they are worth telling apa
 **First, update.** Several of these have been fixed, and each fix needed a specific version:
 
 - Night vision, spotlight, status LED on C340/C350-class firmware — **v0.7.4b2**
-- Person and Vehicle detection — **v0.7.4b5**, then **v0.7.5b1** for firmware that answers
-  the getter but refuses the setter
+- Person and Vehicle detection — **v0.7.4b5**, then **v0.7.5b1** (made the refusal visible),
+  then **v0.7.5b4** (sends the full settings object). Still unconfirmed on firmware that
+  rejects the write with `-10009` — see [#92](https://github.com/steveAbratt/VIGICam/issues/92)
 
 **Then check the one case that isn't a bug.** Microphone Mute and Speaker Mute are *mute*
 switches: `on` means silent. The VIGI app shows the same setting as an enable toggle, so the
@@ -1819,6 +1823,71 @@ two read as opposites while both being correct. See [Microphone Mute](#microphon
 
 **Known and still open:** the master [Alarm](#alarm) switch on C540S and C350 firmware
 ([#79](https://github.com/steveAbratt/VIGICam/issues/79)).
+
+### Detection events arrive sometimes and not others
+
+If the VIGI app and your NVR see every detection but Home Assistant misses some at random,
+and the log shows `ONVIF subscribe failed` or `ONVIF poll error … re-subscribing in 15 s`
+repeating, the camera has run out of event subscriptions.
+
+Detection events reach Home Assistant over an ONVIF pull-point subscription, and these
+cameras allow only a handful at a time. **Every other ONVIF client on the same camera shares
+that budget** — an NVR, Synology Surveillance Station, a second Home Assistant. During each
+re-subscribe gap nothing is listening, so anything that happens in that window is lost. That
+is why the VIGI app still sees everything: it does not use ONVIF.
+
+1. **Update to v0.7.5b4 or later.** Earlier versions abandoned a subscription without
+   releasing it, so each failure left one stranded on the camera for up to an hour and the
+   problem fed itself.
+2. **Then restart Home Assistant and power-cycle the cameras.** The subscriptions already
+   stranded by the old version cannot be released by the new one — the camera holds them
+   until they expire. Until they clear you will still see failures, which is the old leak
+   draining rather than the fix failing. Rebooting the camera clears it at once.
+3. **Reduce the number of ONVIF clients.** If your NVR takes detection from the camera over
+   ONVIF, switching it to its own analysis frees the budget.
+
+The **ONVIF Events** diagnostic sensor can read `on` throughout this fault — it reports that
+a subscription exists, not that polling is succeeding. The log is the reliable signal.
+
+### I changed my camera's password
+
+Home Assistant notices and asks for the new one: Settings → **Devices & Services** →
+**VIGI & InSight Cameras**, on the camera flagged as needing attention. Enter the camera's
+**local** admin password — not your TP-Link ID. Your entities, history and automations are
+kept.
+
+If Home Assistant asks for a password you haven't changed, check the address the prompt shows:
+the camera may have moved, and you may be talking to a different camera. See *My camera's IP
+address changed* below.
+
+### My camera's IP address changed
+
+If your router gave the camera a new address, its entities show **unavailable**. If Home
+Assistant was running when it happened, the log reports `Error fetching vigicam <old address>
+data: Camera not responding`. If Home Assistant has restarted since — usual after a power cut —
+the camera shows **Failed to set up – Retrying setup** on the integration page instead. Either
+way the fix is the same: **add the camera again at its new address. Do not delete the old one
+first.**
+
+If two cameras **swapped** addresses — likely after a power cut if they share a password —
+nothing shows as unavailable: each camera in Home Assistant shows the other's picture and its
+switches act on the other camera. Add *both* cameras again at their current addresses.
+
+1. Find the new address in your router's client list or in the VIGI app.
+2. Settings → **Devices & Services** → **+ Add Integration** → **VIGI & InSight Cameras**, and
+   enter the new IP address, username and password.
+3. Home Assistant recognises the camera by its MAC address and moves the existing entry to the
+   new address. Its entities, history and automations are kept, and it reconnects within a few
+   seconds.
+
+To stop this happening again, give each camera a fixed address (a DHCP reservation) in your
+router.
+
+### Do not delete and re-add a camera to fix it
+
+Deleting a camera throws away its entity customisations — renamed entity IDs, areas, disabled
+entities — and any automation, script or dashboard card that refers to them stops working
+until you fix it by hand. Both problems above have a fix that keeps everything.
 
 ### Getting a diagnostics report
 

@@ -19,7 +19,7 @@
       },
       "reauth_confirm": {
         "title": "Re-authenticate camera",
-        "description": "Home Assistant could not sign in to **{name}** at `{host}` with the stored credentials.\n\nThis usually means the camera's password was changed. Enter the current one below — the camera keeps its existing entities, history and automations.\n\nUse the camera's **local** admin password, not your TP-Link ID / VIGI cloud account password.",
+        "description": "Home Assistant could not sign in to **{name}** at `{host}` with the stored credentials.\n\nThis usually means the camera's password was changed. Enter the current one below — the camera keeps its existing entities, history and automations.\n\nUse the camera's **local** admin password, not your TP-Link ID / VIGI cloud account password.\n\nIf `{host}` is no longer this camera's address, close this and add the camera again at its new address instead — see *My camera's IP address changed* under Troubleshooting on the integration's GitHub page.",
         "data": {
           "username": "Username",
           "password": "Password"
@@ -31,8 +31,11 @@
       "invalid_auth": "Invalid username or password."
     },
     "abort": {
-      "already_configured": "This camera is already configured.",
-      "reauth_successful": "Credentials updated — the camera has been reconnected."
+      "already_configured": "This camera is already set up in Home Assistant (recognised by its MAC address). Nothing was changed; if it had failed to set up, it is being retried now.",
+      "reauth_successful": "Credentials updated. The camera is reconnecting and its entities will return in a few seconds.",
+      "reauth_entry_gone": "This camera is no longer configured in Home Assistant, so there is nothing to re-authenticate.",
+      "wrong_camera": "Those credentials reached a different camera than the one this entry was set up for — its IP address has most likely been reassigned. Close this, find the camera's current address (your router's client list or the VIGI app), then use Add Integration → VIGI & InSight Cameras with that address. Do not delete the existing camera first: Home Assistant will recognise it and move the existing entry to the new address, keeping its entities.",
+      "host_updated": "This camera is already set up (recognised by its MAC address), so the existing entry has been updated with the address and password you entered and is reconnecting. Its entities, history and automations are unchanged."
     }
   },
   "options": {

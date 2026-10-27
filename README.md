@@ -36,7 +36,7 @@ tuning, announcements, and alarms. Entities merge onto the Frigate device automa
 | VIGI C435 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | VIGI C340S-1 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | InSight S385PI | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
-| VIGI C350 | Working. Needs **v0.7.4b2 or later** for night vision, spotlight and status LED, and **v0.7.5b1 or later** for the Person / Vehicle detection toggles. The master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead. No physical status LED, though the camera reports the setting | [@ILikeSleeping000](https://github.com/steveAbratt/VIGICam/discussions/76), [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
+| VIGI C350 | Working. Needs **v0.7.4b2 or later** for night vision, spotlight and status LED, The Person / Vehicle detection toggles are **still not fixed** on this model — the camera rejects the write with error `-10009` ([#92](https://github.com/steveAbratt/VIGICam/issues/92)); **v0.7.5b4** attempts it but is unconfirmed. The master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead. No physical status LED, though the camera reports the setting | [@ILikeSleeping000](https://github.com/steveAbratt/VIGICam/discussions/76), [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
 | VIGI C340 / C340i | Working, same night-vision caveat as the C350. The C340i has no white LED, so it offers only the four non-spotlight night vision modes | [@bcdaus](https://github.com/steveAbratt/VIGICam/issues/78) |
 | VIGI C540S | Streams and reads correctly; the master **Alarm** switch does not hold ([#79](https://github.com/steveAbratt/VIGICam/issues/79)) — use Alarm Light and Alarm Sound instead | [@domdulez](https://github.com/steveAbratt/VIGICam/issues/79) |
 
@@ -50,6 +50,12 @@ misbehaves, a diagnostics download (⋮ → *Download diagnostics*) makes it far
 **A control that shows the right state but won't change it** is nearly always a model
 difference with a known fix or workaround — see
 [Troubleshooting](docs/USAGE.md#troubleshooting).
+
+**If something else also subscribes to your cameras over ONVIF** — an NVR, Synology
+Surveillance Station, a second Home Assistant — be aware these cameras allow only a few
+simultaneous event subscriptions and all clients share that limit. Setting an NVR to do its
+own analysis rather than taking detection from the camera keeps the budget free. See
+[Troubleshooting](docs/USAGE.md#troubleshooting) if detections start arriving intermittently.
 
 ---
 
@@ -143,6 +149,9 @@ and restart.
 ## Adding a Camera
 
 [![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=vigicam)
+
+Give each camera a fixed address (a DHCP reservation in your router) first. If an address
+changes later, see [Troubleshooting](docs/USAGE.md#my-cameras-ip-address-changed).
 
 1. **Settings → Devices & Services → + Add Integration**
 2. Search for **VIGI**

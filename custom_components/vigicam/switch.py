@@ -34,6 +34,10 @@ class VIGISwitchDescription(SwitchEntityDescription):
     openapi_turn_on_fn: Callable[[Any, dict], Any] | None = None
     openapi_turn_off_fn: Callable[[Any, dict], Any] | None = None
     openapi_data_key: str | None = None
+    # Getter used to refresh the object immediately before echoing it back. Without it the
+    # write would echo the last 30s poll, so changing one of the sibling settings in the
+    # VIGI app and then toggling here would silently revert that change.
+    openapi_get_method: str | None = None
 
 
 # Fields getPeople/VehicleDetectionSwitch returns, and that their setters appear to want
@@ -58,6 +62,14 @@ def _detection_params(current: dict, enabled: str) -> dict:
     for field in _DETECTION_WRITE_FIELDS:
         if field in current:
             params[field] = current[field]
+    if len(params) == 1 and current:
+        # The camera returned something, but none of the fields we know. Probably a nested
+        # or renamed reply shape — and the payload we are about to send is exactly the
+        # single-field one that gets rejected with -10009, so name the keys we did see.
+        _LOGGER.debug(
+            "Detection reply had no known fields, sending enabled only. Keys seen: %s",
+            sorted(current),
+        )
     return params
 
 
@@ -93,6 +105,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
             "setPeopleDetectionSwitch", _detection_params(cur, "off")
         ),
         openapi_data_key="openapi_people",
+        openapi_get_method="getPeopleDetectionSwitch",
     ),
     VIGISwitchDescription(
         key="vehicle_detection",
@@ -114,6 +127,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
             "setVehicleDetectionSwitch", _detection_params(cur, "off")
         ),
         openapi_data_key="openapi_vehicle",
+        openapi_get_method="getVehicleDetectionSwitch",
     ),
     VIGISwitchDescription(
         key="tamper_detection",
@@ -284,7 +298,7 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
     def is_on(self) -> bool | None:
         return self.entity_description.is_on_fn(self.coordinator.data or {})
 
-    def _openapi_writable(self, fn: Callable[[Any], Any] | None) -> Any | None:
+    def _openapi_writable(self, fn: Callable[[Any, dict], Any] | None) -> Any | None:
         """Return the OpenAPI client only if state is also read from OpenAPI.
 
         The camera exposes these toggles through two independent subsystems. Writing via
@@ -298,6 +312,27 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
         if openapi is None or fn is None or not key:
             return None
         return openapi if (self.coordinator.data or {}).get(key) else None
+
+    async def _refresh_openapi_state(self, openapi: Any) -> dict:
+        """Re-read the settings object just before echoing it back.
+
+        Falls back to the coordinator's copy if the read fails, so a transient error
+        degrades to the previous behaviour rather than sending an empty object.
+        """
+        desc = self.entity_description
+        cached = (self.coordinator.data or {}).get(desc.openapi_data_key) or {}
+        if not desc.openapi_get_method:
+            return cached
+        try:
+            raw = await openapi.call(desc.openapi_get_method)
+        except VIGIOpenAPIError as exc:
+            _LOGGER.debug(
+                "%s: could not refresh %s before writing (%s) — using the last poll",
+                self.entity_id, desc.openapi_get_method, exc,
+            )
+            return cached
+        result = raw.get("result", raw)
+        return result if isinstance(result, dict) and result else cached
 
     async def _write(
         self,
@@ -316,8 +351,7 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
         """
         openapi = self._openapi_writable(openapi_fn)
         if openapi is not None:
-            key = self.entity_description.openapi_data_key
-            current = (self.coordinator.data or {}).get(key) or {}
+            current = await self._refresh_openapi_state(openapi)
             try:
                 await openapi_fn(openapi, current)
                 return
