@@ -14,6 +14,30 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.5b3] - 2026-10-23
+
+### Added
+
+- **Re-authentication.** Change a camera's password and Home Assistant now shows a
+  *"Reconfigure"* / needs-attention prompt asking for the new one, keeping the camera's
+  existing entities, history and automations.
+
+  Previously there was no reauth step at all. The integration signalled an authentication
+  failure correctly, so Home Assistant tried to start a re-authentication flow — and found
+  none, producing an `UnknownStep` error in the log and no way to enter the new password
+  short of deleting and re-adding the camera. Re-adding assigns fresh entity IDs, so it
+  would have broken every automation and dashboard referencing that camera.
+
+### Fixed
+
+- **A password changed while Home Assistant was running retried forever in silence.** The
+  coordinator reported an authentication failure as a generic communication error, so it
+  retried every 30 seconds and logged "Camera communication error" indefinitely, never
+  indicating that the credentials were the problem. It now triggers the re-authentication
+  prompt above.
+
+---
+
 ## [0.7.5b2] - 2026-10-23
 
 Findings from a multi-persona review of the whole integration. Nothing in this release

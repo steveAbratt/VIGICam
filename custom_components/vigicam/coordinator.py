@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
@@ -53,7 +54,12 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             return await self._fetch_all()
         except VIGIAuthError as exc:
-            raise UpdateFailed(f"Authentication error: {exc}") from exc
+            # ConfigEntryAuthFailed, not UpdateFailed: this makes HA start the reauth
+            # flow and show a "needs attention" card. As UpdateFailed, a password
+            # changed while HA was running retried every 30s forever, logging a
+            # generic communication error and never telling the user their
+            # credentials were the problem.
+            raise ConfigEntryAuthFailed(f"Authentication error: {exc}") from exc
         except VIGIError as exc:
             raise UpdateFailed(f"Camera communication error: {exc}") from exc
 
