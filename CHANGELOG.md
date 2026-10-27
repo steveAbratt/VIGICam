@@ -14,6 +14,82 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.5b5] - 2026-10-27
+
+Findings from a second multi-persona review, this time of the b2→b4 changes themselves. Two of
+the fixes in b4 did not work, and one of them would have passed a hardware test.
+
+### Fixed
+
+- **Re-authentication did nothing on cameras without PTZ.** `VIGIAuthError` is a sibling of
+  `VIGIError`, not a subclass, so an authentication failure during a poll fell through to the
+  coordinator's catch-all, was logged as an "unexpected error" and left that reading empty —
+  the refresh then returned normally and never raised `ConfigEntryAuthFailed`. A password
+  changed while Home Assistant was running therefore retried forever in silence. It happened
+  to work on PTZ models only, because the preset fetch let the error through.
+
+  An OpenAPI authentication failure now routes to the same prompt; previously it emptied four
+  readings silently, which the write path then read as "OpenAPI is not in charge" and sent
+  changes to the API that was also failing.
+
+- **Re-authentication could bind credentials to the wrong camera.** It verified the password
+  against the stored address without checking the camera's identity. On a network where
+  addresses are reassigned by DHCP, and with the same password on every camera, it could
+  succeed against a different device and silently repoint every entity. It now compares the
+  camera's MAC against the one the entry was created with and refuses if they differ.
+
+- **Re-authentication reloaded the camera twice** on success, and could raise an error if the
+  camera had been removed while the prompt was open.
+
+- **The ONVIF subscription was being renewed every few seconds** instead of hourly. The renew
+  never re-read the new expiry time, so once inside the renewal window every poll was preceded
+  by a renewal — a reporter's log showed one every nine seconds. A renewal the camera refuses
+  is also no longer logged as a success.
+
+- **The event-push setup used the single-field payload that b4 established these cameras
+  reject**, so on affected firmware push notifications were never enabled and the OpenAPI
+  detection sensors never fired. It failed invisibly, at debug level.
+
+- **`ONVIF subscribe failed` named no cause.** b4 fixed two of the three log lines with this
+  problem and missed the one that fires when a camera is out of subscriptions — the fault it
+  was released to address.
+
+- **Toggling Person or Vehicle detection could revert the camera's other settings** for that
+  detection type. b4 echoed the whole settings object back, but from the last 30-second poll,
+  so a change made in the VIGI app and followed by a toggle in Home Assistant was overwritten.
+  The settings are now re-read immediately before writing.
+
+- **A persistently slow camera no longer logs the same warning forever** — it is reported once
+  per episode, with a message when polling recovers. The timeout counter is also now cleared
+  when a subscription is rebuilt, so a fresh subscription could no longer be torn down on its
+  first timeout.
+
+- **The ONVIF session could leak** if Home Assistant cancelled a slow unload while the
+  subscription was being released.
+
+- **Diagnostics reported `has_onvif_events: true` unconditionally**, because the listener is
+  always constructed. It said the same thing with detection events switched off and with every
+  subscription failing — and was quoted back as evidence that ONVIF was healthy during exactly
+  that fault. It now reports whether a subscription is actually held, plus the current timeout
+  count.
+
+### Documentation
+
+- **Troubleshooting gains the symptom that produced the last release**: detections arriving
+  intermittently, what the log looks like, that other ONVIF clients share a small fixed budget,
+  and that cameras need power-cycling after updating because the stranded subscriptions cannot
+  be released by the new code.
+- **A section on changing a camera's password**, and the warning not to delete and re-add.
+- **The README and entity reference no longer claim v0.7.5b1 fixed the Person / Vehicle
+  toggles.** It made the refusal visible; the toggles are still unconfirmed on the affected
+  firmware. Both now say so and link to the issue.
+- **The ONVIF Events sensor is documented honestly** — it reports that a subscription exists,
+  not that polling is working, and can read `on` throughout the fault above.
+- The README warns NVR and Surveillance Station owners about the shared subscription budget
+  before they install, rather than only in Troubleshooting.
+
+---
+
 ## [0.7.5b4] - 2026-10-27
 
 ### Fixed
@@ -47,6 +123,12 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   payload carrying only the field being changed with `errCode -10009` (#92); the camera's
   own getter returns six fields, and all of them are now echoed with one value altered.
 
+- **A password changed while Home Assistant was running retried forever in silence.** The
+  coordinator reported an authentication failure as a generic communication error, so it
+  retried every 30 seconds and logged "Camera communication error" indefinitely, never
+  indicating that the credentials were the problem. It now triggers the re-authentication
+  prompt above.
+
 ### Added
 
 - **Re-authentication.** Change a camera's password and Home Assistant now shows a
@@ -58,14 +140,6 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   none, producing an `UnknownStep` error in the log and no way to enter the new password
   short of deleting and re-adding the camera. Re-adding assigns fresh entity IDs, so it
   would have broken every automation and dashboard referencing that camera.
-
-### Fixed
-
-- **A password changed while Home Assistant was running retried forever in silence.** The
-  coordinator reported an authentication failure as a generic communication error, so it
-  retried every 30 seconds and logged "Camera communication error" indefinitely, never
-  indicating that the credentials were the problem. It now triggers the re-authentication
-  prompt above.
 
 ---
 

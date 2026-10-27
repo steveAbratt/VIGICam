@@ -83,7 +83,17 @@ async def async_get_config_entry_diagnostics(
                 "has_ptz": bool(data.get("has_ptz")),
                 "has_openapi": bool(data.get("has_openapi")),
                 "has_onvif_ptz": data.get("onvif_ptz") is not None,
-                "has_onvif_events": data.get("onvif_events") is not None,
+                # The listener object is constructed unconditionally, so "is not None" was
+                # always True — it read as healthy even with detection events turned off
+                # or every subscribe failing, and a reporter quoted it as evidence ONVIF
+                # was fine while it was the actual fault. Report the live state instead,
+                # and keep the poll-error count so a leak is visible in the report.
+                "onvif_events_subscribed": bool(
+                    getattr(data.get("onvif_events"), "is_connected", False)
+                ),
+                "onvif_consecutive_timeouts": getattr(
+                    data.get("onvif_events"), "_consecutive_timeouts", None
+                ),
                 "has_event_capture": bool(data.get("has_event_capture")),
                 "has_sd_card": bool(data.get("has_sd_card")),
                 "has_frigate": bool(data.get("has_frigate")),

@@ -29,6 +29,21 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 _LOGGER = logging.getLogger(__name__)
 
+
+class VIGIOnvifError(Exception):
+    """An ONVIF exchange completed but the camera refused it."""
+
+
+def _parse_termination_time(resp: str) -> datetime | None:
+    """Pull <wsnt:TerminationTime> out of a subscribe or renew response."""
+    term = re.search(r"<wsnt:TerminationTime>([^<]+)</wsnt:TerminationTime>", resp)
+    if not term:
+        return None
+    try:
+        return datetime.fromisoformat(term.group(1).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
 ONVIF_SERVICE_URL = "http://{}:80/onvif/service"
 PULL_TIMEOUT_S = 8          # camera holds connection this long if no events
 SUBSCRIPTION_DURATION = "PT1H"
@@ -84,6 +99,7 @@ class VIGIOnvifEvents:
         self._sub_address: str | None = None
         self._sub_expiry: datetime | None = None
         self._consecutive_timeouts: int = 0
+        self._timeout_warned: bool = False
         self._task: asyncio.Task | None = None
         self._session: aiohttp.ClientSession | None = None
 
@@ -126,9 +142,14 @@ class VIGIOnvifEvents:
         # Release the subscription before closing the session, or the camera keeps it
         # alive for up to an hour after every reload — which on a camera with a small
         # subscription limit means a few reloads can lock out real-time events (#95).
-        await self._unsubscribe()
-        if self._session and not self._session.closed:
-            await self._session.close()
+        # finally: _unsubscribe does network I/O and does not swallow CancelledError, and
+        # HA cancels unload if it runs long. Without this the session leaked whenever a
+        # camera was unreachable at shutdown.
+        try:
+            await self._unsubscribe()
+        finally:
+            if self._session and not self._session.closed:
+                await self._session.close()
 
     # ── SOAP ─────────────────────────────────────────────────────────────────
 
@@ -197,32 +218,40 @@ class VIGIOnvifEvents:
                 _LOGGER.debug("ONVIF subscribe response: %s", resp[:500])
                 return False
             self._sub_address = addr.group(1).strip()
-            term = re.search(r"<wsnt:TerminationTime>([^<]+)</wsnt:TerminationTime>", resp)
-            if term:
-                try:
-                    self._sub_expiry = datetime.fromisoformat(
-                        term.group(1).replace("Z", "+00:00")
-                    )
-                except ValueError:
-                    self._sub_expiry = None
+            self._sub_expiry = _parse_termination_time(resp)
             _LOGGER.debug("ONVIF subscription: %s expires %s", self._sub_address, self._sub_expiry)
             return True
         except Exception as exc:
-            _LOGGER.warning("ONVIF subscribe failed for %s: %s", self._ip, exc)
+            _LOGGER.warning(
+                "ONVIF subscribe failed for %s (%s: %s)",
+                self._ip, type(exc).__name__, exc,
+            )
             return False
 
     async def _renew(self) -> None:
         if not self._sub_address:
             return
         try:
-            await self._soap(
+            resp = await self._soap(
                 self._sub_address, _RENEW_ACTION,
                 f"<wsnt:Renew>"
                 f"<wsnt:TerminationTime>{SUBSCRIPTION_DURATION}</wsnt:TerminationTime>"
                 f"</wsnt:Renew>",
                 timeout=10,
             )
-            _LOGGER.debug("ONVIF subscription renewed for %s", self._ip)
+            if "ResourceUnknown" in resp or "SOAP-ENV:Fault" in resp or "s:Fault" in resp:
+                # A Fault here means the subscription is already gone. Treating it as
+                # success left the loop renewing a dead subscription until expiry.
+                raise VIGIOnvifError("renew refused (subscription no longer exists)")
+            # Re-read the new expiry. Without this _sub_expiry kept its original value, so
+            # once inside RENEW_MARGIN_S the renew condition was true on EVERY pass — a
+            # reporter's log showed "subscription renewed" every ~9 seconds on a one-hour
+            # subscription, one extra SOAP round trip before every single pull, against the
+            # scarce resource #95 is about.
+            self._sub_expiry = _parse_termination_time(resp) or self._sub_expiry
+            _LOGGER.debug(
+                "ONVIF subscription renewed for %s (expires %s)", self._ip, self._sub_expiry
+            )
         except Exception as exc:
             _LOGGER.warning(
                 "ONVIF renew failed for %s (%s: %s) — will re-subscribe",
@@ -245,6 +274,13 @@ class VIGIOnvifEvents:
         """
         address, self._sub_address = self._sub_address, None
         self._sub_expiry = None
+        # The timeout counter and its warning latch describe THIS subscription, so they
+        # reset here — the one place a subscription ends. Resetting them at the call sites
+        # instead left a renew-triggered rebuild carrying a stale count, so the first
+        # timeout on a brand-new subscription could claim "timed out 3 times in a row" and
+        # immediately tear it down again.
+        self._consecutive_timeouts = 0
+        self._timeout_warned = False
         if not address or self._session is None or self._session.closed:
             return
         try:
@@ -316,22 +352,31 @@ class VIGIOnvifEvents:
                     # down here was what orphaned subscriptions and lost every event in
                     # the 15s re-subscribe window (#95). Just pull again.
                     self._consecutive_timeouts += 1
-                    if self._consecutive_timeouts == _TIMEOUT_TOLERANCE:
-                        _LOGGER.warning(
-                            "ONVIF pull has timed out %s times in a row for %s — the "
-                            "camera is slow to answer. Events may be delayed. If another "
-                            "ONVIF client (NVR, Surveillance Station) also subscribes to "
-                            "this camera, it may be at its subscription limit.",
-                            _TIMEOUT_TOLERANCE, self._ip,
-                        )
                     if self._consecutive_timeouts >= _TIMEOUT_TOLERANCE:
-                        # Persistently unanswered: rebuild the subscription, releasing
-                        # the old one first so it does not linger on the camera.
+                        if not self._timeout_warned:
+                            # Once per episode, not once per rebuild: a permanently slow
+                            # camera would otherwise log this every ~40s indefinitely,
+                            # which is the kind of log noise this release set out to end.
+                            _LOGGER.warning(
+                                "ONVIF pull keeps timing out for %s — the camera is slow "
+                                "to answer and events may be delayed. If another ONVIF "
+                                "client (an NVR, Synology Surveillance Station, a second "
+                                "Home Assistant) also subscribes to this camera, it may "
+                                "be at its subscription limit.",
+                                self._ip,
+                            )
+                        # Persistently unanswered: rebuild, releasing the old subscription
+                        # first so it does not linger on the camera. _unsubscribe() clears
+                        # the latch along with the rest of the subscription state, so set it
+                        # again afterwards — the episode is not over until a pull succeeds.
                         await self._unsubscribe()
-                        self._consecutive_timeouts = 0
+                        self._timeout_warned = True
                         await asyncio.sleep(RESUBSCRIBE_DELAY_S)
                     continue
+                if self._timeout_warned:
+                    _LOGGER.info("ONVIF polling recovered for %s", self._ip)
                 self._consecutive_timeouts = 0
+                self._timeout_warned = False
 
                 for event in events:
                     _LOGGER.debug(
@@ -355,7 +400,6 @@ class VIGIOnvifEvents:
                 # loop rebuild — so a failed re-subscribe backs off instead of falling
                 # straight into _pull().
                 await self._unsubscribe()
-                self._consecutive_timeouts = 0
                 await asyncio.sleep(RESUBSCRIBE_DELAY_S)
 
     def _dispatch(self, event: dict[str, Any]) -> None:

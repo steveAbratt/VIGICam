@@ -296,6 +296,11 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Not _get_reauth_entry(): that helper only exists on newer Home Assistant, and
         # this lookup has been stable for far longer.
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry is None:
+            # The reauth card waits for the user, so the entry can disappear underneath
+            # it — deleted and re-added in another tab, for instance. Abort rather than
+            # raising AttributeError inside the flow.
+            return self.async_abort(reason="reauth_entry_gone")
 
         if user_input is not None:
             username = user_input.get(CONF_USERNAME, self._username).strip()
@@ -313,13 +318,31 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 errors["base"] = "cannot_connect"
             else:
+                # Verify we are still talking to the SAME camera before binding
+                # credentials to this entry. On a camera VLAN with DHCP, the address this
+                # entry holds can be reassigned to a different camera; since most installs
+                # use one password everywhere, reauth would then succeed against the wrong
+                # device and silently repoint every entity under this device at it.
+                found_id = (info.get("mac") or self._host).replace(":", "").lower()
+                if entry.unique_id and found_id != entry.unique_id:
+                    _LOGGER.warning(
+                        "Reauth for %s reached a different camera (expected %s, found %s)",
+                        self._host, entry.unique_id, found_id,
+                    )
+                    return self.async_abort(reason="wrong_camera")
+
                 # Deliberately NOT touching unique_id. Entity unique IDs derive from it,
                 # so changing it here would create a duplicate device and orphan every
                 # automation the user has — the exact harm reauth exists to avoid.
                 # Explicit merged data rather than data_updates=, which is only
                 # supported on newer Home Assistant. CONF_HOST is carried over
                 # unchanged — reauth replaces credentials, never the address.
-                return self.async_update_reload_and_abort(
+                # async_update_entry + abort, NOT async_update_reload_and_abort: the
+                # entry already has an update listener that reloads on any change, so the
+                # combined helper reloaded twice — setup, unload, setup. On a camera that
+                # has just been unreachable that extra teardown is the one most likely to
+                # leak an ONVIF subscription, which is what #95 was about.
+                self.hass.config_entries.async_update_entry(
                     entry,
                     data={
                         **entry.data,
@@ -328,6 +351,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL: verify_ssl,
                     },
                 )
+                return self.async_abort(reason="reauth_successful")
 
         return self.async_show_form(
             step_id="reauth_confirm",
@@ -338,7 +362,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "host": self._host,
-                "name": entry.title if entry else self._host,
+                "name": entry.title,
             },
         )
 

@@ -68,6 +68,26 @@ _MSG_PUSH_METHODS: tuple[tuple[str, str], ...] = (
 )
 
 
+# Status fields that arrive in a reply but are not settings — echoing them back into a
+# setter would be sending the camera its own error code as a parameter.
+_STATUS_KEYS = frozenset({"errCode", "error_code"})
+
+
+def _unwrap_switch(result: dict) -> dict:
+    """Return the settings object from a get*DetectionSwitch reply.
+
+    Some firmware returns the fields at the top level, others nest them one level deep
+    under a key whose name varies by method, which is why this searches rather than
+    indexing a known key.
+    """
+    if "enabled" in result:
+        return result
+    for value in result.values():
+        if isinstance(value, dict) and "enabled" in value:
+            return value
+    return result
+
+
 class VIGIOpenAPIEventListener:
     """Persistent subscribeMsg connection for a single VIGI camera."""
 
@@ -133,7 +153,18 @@ class VIGIOpenAPIEventListener:
                             if push_val is not None:
                                 break
                 if push_val != "on":
-                    await self._openapi.call(setter, {"msg_push_enabled": "on"})
+                    # Echo the whole object back with one value changed, not
+                    # {"msg_push_enabled": "on"} alone. These are the same setters that
+                    # reject single-field payloads with errCode -10009 (#92), and this
+                    # call failing is invisible — it sits in the broad except below at
+                    # debug level, so the only symptom is that the OpenAPI detection
+                    # sensors never fire and nothing says why.
+                    payload = {
+                        k: v for k, v in _unwrap_switch(result).items()
+                        if k not in _STATUS_KEYS and not isinstance(v, (dict, list))
+                    }
+                    payload["msg_push_enabled"] = "on"
+                    await self._openapi.call(setter, payload)
                     _LOGGER.debug(
                         "OpenAPI: enabled msg_push for %s on %s", getter, self._openapi._ip
                     )

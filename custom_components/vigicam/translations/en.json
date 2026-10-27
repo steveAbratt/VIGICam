@@ -32,7 +32,9 @@
     },
     "abort": {
       "already_configured": "This camera is already configured.",
-      "reauth_successful": "Credentials updated — the camera has been reconnected."
+      "reauth_successful": "Credentials updated — the camera has been reconnected.",
+      "reauth_entry_gone": "This camera is no longer configured in Home Assistant, so there is nothing to re-authenticate.",
+      "wrong_camera": "Those credentials reached a different camera than the one this entry was set up for — most likely its IP address has been reassigned. Check the camera's current address and reconfigure it instead."
     }
   },
   "options": {

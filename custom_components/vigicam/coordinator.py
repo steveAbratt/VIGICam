@@ -10,6 +10,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
+from .openapi import VIGIOpenAPIAuthError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 if TYPE_CHECKING:
@@ -69,6 +70,15 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         async def safe_get(key: str, coro):
             try:
                 results[key] = await coro
+            except VIGIAuthError:
+                # Must escape. VIGIAuthError is a SIBLING of VIGIError, not a subclass, so
+                # it used to fall through to `except Exception` below, get logged as an
+                # "unexpected error" and leave results[key] = {} — meaning _fetch_all
+                # returned normally and the ConfigEntryAuthFailed in _async_update_data was
+                # never reached. A password changed while HA was running therefore retried
+                # forever on every camera except PTZ models, where get_presets() happened to
+                # let it through. Credentials are a whole-entry problem, not a per-key one.
+                raise
             except VIGIError as exc:
                 _LOGGER.debug("Could not fetch %s: %s", key, exc)
                 results[key] = {}
@@ -106,6 +116,13 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 try:
                     raw = await self.openapi.call(method)
                     results[key] = raw.get("result", {})
+                except VIGIOpenAPIAuthError as exc:
+                    # OpenAPI uses the same credentials, so a changed password fails here
+                    # too. Swallowing it left four keys silently empty, which
+                    # _openapi_writable then read as "OpenAPI is not authoritative" and
+                    # routed writes to the JSON API that was also failing. Route it to the
+                    # same reauth flow instead.
+                    raise VIGIAuthError(f"OpenAPI authentication failed: {exc}") from exc
                 except Exception as exc:  # noqa: BLE001
                     _LOGGER.debug("OpenAPI %s failed: %s", method, exc)
                     results[key] = {}
