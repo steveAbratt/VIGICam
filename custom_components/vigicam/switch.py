@@ -28,9 +28,37 @@ class VIGISwitchDescription(SwitchEntityDescription):
     supported_fn: Callable[[dict], bool] = lambda _: True
     # Optional OpenAPI handlers — preferred over the JSON API, but only when the state is
     # also READ from OpenAPI. openapi_data_key names the coordinator key that holds it.
-    openapi_turn_on_fn: Callable[[Any], Any] | None = None
-    openapi_turn_off_fn: Callable[[Any], Any] | None = None
+    # Called as fn(openapi_client, last_read_state). Some firmware rejects a setter
+    # that carries only the field being changed, so the writer is given the whole
+    # object the matching getter returned and sends it back with one value altered.
+    openapi_turn_on_fn: Callable[[Any, dict], Any] | None = None
+    openapi_turn_off_fn: Callable[[Any, dict], Any] | None = None
     openapi_data_key: str | None = None
+
+
+# Fields getPeople/VehicleDetectionSwitch returns, and that their setters appear to want
+# back in full. A C350 on firmware 2.3.2 rejected {"enabled": ...} alone with errCode
+# -10009 (#92), which is why the whole object is echoed with one value changed.
+_DETECTION_WRITE_FIELDS = (
+    "sound_alarm_enabled",
+    "light_alarm_enabled",
+    "msg_push_enabled",
+    "record_enabled",
+    "sensitivity",
+)
+
+
+def _detection_params(current: dict, enabled: str) -> dict:
+    """Build a detection-switch payload: the last-read object with `enabled` replaced.
+
+    Only known fields are echoed, so an unexpected key in the getter's reply cannot be
+    sent back and rejected. Fields the camera did not report are simply omitted.
+    """
+    params = {"enabled": enabled}
+    for field in _DETECTION_WRITE_FIELDS:
+        if field in current:
+            params[field] = current[field]
+    return params
 
 
 SWITCHES: tuple[VIGISwitchDescription, ...] = (
@@ -58,8 +86,12 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
         supported_fn=lambda d: (
             "people_enabled" in d.get("motion", {}) or bool(d.get("openapi_people"))
         ),
-        openapi_turn_on_fn=lambda oapi: oapi.call("setPeopleDetectionSwitch", {"enabled": "on"}),
-        openapi_turn_off_fn=lambda oapi: oapi.call("setPeopleDetectionSwitch", {"enabled": "off"}),
+        openapi_turn_on_fn=lambda oapi, cur: oapi.call(
+            "setPeopleDetectionSwitch", _detection_params(cur, "on")
+        ),
+        openapi_turn_off_fn=lambda oapi, cur: oapi.call(
+            "setPeopleDetectionSwitch", _detection_params(cur, "off")
+        ),
         openapi_data_key="openapi_people",
     ),
     VIGISwitchDescription(
@@ -75,8 +107,12 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
         supported_fn=lambda d: (
             "vehicle_enabled" in d.get("motion", {}) or bool(d.get("openapi_vehicle"))
         ),
-        openapi_turn_on_fn=lambda oapi: oapi.call("setVehicleDetectionSwitch", {"enabled": "on"}),
-        openapi_turn_off_fn=lambda oapi: oapi.call("setVehicleDetectionSwitch", {"enabled": "off"}),
+        openapi_turn_on_fn=lambda oapi, cur: oapi.call(
+            "setVehicleDetectionSwitch", _detection_params(cur, "on")
+        ),
+        openapi_turn_off_fn=lambda oapi, cur: oapi.call(
+            "setVehicleDetectionSwitch", _detection_params(cur, "off")
+        ),
         openapi_data_key="openapi_vehicle",
     ),
     VIGISwitchDescription(
@@ -265,7 +301,7 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
 
     async def _write(
         self,
-        openapi_fn: Callable[[Any], Any] | None,
+        openapi_fn: Callable[[Any, dict], Any] | None,
         api_fn: Callable[[VIGICamera], Any],
     ) -> None:
         """Write via OpenAPI when it is the authority, falling back to the JSON API.
@@ -274,11 +310,16 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
         preferring OpenAPI on the strength of the read alone is not enough — the rejection
         has to be caught and the change retried through the JSON API, or the toggle flips
         and springs back with nothing in the log.
+
+        The writer receives the last-read object so it can echo the whole thing back with
+        one value changed; a C350 rejected a single-field payload with errCode -10009.
         """
         openapi = self._openapi_writable(openapi_fn)
         if openapi is not None:
+            key = self.entity_description.openapi_data_key
+            current = (self.coordinator.data or {}).get(key) or {}
             try:
-                await openapi_fn(openapi)
+                await openapi_fn(openapi, current)
                 return
             except VIGIOpenAPIError as exc:
                 _LOGGER.warning(

@@ -14,7 +14,38 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
-## [0.7.5b3] - 2026-10-23
+## [0.7.5b4] - 2026-10-27
+
+### Fixed
+
+- **Abandoned ONVIF subscriptions piled up on the camera, and starved it of the ability to
+  deliver events.** Reported in #95 on a four-camera C540V install: detection events went
+  missing intermittently while the VIGI app and a Synology NVR saw them all, and the log
+  filled with `ONVIF poll error … re-subscribing in 15 s` — 1306 times in under ten hours.
+
+  When a poll failed, VIGICam dropped the subscription by forgetting its address. That does
+  not release it: the camera holds a pull-point subscription until its termination time,
+  which VIGICam requests as **one hour**. At a failure every fifteen seconds, each camera
+  accumulated hundreds of live subscriptions, and these devices allow only a handful — so
+  the camera began refusing or stalling, which caused more poll failures, which orphaned
+  more subscriptions. A second ONVIF client on the same camera (an NVR, or Synology
+  Surveillance Station) consumes the same budget and brings the limit closer, which is why
+  the reporter found the fault tracked their NVR's detection-source setting.
+
+  VIGICam now sends `Unsubscribe` whenever it gives up a subscription — on a poll error, on
+  a failed renew, and when the integration stops or reloads.
+
+- **A slow camera no longer costs you events.** `PullMessages` is a long poll, so a timeout
+  means the camera was slow to answer, not that the subscription is broken. Tearing it down
+  lost every event in the following fifteen seconds. Timeouts are now tolerated, and only a
+  run of three in a row rebuilds the subscription, with a log line that says what to check.
+
+- **`ONVIF poll error for <ip>: — re-subscribing`** named no cause, because several of the
+  exceptions reaching that line have an empty message. The exception type is now logged.
+
+- **Person and Vehicle detection write the whole settings object back.** A C350 rejected a
+  payload carrying only the field being changed with `errCode -10009` (#92); the camera's
+  own getter returns six fields, and all of them are now echoed with one value altered.
 
 ### Added
 
