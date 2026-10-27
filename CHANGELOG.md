@@ -58,8 +58,8 @@ of them would have passed a hardware test.
 - **An unreachable camera now goes unavailable.** Every switch used to read "off" — motion
   detection, privacy mask, alarm — while the entities stayed available, so automations acted
   on invented state. The log now names which camera stopped responding. A failed storage
-  read — during polling or at startup — no longer raises a spurious "SD card missing" notice
-  followed by a full reload.
+  read during polling no longer raises a spurious "SD card missing" notice followed by a full
+  reload.
 
 - **A camera closing the connection mid-handshake could freeze Home Assistant** on models with
   event-image capture: the handshake loop spun without yielding at end-of-stream.

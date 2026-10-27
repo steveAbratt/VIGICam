@@ -32,16 +32,14 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         camera: VIGICamera,
         *,
         has_ptz: bool = False,
-        has_sd_card: bool | None = None,
         has_openapi: bool = False,
         openapi: "VIGIOpenAPI | None" = None,
-        config_entry: "ConfigEntry | None" = None,
+        config_entry: "ConfigEntry",
     ) -> None:
         super().__init__(
             hass,
             _LOGGER,
             config_entry=config_entry,
-            # Per camera, so "Error fetching … data" names which one failed.
             name=f"{DOMAIN} {camera.host}",
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
@@ -49,7 +47,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.has_ptz = has_ptz
         # None until a storage read answers, so a failed first read is not mistaken for
         # "no card" and then "card inserted" one poll later.
-        self.has_sd_card: bool | None = has_sd_card
+        self.has_sd_card: bool | None = None
         self.has_openapi = has_openapi
         self.openapi: VIGIOpenAPI | None = openapi
         self.presets: list[dict] = []
@@ -71,7 +69,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise ConfigEntryAuthFailed(f"Authentication error: {exc}") from exc
         except VIGIError as exc:
             raise UpdateFailed(f"Camera communication error: {exc}") from exc
-        if self._auth_failed and self.config_entry is not None:
+        if self._auth_failed and self.stop_on_auth_failure:
             # Recovered without a reauth reload (a write or update_entity refreshed us).
             # The event listeners were stopped on the auth failure, so reload rather than
             # leave detection sensors showing "off" with nothing feeding them.
@@ -88,13 +86,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 results[key] = await coro
                 answered.add(key)
             except VIGIAuthError:
-                # Must escape. VIGIAuthError is a SIBLING of VIGIError, not a subclass, so
-                # it used to fall through to `except Exception` below, get logged as an
-                # "unexpected error" and leave results[key] = {} — meaning _fetch_all
-                # returned normally and the ConfigEntryAuthFailed in _async_update_data was
-                # never reached. A password changed while HA was running therefore retried
-                # forever on every camera except PTZ models, where get_presets() happened to
-                # let it through. Credentials are a whole-entry problem, not a per-key one.
+                # Not a VIGIError subclass: must escape so the entry goes to reauth.
                 raise
             except VIGIError as exc:
                 _LOGGER.debug("Could not fetch %s: %s", key, exc)
@@ -138,7 +130,8 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     results[key] = raw.get("result", {})
                 except Exception as exc:  # noqa: BLE001
                     # Includes VIGIOpenAPIAuthError: stok failures are often transient, and
-                    # reauth only validates the JSON API, so it could never clear them.
+                    # reauth only validates the JSON API. Escalating this was tried in a b5
+                    # draft and stopped all polling on any busy or malformed reply.
                     _LOGGER.debug("OpenAPI %s failed: %s", method, exc)
                     results[key] = {}
 
@@ -163,7 +156,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _recheck_openapi(self) -> None:
         from .openapi import VIGIOpenAPI, try_openapi
 
-        ip = self.camera._ip
+        ip = self.camera.host
         if await try_openapi(ip, self.camera._username, self.camera._password):
             self.has_openapi = True
             self.openapi = VIGIOpenAPI(ip, self.camera._username, self.camera._password)

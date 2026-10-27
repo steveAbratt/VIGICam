@@ -1856,11 +1856,18 @@ Home Assistant notices and asks for the new one: Settings → **Devices & Servic
 **local** admin password — not your TP-Link ID. Your entities, history and automations are
 kept.
 
+If Home Assistant asks for a password you haven't changed, check the address the prompt shows:
+the camera may have moved, and you may be talking to a different camera. See *My camera's IP
+address changed* below.
+
 ### My camera's IP address changed
 
-If your router gave the camera a new address, all of its entities show **unavailable** and
-the log reports `Error fetching vigicam <old address> data: Camera not responding`. To fix it,
-**add the camera again at its new address — do not delete the old one first.**
+If your router gave the camera a new address, its entities show **unavailable**. If Home
+Assistant was running when it happened, the log reports `Error fetching vigicam <old address>
+data: Camera not responding`. If Home Assistant has restarted since — usual after a power cut —
+the camera shows **Failed to set up – Retrying setup** on the integration page instead. Either
+way the fix is the same: **add the camera again at its new address. Do not delete the old one
+first.**
 
 1. Find the new address in your router's client list or in the VIGI app.
 2. Settings → **Devices & Services** → **+ Add Integration** → **VIGI & InSight Cameras**, and
@@ -1874,9 +1881,9 @@ router.
 
 ### Do not delete and re-add a camera to fix it
 
-Deleting a camera discards its entity customisations — renamed entity IDs, areas, disabled
-entities — and the automations and dashboard cards built on them. Both problems above have a
-fix that keeps everything.
+Deleting a camera throws away its entity customisations — renamed entity IDs, areas, disabled
+entities — and any automation, script or dashboard card that refers to them stops working
+until you fix it by hand. Both problems above have a fix that keeps everything.
 
 ### Getting a diagnostics report
 

@@ -150,6 +150,9 @@ and restart.
 
 [![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=vigicam)
 
+Give each camera a fixed address (a DHCP reservation in your router) first. If an address
+changes later, see [Troubleshooting](docs/USAGE.md#my-cameras-ip-address-changed).
+
 1. **Settings → Devices & Services → + Add Integration**
 2. Search for **VIGI**
 3. Enter the camera's IP address, username (`admin`), password, and optionally a name

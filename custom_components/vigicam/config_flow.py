@@ -280,7 +280,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         },
                     )
                     # LOADED: the update listener reloads. Otherwise nothing will.
-                    if changed and existing.state is not ConfigEntryState.LOADED:
+                    if existing.state is not ConfigEntryState.LOADED:
                         self.hass.config_entries.async_schedule_reload(existing.entry_id)
                     return self.async_abort(
                         reason="host_updated" if changed else "already_configured"

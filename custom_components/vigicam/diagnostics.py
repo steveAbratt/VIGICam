@@ -31,7 +31,8 @@ TO_REDACT = {
     "dev_id",
     "device_alias",
     "device_name",
-    # The same naming under other keys (OpenAPI's dev_alias; the JSON API's dev_name, alias).
+    # The same naming under other keys: OpenAPI's dev_alias (seen leaking in #76), and the
+    # JSON API's dev_name / alias as a precaution.
     "dev_alias",
     "dev_name",
     "alias",
@@ -99,7 +100,8 @@ async def async_get_config_entry_diagnostics(
                     data.get("onvif_events"), "_consecutive_timeouts", None
                 ),
                 "has_event_capture": bool(data.get("has_event_capture")),
-                "has_sd_card": bool(data.get("has_sd_card")),
+                # Live value: None means no storage read has answered yet.
+                "has_sd_card": coordinator.has_sd_card if coordinator else data.get("has_sd_card"),
                 "has_frigate": bool(data.get("has_frigate")),
                 # The coordinator's refreshed copy, not entry_data's setup-time snapshot.
                 "preset_count": len(getattr(coordinator, "presets", None) or []) if coordinator else 0,

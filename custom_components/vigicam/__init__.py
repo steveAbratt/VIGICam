@@ -822,8 +822,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     # Determine SD card presence from first-refresh storage data.
-    # From the refresh itself: None if the storage read failed, which the transition
-    # listener below ignores rather than treating as a removal.
     has_sd_card = bool(coordinator.has_sd_card)
 
     # Clear any stale SD card repair issue if the card is now present.
@@ -893,17 +891,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinator.stop_on_auth_failure.append(openapi_events.async_stop)
 
     # Watch for SD card transitions during normal operation.
-    _prev_sd: dict[str, bool | None] = {"has_sd": coordinator.has_sd_card}
+    # Baseline is what the entities were built with. A card first seen later must still
+    # trigger the False→True reload — SD entities are only created at setup.
+    _prev_sd: dict[str, bool] = {"has_sd": has_sd_card}
 
     @callback
     def _on_coordinator_update() -> None:
         now_has_sd = coordinator.has_sd_card
         was_has_sd = _prev_sd["has_sd"]
-        if was_has_sd == now_has_sd or now_has_sd is None:
-            return
+        if now_has_sd is None or was_has_sd == now_has_sd:
+            return  # None: no storage read has answered yet, so no transition to act on
         _prev_sd["has_sd"] = now_has_sd
-        if was_has_sd is None:
-            return  # first successful read after a failed one: not a transition
         if not now_has_sd:
             _LOGGER.info("VIGICam: SD card removed from %s — raising repair notice", ip)
             hass.async_create_task(
