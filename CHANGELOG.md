@@ -20,7 +20,7 @@ No code changes. Corrections to docs, `services.yaml`, the setup dialog text and
   degrees. Six automation examples used binary-sensor entity IDs that don't exist; a trigger on
   a missing entity never fires and never errors.
 - **The PTZ move and preset services now have forms** in Developer Tools and the automation
-  editor. `ptz_save_preset` documents that with all eight slots full, slot 1 is overwritten;
+  editor. `ptz_save_preset` documents that with all eight slots full, slot 1 is used again;
   `ptz_move_to` that leaving `zoom` out sends 0.0.
 - **The Frigate guides no longer break your announcements.** Turning off Camera Stream removes
   the entity every `vigicam.*` example targets; the guides now say to repoint those calls
@@ -28,7 +28,8 @@ No code changes. Corrections to docs, `services.yaml`, the setup dialog text and
   entities merge onto the Frigate device.
 - **Blueprints:** the camera picker is no longer empty for Frigate users, and the pause slider
   can no longer pick a value the service rejects. **Re-import the blueprints to pick this up**
-  — Home Assistant keeps the copy made when you first imported them.
+  (or copy the `blueprints/` folder again, if that's how you installed them) — Home Assistant
+  keeps the copy made at install.
 - Smaller corrections: long audio is trimmed silently at 15 seconds rather than refused; media
   paths (`/media/` except on Core installs); slider limits matching the services; spotlight
   brightness levels; which diagnostic sensors are hidden by default; Intrusion is always

@@ -1538,7 +1538,7 @@ Moves the camera to an absolute pan/tilt/zoom position. Useful for positioning w
 named preset, or for patrol automations that step through fixed positions.
 
 All three values run from **-1.0 to 1.0 — they are not degrees**, and values outside that
-range are rejected. `zoom` is optional, but leaving it out sends `0.0`, which moves the zoom
+range are rejected. `zoom` is optional, but leaving it out sets zoom to `0.0`
 rather than leaving it where it is.
 
 ```yaml
@@ -1560,7 +1560,8 @@ data:
 ### `vigicam.ptz_save_preset` — Save current position as a preset *(PTZ cameras only, requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Saves the camera's current position as a named preset, in slot `id` (1–8). Without an `id`,
-the first free slot is used — and **if all eight are in use, slot 1 is overwritten**. The new
+the first free slot is used — and **if all eight are in use, slot 1 is used again**, which
+likely replaces the preset there. The new
 preset appears in the **PTZ Preset** select entity on the next poll (within about 30 seconds).
 **Until then the whole preset list is briefly empty**, so a `vigicam.goto_preset` straight after
 saving or deleting will report the preset as not found. Wait for the next poll first.
@@ -1591,7 +1592,7 @@ automation:
       data:
         entity_id: camera.vigi_c540v_stream
         name: "Night Watch"
-        id: 8              # a fixed slot, so a nightly run doesn't fill and then overwrite slot 1
+        id: 8              # reuses slot 8 every night — whatever preset is in slot 8 now will likely be replaced
 ```
 
 ---
@@ -1721,7 +1722,7 @@ After importing the blueprint:
 |-------|------------|
 | **Trigger** | Whatever should fire the playback — a motion sensor, a button press, a time pattern, etc. |
 | **Camera** | Any entity of the camera — its IP Address sensor works if Camera Stream is off |
-| **Audio file URL or path** | URL from the media browser, a `/local/` URL, or an absolute file path on the HA host |
+| **Audio file URL or path** | URL from the media browser, a `/local/` URL, or a file path on the HA host inside an allowed folder (see [vigicam.play_file](#vigicamplay_file--play-a-pre-recorded-audio-file)) |
 | **Audio slot** | Slot to upload to (101–103). Slot 101 is fine unless you need to keep a fixed sound separate from TTS. |
 | **Repeat count** | How many times to play the clip. Default 1. |
 | **Pause between repeats** | Extra gap between each play in seconds. Default 1 s. |

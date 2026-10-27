@@ -40,7 +40,8 @@ Common entities to check in automations:
 - `camera.vigi_*_stream` — will be replaced by Frigate's camera entity, **except** in
   `vigicam.*` service calls (`speak`, `play_file`, `ptz`, `goto_preset` and the rest). Those
   must point at a VIGICam entity such as `sensor.vigi_*_ip_address`, not at Frigate's camera,
-  and a broken one shows no orange warning and no failed trace — search your automations and
+  and a broken one shows no orange warning and no failed trace, only a `cannot find camera`
+  line in the HA log — search your automations and
   scripts for `vigicam.` to find them.
 - `binary_sensor.vigi_*_motion` — will be replaced by Frigate's occupancy sensor
 - `binary_sensor.vigi_*_person_detected` — will be replaced by Frigate's person occupancy sensor

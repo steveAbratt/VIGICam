@@ -276,7 +276,7 @@ The following require [OpenAPI enabled](#openapi--extended-detection--sensors):
 service: vigicam.ptz_move_to
 data:
   entity_id: camera.vigi_c540v_stream
-  pan: 0.5     # -1.0 to 1.0 across the camera's range — not degrees
+  pan: 0.5     # -1.0 to 1.0 — not degrees
   tilt: -0.1
   zoom: 0.0
 ```

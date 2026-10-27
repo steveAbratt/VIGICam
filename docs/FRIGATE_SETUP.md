@@ -110,7 +110,8 @@ Even with both disabled, VIGICam continues to provide:
 - **Speaker** services (`vigicam.speak`, `vigicam.play_file`) — play audio through the camera
 - **PTZ** controls (PTZ cameras only) — pan/tilt/zoom, presets, patrol automations
 - **Privacy Mask** switch — blank the camera feed on demand
-- **SD card sensors** — used %, total, free (the **Loop Recording** sensor and the **Last
+- **SD card sensors** — used %, total, free, plus recording duration, oldest recording and
+  capacity remaining with OpenAPI (the **Loop Recording** sensor and the **Last
   Detection** image belong to Detection Events and are removed with it)
 - **Status LED** switch
 - **Microphone/Speaker Mute** switches

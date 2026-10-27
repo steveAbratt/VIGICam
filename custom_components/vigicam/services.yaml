@@ -163,7 +163,7 @@ play_file:
     Fetch an audio file, convert it to the camera's required format (8 kHz mono 16-bit
     WAV via ffmpeg), upload to a slot, and play it through the camera speaker.
     Accepts any audio format ffmpeg supports (WAV, MP3, OGG, etc.).
-    The camera hard limit is 15 seconds / 256 KB; longer files are trimmed to fit and cut off.
+    Audio longer than 15 seconds is cut off there, with no log message.
   fields:
     entity_id:
       name: Cameras
@@ -372,7 +372,7 @@ ptz_move_to:
           mode: box
     zoom:
       name: Zoom
-      description: Zoom. Leaving it out sends 0.0, which moves the zoom.
+      description: Zoom. Leaving it out sets zoom to 0.0 rather than leaving it where it is.
       default: 0.0
       selector:
         number:
@@ -385,7 +385,8 @@ ptz_save_preset:
   name: PTZ Save Preset
   description: >
     Save the camera's current position as a named preset. Without an id, the first
-    free slot (1–8) is used; if all eight are in use, slot 1 is overwritten.
+    free slot (1–8) is used; if all eight are in use, slot 1 is used again, which likely
+    replaces the preset there.
     Requires OpenAPI to be enabled on the camera.
   fields:
     entity_id:
