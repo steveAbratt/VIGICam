@@ -1869,6 +1869,10 @@ the camera shows **Failed to set up – Retrying setup** on the integration page
 way the fix is the same: **add the camera again at its new address. Do not delete the old one
 first.**
 
+If two cameras **swapped** addresses — likely after a power cut if they share a password —
+nothing shows as unavailable: each camera in Home Assistant shows the other's picture and its
+switches act on the other camera. Add *both* cameras again at their current addresses.
+
 1. Find the new address in your router's client list or in the VIGI app.
 2. Settings → **Devices & Services** → **+ Add Integration** → **VIGI & InSight Cameras**, and
    enter the new IP address, username and password.

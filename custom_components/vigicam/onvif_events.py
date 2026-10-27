@@ -141,7 +141,7 @@ class VIGIOnvifEvents:
         """
         if self._stop_task is None:
             self._stop_task = self._hass.async_create_background_task(
-                self._do_stop(), "vigicam_onvif_stop"
+                self._do_stop(), f"vigicam_onvif_stop_{self._entry_id}"
             )
         await asyncio.shield(self._stop_task)
 

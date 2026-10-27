@@ -52,7 +52,8 @@ of them would have passed a hardware test.
 
 - **A camera whose IP address changed can be recovered.** Add it again at its new address —
   without deleting it first. Home Assistant recognises it by MAC address and moves the existing
-  entry, credentials included, keeping its entities. Previously this aborted with "already
+  entry, credentials included, keeping its entities. Re-adding with unchanged details also
+  retries a camera stuck in "Failed to set up". Previously this aborted with "already
   configured" and there was no way to change the address.
 
 - **An unreachable camera now goes unavailable.** Every switch used to read "off" — motion
@@ -107,7 +108,8 @@ of them would have passed a hardware test.
   and that cameras need power-cycling after updating because the stranded subscriptions cannot
   be released by the new code.
 - **Sections on changing a camera's password and on a camera whose IP address changed**, and
-  why deleting and re-adding a camera is never the fix.
+  why deleting and re-adding a camera is never the fix. The README now recommends a DHCP
+  reservation for each camera at setup.
 - **The README and entity reference no longer claim v0.7.5b1 fixed the Person / Vehicle
   toggles.** It made the refusal visible; the toggles are still unconfirmed on the affected
   firmware. Both now say so and link to the issue.

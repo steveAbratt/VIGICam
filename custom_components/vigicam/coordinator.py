@@ -40,13 +40,13 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             config_entry=config_entry,
-            name=f"{DOMAIN} {camera.host}",
+            name=f"{DOMAIN} {camera.host}",  # per camera, so failures name which one
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.camera = camera
         self.has_ptz = has_ptz
-        # None until a storage read answers, so a failed first read is not mistaken for
-        # "no card" and then "card inserted" one poll later.
+        # None until a storage read answers (live value and diagnostics only). The setup
+        # SD listener deliberately uses a bool baseline: see _on_coordinator_update.
         self.has_sd_card: bool | None = None
         self.has_openapi = has_openapi
         self.openapi: VIGIOpenAPI | None = openapi
@@ -69,12 +69,12 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise ConfigEntryAuthFailed(f"Authentication error: {exc}") from exc
         except VIGIError as exc:
             raise UpdateFailed(f"Camera communication error: {exc}") from exc
-        if self._auth_failed and self.stop_on_auth_failure:
-            # Recovered without a reauth reload (a write or update_entity refreshed us).
-            # The event listeners were stopped on the auth failure, so reload rather than
-            # leave detection sensors showing "off" with nothing feeding them.
+        if self._auth_failed:
             self._auth_failed = False
-            self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+            # Recovered without a reauth reload: the listeners were stopped, so reload to
+            # restart them rather than leave detection sensors "off" with nothing feeding them.
+            if self.stop_on_auth_failure:
+                self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
         return data
 
     async def _fetch_all(self) -> dict[str, Any]:

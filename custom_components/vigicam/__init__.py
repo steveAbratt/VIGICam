@@ -821,7 +821,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await coordinator.async_config_entry_first_refresh()
 
-    # Determine SD card presence from first-refresh storage data.
     has_sd_card = bool(coordinator.has_sd_card)
 
     # Clear any stale SD card repair issue if the card is now present.
@@ -890,7 +889,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await openapi_events.async_start()
             coordinator.stop_on_auth_failure.append(openapi_events.async_stop)
 
-    # Watch for SD card transitions during normal operation.
     # Baseline is what the entities were built with. A card first seen later must still
     # trigger the False→True reload — SD entities are only created at setup.
     _prev_sd: dict[str, bool] = {"has_sd": has_sd_card}
@@ -900,7 +898,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         now_has_sd = coordinator.has_sd_card
         was_has_sd = _prev_sd["has_sd"]
         if now_has_sd is None or was_has_sd == now_has_sd:
-            return  # None: no storage read has answered yet, so no transition to act on
+            return
         _prev_sd["has_sd"] = now_has_sd
         if not now_has_sd:
             _LOGGER.info("VIGICam: SD card removed from %s — raising repair notice", ip)
@@ -910,15 +908,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         else:
             _LOGGER.info("VIGICam: SD card reinserted in %s — scheduling reload", ip)
             hass.async_create_task(_clear_sd_card_repair(hass, entry))
-            # async_schedule_reload is a @callback returning None, so wrapping it in
-            # async_create_task raised TypeError here — inside a coordinator listener,
-            # which meant the reload never happened AND the exception took out every
-            # listener registered after this one for that refresh.
+            # @callback returning None: do not wrap in async_create_task.
             hass.config_entries.async_schedule_reload(entry.entry_id)
 
     entry_data["_sd_unsub"] = coordinator.async_add_listener(_on_coordinator_update)
 
-    # Re-register a listener so options changes trigger a reload.
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     _register_services(hass)
