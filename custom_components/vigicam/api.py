@@ -22,8 +22,8 @@ from urllib.parse import unquote
 from typing import Any
 
 import aiohttp
-from Crypto.Cipher import PKCS1_v1_5
-from Crypto.PublicKey import RSA
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
 from .const import TAPO_PASSWORD_PREFIX, TIMEOUT
 
@@ -64,6 +64,65 @@ def canonical_mac(value: str | None) -> str | None:
 
 class VIGIError(Exception):
     pass
+
+
+class VIGIApiError(VIGIError):
+    """The camera answered, with a non-zero error_code."""
+
+    def __init__(self, code: int, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+# Poll reads, as result key -> (module, section). get_many sends them as one multi-module
+# "get"; the camera answers every module in a single reply, an unsupported one as an empty
+# object. Verified on a C540V and an InSight S245: identical data, one request instead of
+# twelve. Tapo's "multipleRequest" is refused (-40105).
+_POLL_READS: dict[str, tuple[str, str]] = {
+    "device_info": ("device_info", "basic_info"),
+    "motion": ("motion_detection", "motion_det"),
+    "image_switch": ("image", "switch"),
+    "image_common": ("image", "common"),
+    "alarm": ("msg_alarm", "chn1_msg_alarm_info"),
+    "led": ("led", "config"),
+    "speaker": ("audio_config", "speaker"),
+    "microphone": ("audio_config", "microphone"),
+    "tamper": ("tamper_detection", "tamper_det"),
+    "network": ("network", "wan"),
+    "lens_mask": ("lens_mask", "lens_mask"),
+    "target_track": ("target_track", "target_track_info"),
+    "presets": ("preset", "preset"),
+}
+
+
+def _parse_storage(resp: dict) -> dict:
+    """The first disk's info dict from a harddisk_manage reply."""
+    hd = resp.get("harddisk_manage", {}).get("hd_info", [])
+    # Some firmware returns a list, others a single dict
+    if isinstance(hd, list):
+        entry = hd[0] if hd else {}
+    elif isinstance(hd, dict):
+        entry = hd
+    else:
+        return {}
+    # Camera wraps disk data one level deeper: {"hd_info_1": {actual data}}
+    # Unwrap if the expected keys aren't at the top level
+    if isinstance(entry, dict) and "status" not in entry and "disk_name" not in entry:
+        entry = next(iter(entry.values()), {})
+    return entry if isinstance(entry, dict) else {}
+
+
+def _parse_presets(data: dict) -> list[dict]:
+    """[{id, name}, ...] from a preset section; names arrive URL-encoded."""
+    ids = data.get("id", [])
+    names = data.get("name", [])
+    # One preset may arrive as a bare string rather than a one-item list.
+    ids = [ids] if isinstance(ids, str) else ids
+    names = [names] if isinstance(names, str) else names
+    return [
+        {"id": ids[i], "name": urllib.parse.unquote(names[i])}
+        for i in range(min(len(ids), len(names)))
+    ]
 
 
 class VIGICamera:
@@ -131,16 +190,26 @@ class VIGICamera:
 
     def _encrypt_password(self, nonce: str, key_b64: str) -> str:
         """RSA-encrypt the password+nonce. Synchronous but fast (<1ms)."""
-        if "BEGIN" not in key_b64:
-            key_b64 = (
-                f"-----BEGIN PUBLIC KEY-----\n{key_b64}\n-----END PUBLIC KEY-----"
-            )
-        rsa_key = RSA.import_key(key_b64)
+        # The cameras send a bare SubjectPublicKeyInfo body (docs/PROTOCOL.md). Also accept
+        # a PKCS#1 body, which pycryptodome tolerated under either header and
+        # cryptography does not.
+        pems = [key_b64] if "BEGIN" in key_b64 else [
+            f"-----BEGIN {kind}-----\n{key_b64}\n-----END {kind}-----"
+            for kind in ("PUBLIC KEY", "RSA PUBLIC KEY")
+        ]
+        for pem in pems:
+            try:
+                rsa_key = load_pem_public_key(pem.encode())
+                break
+            except ValueError:
+                continue
+        else:
+            raise VIGIError(f"Unreadable login key from {self._ip}")
         pwd_hash = hashlib.md5(
             (TAPO_PASSWORD_PREFIX + self._password).encode()
         ).hexdigest().upper()
         payload = f"{pwd_hash}:{nonce}".encode()
-        return base64.b64encode(PKCS1_v1_5.new(rsa_key).encrypt(payload)).decode()
+        return base64.b64encode(rsa_key.encrypt(payload, padding.PKCS1v15())).decode()
 
     async def authenticate(self) -> None:
         """Fetch a fresh stok session token from the camera."""
@@ -193,7 +262,7 @@ class VIGICamera:
             error_code = resp.get("error_code", 0)
 
         if error_code not in (0, None):
-            raise VIGIError(f"API error {error_code} for request: {body}")
+            raise VIGIApiError(error_code, f"API error {error_code} for request: {body}")
         return resp
 
     # ── Low-level helpers ──────────────────────────────────────────────────────
@@ -201,6 +270,46 @@ class VIGICamera:
     async def get(self, module: str, name: str | list[str]) -> dict:
         resp = await self._request({"method": "get", module: {"name": name}})
         return resp.get(module, resp)
+
+    async def get_many(self, keys: list[str]) -> dict[str, Any]:
+        """Read several _POLL_READS keys (and "storage") in one request.
+
+        Returns only the keys the camera answered. Raises VIGIApiError if it refuses
+        the combined request.
+        """
+        body: dict[str, Any] = {"method": "get"}
+        sections: dict[str, list[str]] = {}
+        for key in keys:
+            if key == "storage":
+                body["harddisk_manage"] = {"table": "hd_info"}
+            else:
+                module, section = _POLL_READS[key]
+                sections.setdefault(module, []).append(section)
+        for module, names in sections.items():
+            body[module] = {"name": names[0] if len(names) == 1 else names}
+        resp = await self._request(body)
+
+        out: dict[str, Any] = {}
+        for key in keys:
+            try:
+                if key == "storage":
+                    # Answered only with hd_info present: a failed read must not look
+                    # like a missing card (that drives the SD repair and reload).
+                    hd = resp.get("harddisk_manage")
+                    if isinstance(hd, dict) and isinstance(hd.get("hd_info"), (list, dict)):
+                        out[key] = _parse_storage(resp)
+                    continue
+                module, section = _POLL_READS[key]
+                data = (resp.get(module) or {}).get(section)
+                if key == "presets":
+                    # Without "id" an empty section is a failed read, not "no presets".
+                    if isinstance(data, dict) and "id" in data:
+                        out[key] = _parse_presets(data)
+                elif isinstance(data, dict):
+                    out[key] = data
+            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+                continue  # an unexpected shape loses this key, not the whole poll
+        return out
 
     async def set(self, module: str, fields: dict) -> None:
         await self._request({"method": "set", module: fields})
@@ -459,22 +568,9 @@ class VIGICamera:
 
     async def get_storage(self) -> dict:
         """Returns the first disk's info dict from harddisk_manage."""
-        resp = await self._request(
+        return _parse_storage(await self._request(
             {"method": "get", "harddisk_manage": {"table": "hd_info"}}
-        )
-        hd = resp.get("harddisk_manage", {}).get("hd_info", [])
-        # Some firmware returns a list, others a single dict
-        if isinstance(hd, list):
-            entry = hd[0] if hd else {}
-        elif isinstance(hd, dict):
-            entry = hd
-        else:
-            return {}
-        # Camera wraps disk data one level deeper: {"hd_info_1": {actual data}}
-        # Unwrap if the expected keys aren't at the top level
-        if isinstance(entry, dict) and "status" not in entry and "disk_name" not in entry:
-            entry = next(iter(entry.values()), {})
-        return entry if isinstance(entry, dict) else {}
+        ))
 
     # ── Tamper detection ──────────────────────────────────────────────────────
 
@@ -510,16 +606,7 @@ class VIGICamera:
         """
         try:
             resp = await self.get("preset", "preset")
-            data = resp.get("preset", resp)
-            ids = data.get("id", [])
-            names = data.get("name", [])
-            return [
-                {
-                    "id": ids[i],
-                    "name": urllib.parse.unquote(names[i]),
-                }
-                for i in range(len(ids))
-            ]
+            return _parse_presets(resp.get("preset", resp))
         except (VIGIError, KeyError, IndexError):
             return []
 

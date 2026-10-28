@@ -6,12 +6,14 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
+
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import VIGIAuthError, VIGICamera, VIGIError, canonical_mac
+from .api import VIGIApiError, VIGIAuthError, VIGICamera, VIGIError, canonical_mac
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, REPAIRS_WRONG_CAMERA
 
 if TYPE_CHECKING:
@@ -24,6 +26,14 @@ _LOGGER = logging.getLogger(__name__)
 # 10 ticks × 30 s = 5 minutes.
 _OPENAPI_RECHECK_TICKS = 10
 _PRESET_REFRESH_TICKS = 10   # ~5 min at the default 30 s scan interval
+
+# Refused combined reads in a row before polling one module at a time until reload.
+_BATCH_REFUSALS_ALLOWED = 3
+
+_POLL_KEYS = (
+    "device_info", "motion", "image_switch", "image_common", "alarm", "led", "speaker",
+    "microphone", "storage", "tamper", "network", "lens_mask",
+)
 
 
 class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -60,6 +70,9 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_preset: str | None = None  # last preset selected from HA; None = unknown
         self._openapi_recheck_counter: int = 0
         self._preset_refresh_counter: int = 0
+        self._batch_reads = True
+        self._batch_refusals = 0
+        self._batch_checked = False
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -128,6 +141,119 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_update_listeners()
 
     async def _fetch_all(self) -> dict[str, Any]:
+        batched = await self._fetch_batched() if self._batch_reads else None
+        if batched is None:
+            results, answered = await self._fetch_each()
+        else:
+            results, answered = batched
+
+        if self.has_openapi and self.openapi:
+            async def safe_openapi(key: str, method: str) -> None:
+                try:
+                    raw = await self.openapi.call(method)
+                    results[key] = raw.get("result", {})
+                except Exception as exc:  # noqa: BLE001
+                    # Includes VIGIOpenAPIAuthError: stok failures are often transient, and
+                    # reauth only validates the JSON API. Escalating this was tried in a b5
+                    # draft and stopped all polling on any busy or malformed reply.
+                    _LOGGER.debug("OpenAPI %s failed: %s", method, exc)
+                    results[key] = {}
+
+            await safe_openapi("openapi_sd", "getSdCardStatus")
+            await safe_openapi("openapi_device", "getDeviceStatus")
+            await safe_openapi("openapi_people", "getPeopleDetectionSwitch")
+            await safe_openapi("openapi_vehicle", "getVehicleDetectionSwitch")
+
+        # Only from a read that answered; a failed read must not look like a missing card.
+        if "storage" in answered:
+            self.has_sd_card = _detect_sd_card(results["storage"])
+
+        # Periodically probe for OpenAPI becoming available.
+        if not self.has_openapi:
+            self._openapi_recheck_counter += 1
+            if self._openapi_recheck_counter >= _OPENAPI_RECHECK_TICKS:
+                self._openapi_recheck_counter = 0
+                await self._recheck_openapi()
+
+        return results
+
+    async def _fetch_batched(self) -> tuple[dict[str, Any], set[str]] | None:
+        """Every JSON API read in one request; None to read one module at a time instead.
+
+        Untested firmware may refuse the combined read, or answer part of it empty while
+        answering the same module alone. A refusal is counted, since one may be
+        transient; a module left out is caught by comparing the first batch with a
+        per-module read. Either way the camera is read one module at a time until reload:
+        slower, never wrong.
+        """
+        keys = [*_POLL_KEYS, *(("target_track", "presets") if self.has_ptz else ())]
+        try:
+            got = await self.camera.get_many(keys)
+        except VIGIAuthError:
+            raise
+        except VIGIApiError as exc:
+            return self._batch_refused(f"error {exc.code}")
+        except aiohttp.ClientError as exc:
+            # The SSL errors _post deliberately leaves unwrapped (#39): unreachable, not a
+            # refusal. Must not be counted.
+            raise UpdateFailed(f"Camera not responding: {exc}") from exc
+        except VIGIError as exc:
+            if self._batch_checked:
+                raise UpdateFailed(f"Camera not responding: {exc}") from exc
+            # Until a batch has worked, firmware that rejects it by dropping the
+            # connection or sending an error page looks like this too. Fall back for this
+            # poll; if the camera answers one module at a time, it was a refusal.
+            results, answered = await self._fetch_each()
+            self._batch_refused(type(exc).__name__)
+            return results, answered
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning(
+                "Unexpected combined-read reply from %s", self.camera.host, exc_info=True
+            )
+            return self._batch_refused(type(exc).__name__)
+        if "device_info" not in got:
+            return self._batch_refused("no device_info")
+        self._batch_refusals = 0
+        self.check_identity(got["device_info"])
+
+        if not self._batch_checked:
+            missing = [k for k in keys if k not in got]
+            if missing:
+                results, answered = await self._fetch_each()
+                extra = sorted(answered.intersection(missing))
+                if extra:
+                    self._batch_reads = False
+                    _LOGGER.info(
+                        "%s leaves %s out of a combined read; polling one module at a time",
+                        self.camera.host, ", ".join(extra),
+                    )
+                    return results, answered
+            self._batch_checked = True
+
+        # A present preset section is authoritative, even when it lists none. Without one,
+        # refresh on the per-module cadence so the list can't freeze.
+        if "presets" in got:
+            self.presets = got.pop("presets")
+        elif self.has_ptz:
+            self._preset_refresh_counter += 1
+            if not self.presets or self._preset_refresh_counter >= _PRESET_REFRESH_TICKS:
+                self._preset_refresh_counter = 0
+                self.presets = await self.camera.get_presets()
+        return {key: got.get(key, {}) for key in keys if key != "presets"}, set(got)
+
+    def _batch_refused(self, reason: str) -> None:
+        self._batch_refusals += 1
+        _LOGGER.debug("Combined read refused by %s (%s)", self.camera.host, reason)
+        if self._batch_refusals >= _BATCH_REFUSALS_ALLOWED:
+            self._batch_reads = False
+            _LOGGER.info(
+                "%s refuses combined reads (%s); polling one module at a time",
+                self.camera.host, reason,
+            )
+        return None
+
+    async def _fetch_each(self) -> tuple[dict[str, Any], set[str]]:
+        """One request per module: the fallback for firmware that refuses a combined read."""
         results: dict[str, Any] = {}
         answered: set[str] = set()
 
@@ -174,35 +300,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.presets = self.presets or []
             await safe_get("target_track", self.camera.get_target_track())
 
-        if self.has_openapi and self.openapi:
-            async def safe_openapi(key: str, method: str) -> None:
-                try:
-                    raw = await self.openapi.call(method)
-                    results[key] = raw.get("result", {})
-                except Exception as exc:  # noqa: BLE001
-                    # Includes VIGIOpenAPIAuthError: stok failures are often transient, and
-                    # reauth only validates the JSON API. Escalating this was tried in a b5
-                    # draft and stopped all polling on any busy or malformed reply.
-                    _LOGGER.debug("OpenAPI %s failed: %s", method, exc)
-                    results[key] = {}
-
-            await safe_openapi("openapi_sd", "getSdCardStatus")
-            await safe_openapi("openapi_device", "getDeviceStatus")
-            await safe_openapi("openapi_people", "getPeopleDetectionSwitch")
-            await safe_openapi("openapi_vehicle", "getVehicleDetectionSwitch")
-
-        # Only from a read that answered; a failed read must not look like a missing card.
-        if "storage" in answered:
-            self.has_sd_card = _detect_sd_card(results["storage"])
-
-        # Periodically probe for OpenAPI becoming available.
-        if not self.has_openapi:
-            self._openapi_recheck_counter += 1
-            if self._openapi_recheck_counter >= _OPENAPI_RECHECK_TICKS:
-                self._openapi_recheck_counter = 0
-                await self._recheck_openapi()
-
-        return results
+        return results, answered
 
     async def _recheck_openapi(self) -> None:
         from .openapi import VIGIOpenAPI, try_openapi
