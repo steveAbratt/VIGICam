@@ -75,5 +75,10 @@
       "title": "{title} has moved: a different camera is at {host}",
       "description": "**{title}** is set up at `{host}`, but a different camera is answering there now — most likely your router gave the cameras new addresses, for example after a power cut. To avoid acting on the wrong camera, VIGICam has stopped controlling **{title}** until this is fixed.\n\n1. Find **{title}**'s current address: look for MAC address `{mac}` in your router's client list, or check the VIGI app.\n2. Go to **Settings → Devices & Services → Add Integration → VIGI & InSight Cameras** and enter that address with the camera's username and password. Do **not** delete the existing camera first — Home Assistant recognises it, moves it to the new address and keeps its entities and history.\n3. If more than one camera shows this notice, repeat for each.\n\nThis notice clears itself once the right camera answers. Giving each camera a fixed address (a DHCP reservation in your router) stops it happening again.\n\nIf you **replaced** {title} with a new camera at the same address, delete {title} and add the new camera instead. To get the old entity IDs back, open the new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_main_stream`, use \"Front Door\"), then accept Home Assistant's offer to rename its entity IDs."
     }
+  },
+  "exceptions": {
+    "alarm_needs_output": {
+      "message": "Turn on Alarm Light or Alarm Sound first. The Alarm switch only arms the camera's alarm; with both off it does nothing."
+    }
   }
 }

@@ -164,11 +164,12 @@ detection events according to the Alarm Light and Alarm Sound switches below.
 > This does **not** prevent detection events from firing binary sensors in HA — it only
 > controls the camera's own on-device response.
 
-> **Known issue on some firmware** ([#79](https://github.com/steveAbratt/VIGICam/issues/79)):
-> on the C540S and C350 this switch flickers and does not change the camera's behaviour, while
-> **Alarm Light** and **Alarm Sound** work correctly. The field appears to be accepted and
-> stored but ignored by those firmware versions. Use the two output switches as the real
-> control — turning both off disables the alarm as effectively as the master switch would.
+> **Alarm needs an output** ([#79](https://github.com/steveAbratt/VIGICam/issues/79)). Alarm
+> only arms the camera's alarm; Alarm Light and Alarm Sound decide what it does. With both
+> off, turning Alarm on would do nothing, so Home Assistant refuses with "Turn on Alarm Light
+> or Alarm Sound first", and an automation stops at that step. Turning the outputs on in the
+> same action as Alarm, or in an earlier step, works. Turning both outputs off disables the
+> alarm as effectively as turning Alarm off.
 
 ### Alarm Light
 
