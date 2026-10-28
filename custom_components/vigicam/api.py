@@ -30,6 +30,9 @@ class VIGIAuthError(Exception):
     pass
 
 
+_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=TIMEOUT)
+
+
 def camera_unique_id(info: dict, fallback: str) -> str:
     """The identity a config entry is keyed on: the camera's MAC, normalised.
 
@@ -95,7 +98,7 @@ class VIGICamera:
             # TIMEOUT of its own, so a camera that accepted the connection and then went
             # silent held a poll for aiohttp's 5-minute default.
             async with session.post(
-                url, json=body, timeout=aiohttp.ClientTimeout(total=TIMEOUT)
+                url, json=body, timeout=_REQUEST_TIMEOUT
             ) as resp:
                 return await resp.json(content_type=None)
         except (aiohttp.ClientSSLError, aiohttp.ClientConnectorCertificateError):
@@ -239,9 +242,11 @@ class VIGICamera:
                 await self.get(module, name)
                 return True
             except VIGIError:
-                continue        # this module is unsupported; try the other
+                # Unsupported, or the request failed (timeouts and connection errors are
+                # VIGIError too): try the other module. Both failing returns False below.
+                continue
             except Exception:   # noqa: BLE001
-                return False    # unreachable — don't claim PTZ we could not verify
+                return False    # unexpected error — don't claim PTZ we could not verify
         return False
 
     # ── Night vision / spotlight ──────────────────────────────────────────────

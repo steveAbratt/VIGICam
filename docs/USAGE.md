@@ -1889,9 +1889,20 @@ the camera shows **Failed to set up – Retrying setup** on the integration page
 way the fix is the same: **add the camera again at its new address. Do not delete the old one
 first.**
 
-If two cameras **swapped** addresses — likely after a power cut if they share a password —
-nothing shows as unavailable: each camera in Home Assistant shows the other's picture and its
-switches act on the other camera. Add *both* cameras again at their current addresses.
+If two cameras **swapped** addresses (likely after a power cut), both go **unavailable** and
+**Settings → Repairs** shows "… has moved: a different camera is at …" for each, with the MAC
+address to look for in your router. VIGICam checks every camera's MAC address and stops
+controlling one it doesn't recognise, including its `vigicam.*` services, so it never acts on
+the wrong camera. Follow the steps below once for each camera, using the address where that
+camera is now; each notice clears itself once its camera is fixed.
+
+### I replaced a camera with a new one
+
+A replacement camera has a different MAC address, so if you put it at the old one's address
+VIGICam treats it as a different camera: the entities go unavailable and the repair above
+appears. Delete the old camera from **Settings → Devices & Services → VIGI & InSight
+Cameras**, then add the new one. Give it the same name and the entity IDs come out the same,
+so most automations keep working.
 
 1. Find the new address in your router's client list or in the VIGI app.
 2. Settings → **Devices & Services** → **+ Add Integration** → **VIGI & InSight Cameras**, and

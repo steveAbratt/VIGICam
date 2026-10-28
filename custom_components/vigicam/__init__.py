@@ -15,7 +15,11 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 
@@ -35,6 +39,7 @@ from .const import (
     IMAGE_CONTROL_SUFFIXES,
     REPAIRS_FRIGATE_GONE,
     REPAIRS_SD_CARD_MISSING,
+    REPAIRS_WRONG_CAMERA,
 )
 from .frigate import detect_frigate_camera
 from .coordinator import VIGICoordinator
@@ -268,6 +273,13 @@ def _iter_targets(
         if data is None:
             _LOGGER.error("vigicam.%s: cannot find camera for %s", service, eid)
             continue
+        if not data["coordinator"].identity_ok:
+            # Services bypass entities, so unavailable entities don't stop them. Without
+            # this a preset save would write into the other camera's preset table.
+            raise HomeAssistantError(
+                f"vigicam.{service}: a different camera is answering at "
+                f"{data['ip']} — see Settings → Repairs"
+            )
         targets.append((eid, data))
     return targets
 
@@ -349,12 +361,6 @@ def _entry_data_for_entity(hass: HomeAssistant, entity_id: str) -> dict | None:
     if entry and entry.config_entry_id:
         return hass.data[DOMAIN].get(entry.config_entry_id)
     return None
-
-
-async def _refresh_presets(coordinator: VIGICoordinator) -> None:
-    """Re-read presets after a save or delete so the select and goto_preset see them."""
-    coordinator.presets = await coordinator.camera.get_presets()
-    coordinator.async_update_listeners()
 
 
 async def _openapi_get_presets(openapi) -> list[dict]:
@@ -739,9 +745,7 @@ def _register_services(hass: HomeAssistant) -> None:
                     used_ids = {int(p["id"]) for p in existing if p["id"].isdigit()}
                     preset_id = next((i for i in range(1, 9) if i not in used_ids), 1)
                 await openapi.call("setPresetPoint", {"id": str(preset_id), "name": name})
-                # Refresh now rather than clearing: an empty list left every preset
-                # "not found" (select and goto_preset) until the next poll.
-                await _refresh_presets(data["coordinator"])
+                await data["coordinator"].async_refresh_presets()
                 _LOGGER.debug(
                     "vigicam.ptz_save_preset: saved '%s' as id %d on %s", name, preset_id, eid
                 )
@@ -765,7 +769,7 @@ def _register_services(hass: HomeAssistant) -> None:
                     )
                     continue
                 await openapi.call("removePresetPoint", {"id": preset["id"]})
-                await _refresh_presets(data["coordinator"])
+                await data["coordinator"].async_refresh_presets()
                 _LOGGER.debug("vigicam.ptz_delete_preset: deleted preset '%s' on %s", name, eid)
             except Exception as exc:
                 _LOGGER.error("vigicam.ptz_delete_preset failed for %s: %s", eid, exc)
@@ -909,14 +913,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     if want_detection:
-        await onvif_events.async_start()
         # HA does not unload config entries on shutdown, so without this the subscription
-        # is abandoned on the camera on every restart (held up to an hour; see #95).
+        # is abandoned on the camera on every restart (held up to an hour). Registered
+        # before start so a stop during startup is not missed; the unsub is cleared once
+        # it fires, as HA's own coordinator does, so a later unload doesn't remove it twice.
+        stop_unsub: list = []
+
         async def _release_onvif(_event: Event) -> None:
+            stop_unsub.clear()
             await onvif_events.async_stop()
-        entry.async_on_unload(
-            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _release_onvif)
-        )
+
+        stop_unsub.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _release_onvif))
+        entry.async_on_unload(lambda: stop_unsub and stop_unsub.pop()())
+        await onvif_events.async_start()
         coordinator.stop_on_auth_failure.append(onvif_events.async_stop)
         if openapi_events:
             await openapi_events.async_start()
@@ -970,3 +979,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await data["onvif_ptz"].close()
         await data["api"].close()
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clear this camera's repair notices when it is deleted, so none are left behind."""
+    from homeassistant.helpers import issue_registry as ir
+
+    for issue in (REPAIRS_WRONG_CAMERA, REPAIRS_SD_CARD_MISSING, REPAIRS_FRIGATE_GONE):
+        ir.async_delete_issue(hass, DOMAIN, f"{issue}_{entry.entry_id}")

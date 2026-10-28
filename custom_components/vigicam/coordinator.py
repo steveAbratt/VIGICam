@@ -5,13 +5,14 @@ from datetime import timedelta
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import VIGIAuthError, VIGICamera, VIGIError, camera_unique_id
+from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, REPAIRS_WRONG_CAMERA
 
 if TYPE_CHECKING:
@@ -25,6 +26,19 @@ _LOGGER = logging.getLogger(__name__)
 _OPENAPI_RECHECK_TICKS = 10
 _PRESET_REFRESH_TICKS = 10   # ~5 min at the default 30 s scan interval
 
+
+
+def _canonical_mac(value: str | None) -> str | None:
+    """12 lowercase hex digits, or None if *value* isn't a MAC.
+
+    For comparison only — entries stay keyed by camera_unique_id(), which must never
+    change. Accepts dashes, colons, none, upper case and URL-encoded separators, so a
+    firmware update that changes the MAC's format can't lock every camera out.
+    """
+    if not value:
+        return None
+    digits = "".join(c for c in unquote(value).lower() if c in "0123456789abcdef")
+    return digits if len(digits) == 12 else None
 
 class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
@@ -56,6 +70,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # old password (account lockout); a later successful poll reloads the entry.
         self.stop_on_auth_failure: list[Callable[[], Awaitable[None]]] = []
         self._auth_failed = False
+        self.identity_ok = True
         self.last_preset: str | None = None  # last preset selected from HA; None = unknown
         self._openapi_recheck_counter: int = 0
         self._preset_refresh_counter: int = 0
@@ -82,33 +97,49 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Refuse to drive a different camera that now answers at this entry's address.
 
         Two cameras that swap DHCP addresses and share a password otherwise swap
-        identities silently: each entry shows the other's picture and its switches act on
-        the other camera. Raises UpdateFailed so the entities go unavailable, and raises a
-        repair telling the user how to fix it. Compared only when both sides have a MAC.
+        identities silently. Deliberately called outside safe_get: its broad except would
+        swallow the UpdateFailed and the check would do nothing.
         """
-        expected = self.config_entry.unique_id
-        found = device_info.get("mac")
+        expected = _canonical_mac(self.config_entry.unique_id)
+        found = _canonical_mac(device_info.get("mac"))
         issue_id = f"{REPAIRS_WRONG_CAMERA}_{self.config_entry.entry_id}"
-        # An entry created when the camera reported no MAC is keyed on its IP address
-        # (dotted); comparing that against a real MAC would reject every such camera.
-        if (
-            not expected or not found or "." in expected
-            or camera_unique_id(device_info, "") == expected
-        ):
+        if expected is None or found is None:
+            # Entry keyed on an address (camera reported no MAC when added), or this
+            # reply carried none: nothing to compare. Leave any existing issue alone —
+            # only a positive match may clear it.
+            return
+        if found == expected:
+            self.identity_ok = True
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
+        self.identity_ok = False
         ir.async_create_issue(
             self.hass, DOMAIN, issue_id,
             is_fixable=False,
             severity=ir.IssueSeverity.ERROR,
             translation_key=REPAIRS_WRONG_CAMERA,
             translation_placeholders={
-                "title": self.config_entry.title, "host": self.camera.host,
+                "title": self.config_entry.title,
+                "host": self.camera.host,
+                "mac": "-".join(expected[k:k + 2] for k in range(0, 12, 2)).upper(),
             },
         )
         raise UpdateFailed(
             f"A different camera is answering at {self.camera.host} — its address changed"
         )
+
+    async def async_refresh_presets(self) -> None:
+        """Re-read presets after a save or delete.
+
+        Keeps the old list if the read comes back empty (a failed read looks the same),
+        and forces the next poll to re-read anyway: presets are written through OpenAPI
+        and read through the JSON API, which may lag.
+        """
+        presets = await self.camera.get_presets()
+        if presets or not self.presets:
+            self.presets = presets
+        self._preset_refresh_counter = _PRESET_REFRESH_TICKS
+        self.async_update_listeners()
 
     async def _fetch_all(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
