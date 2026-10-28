@@ -2,13 +2,13 @@
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![Release](https://img.shields.io/github/v/release/steveAbratt/VIGICam?display_name=tag)](https://github.com/steveAbratt/VIGICam/releases)
-[![License](https://img.shields.io/github/license/steveAbratt/VIGICam)](LICENSE)
+[![License](https://img.shields.io/github/license/steveAbratt/VIGICam)](https://github.com/steveAbratt/VIGICam/blob/main/LICENSE)
 
 Full local control of TP-Link VIGI and InSight cameras — real-time smart detection, PTZ,
 two-way audio announcements, image configuration, and deep camera management.
 No cloud account. No subscription. No dependency on TP-Link servers.
 
-**→ [Full entity & feature reference](docs/USAGE.md)**
+**→ [Full entity & feature reference](https://github.com/steveAbratt/VIGICam/blob/main/docs/USAGE.md)** · **[What's new](https://github.com/steveAbratt/VIGICam/blob/main/CHANGELOG.md)** · **[Releases](https://github.com/steveAbratt/VIGICam/releases)**
 
 ---
 
@@ -25,7 +25,7 @@ VIGICam steps back gracefully — streams and detection hand off to Frigate whil
 retains exclusive control over the functions Frigate can't reach: PTZ, spotlight, image
 tuning, announcements, and alarms. Turn off **Camera Stream** and **Detection Events** in
 VIGICam's Configure dialog and it keeps only the hardware controls — see
-[Setting up with Frigate](docs/FRIGATE_SETUP.md).
+[Setting up with Frigate](https://github.com/steveAbratt/VIGICam/blob/main/docs/FRIGATE_SETUP.md).
 
 ---
 
@@ -51,13 +51,13 @@ misbehaves, a diagnostics download (⋮ → *Download diagnostics*) makes it far
 
 **A control that shows the right state but won't change it** is nearly always a model
 difference with a known fix or workaround — see
-[Troubleshooting](docs/USAGE.md#troubleshooting).
+[Troubleshooting](https://github.com/steveAbratt/VIGICam/blob/main/docs/USAGE.md#troubleshooting).
 
 **If something else also subscribes to your cameras over ONVIF** — an NVR, Synology
 Surveillance Station, a second Home Assistant — be aware these cameras allow only a few
 simultaneous event subscriptions and all clients share that limit. Setting an NVR to do its
 own analysis rather than taking detection from the camera keeps the budget free. See
-[Troubleshooting](docs/USAGE.md#troubleshooting) if detections start arriving intermittently.
+[Troubleshooting](https://github.com/steveAbratt/VIGICam/blob/main/docs/USAGE.md#troubleshooting) if detections start arriving intermittently.
 
 ---
 
@@ -146,6 +146,9 @@ Requires Home Assistant **2024.11 or newer**.
 > update as normal:
 > - **Marketplace (2026.11+):** its **Pre-release** switch (on its page or under its **⋮** menu).
 > - **HACS (before 2026.11):** **⋮** → **Enable Beta Versions**.
+>
+> What each beta changes is in the [changelog](https://github.com/steveAbratt/VIGICam/blob/main/CHANGELOG.md) and on the [Releases page](https://github.com/steveAbratt/VIGICam/releases)
+> (betas are marked **Pre-release**).
 
 ## Manual Installation
 
@@ -159,7 +162,7 @@ and restart. Requires Home Assistant 2024.11 or newer; older versions fail to lo
 [![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=vigicam)
 
 Give each camera a fixed address (a DHCP reservation in your router) first. If an address
-changes later, see [Troubleshooting](docs/USAGE.md#my-cameras-ip-address-changed).
+changes later, see [Troubleshooting](https://github.com/steveAbratt/VIGICam/blob/main/docs/USAGE.md#my-cameras-ip-address-changed).
 
 1. **Settings → Devices & Services → + Add Integration**
 2. Search for **VIGI**
@@ -308,9 +311,9 @@ data:
 For a plain-language explanation of every entity, button, switch, sensor, and service —
 including what they actually do, automation examples, and dashboard tips — see:
 
-**[docs/USAGE.md](docs/USAGE.md)**
+**[docs/USAGE.md](https://github.com/steveAbratt/VIGICam/blob/main/docs/USAGE.md)**
 
-Also in there: [Troubleshooting](docs/USAGE.md#troubleshooting), covering controls that read
+Also in there: [Troubleshooting](https://github.com/steveAbratt/VIGICam/blob/main/docs/USAGE.md#troubleshooting), covering controls that read
 correctly but won't change, which version fixed which model, and how to capture the
 diagnostics report and debug log that make a bug report actionable.
 
@@ -331,4 +334,4 @@ install, install ffmpeg from your OS's package manager.
 - **[yetanothercarbot/vigi_camera_lighting](https://github.com/yetanothercarbot/vigi_camera_lighting)** — spotlight/night-vision endpoint reference
 - **[Komzpa/ha-vigi-control](https://github.com/Komzpa/ha-vigi-control)** — image control API field reference and Frigate integration approach
 
-MIT licensed. See [LICENSE](LICENSE).
+MIT licensed. See [LICENSE](https://github.com/steveAbratt/VIGICam/blob/main/LICENSE).
