@@ -30,6 +30,17 @@ class VIGIAuthError(Exception):
     pass
 
 
+def camera_unique_id(info: dict, fallback: str) -> str:
+    """The identity a config entry is keyed on: the camera's MAC, normalised.
+
+    Shared by the config flow and setup so the identity check compares like with like.
+    Falls back to the address only when the camera reports no MAC. This must stay
+    byte-for-byte the normalisation existing entries were created with — changing it
+    (stripping dashes, say) would make every installed camera fail the identity check.
+    """
+    return (info.get("mac") or fallback).replace(":", "").lower()
+
+
 class VIGIError(Exception):
     pass
 
@@ -80,12 +91,22 @@ class VIGICamera:
     async def _post(self, url: str, body: dict) -> dict:
         session = self._get_session()
         try:
-            async with session.post(url, json=body) as resp:
+            # Per-request timeout: the session normally comes from HA and carries no
+            # TIMEOUT of its own, so a camera that accepted the connection and then went
+            # silent held a poll for aiohttp's 5-minute default.
+            async with session.post(
+                url, json=body, timeout=aiohttp.ClientTimeout(total=TIMEOUT)
+            ) as resp:
                 return await resp.json(content_type=None)
         except (aiohttp.ClientSSLError, aiohttp.ClientConnectorCertificateError):
             raise  # Let SSL errors propagate as-is so config flow can retry without SSL
         except aiohttp.ClientError as exc:
             raise VIGIError(f"HTTP error communicating with {self._ip}: {exc}") from exc
+        except TimeoutError as exc:
+            raise VIGIError(f"Timed out communicating with {self._ip}") from exc
+        except ValueError as exc:
+            # A non-JSON body (an HTML error page from a busy camera).
+            raise VIGIError(f"Unreadable response from {self._ip}: {exc}") from exc
 
     def _encrypt_password(self, nonce: str, key_b64: str) -> str:
         """RSA-encrypt the password+nonce. Synchronous but fast (<1ms)."""

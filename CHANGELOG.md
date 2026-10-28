@@ -12,9 +12,31 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two cameras that swap addresses no longer swap identities.** If the router gives the
+  cameras new addresses (after a power cut, for instance) and they share a password, each
+  entry used to start controlling the other camera — showing its picture and sending it
+  commands. VIGICam now checks the camera's MAC address on every poll; if a different camera
+  answers, its entities go unavailable and a repair notice explains how to move it to its new
+  address.
+- **Event subscriptions are released when Home Assistant shuts down.** Home Assistant doesn't
+  unload integrations on a restart, so every restart left an ONVIF subscription on each camera
+  for up to an hour — the resource #95 was about.
+- **A camera whose SD card read fails at startup no longer reloads in a loop.** VIGICam now
+  remembers the last answer instead of assuming there's no card.
+- **Requests to a camera that stops answering now time out after 10 seconds** instead of
+  holding a poll for up to five minutes, and a camera that fails during startup now retries
+  instead of failing outright.
+- **Saving or deleting a PTZ preset no longer empties the preset list** until the next poll;
+  the list is refreshed straight away.
+- **Frigate detection no longer links a camera to another camera's Frigate input** with a
+  similar address (192.168.1.1 used to match 192.168.1.10).
+- A file-path check in the audio services no longer runs on Home Assistant's event loop.
+
 ### Documentation
 
-No code changes. Corrections to docs, `services.yaml`, the setup dialog text and the blueprints.
+Corrections to docs, `services.yaml`, the setup dialog text and the blueprints.
 
 - **Examples that could never work are fixed.** `vigicam.ptz_move_to` takes -1.0 to 1.0, not
   degrees. Six automation examples used binary-sensor entity IDs that don't exist; a trigger on

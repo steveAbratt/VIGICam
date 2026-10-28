@@ -7,8 +7,14 @@ import logging
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    EVENT_HOMEASSISTANT_STOP,
+    Platform,
+)
+from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
@@ -295,7 +301,8 @@ async def _fetch_audio_bytes(hass: HomeAssistant, url: str) -> tuple[bytes, str]
 
     # A local path must sit inside HA's allowlist (allowlist_external_dirs, media dirs,
     # www). Without this a service call could read any file the HA process can.
-    if not hass.config.is_allowed_path(url):
+    # is_allowed_path touches the filesystem; HA documents it as blocking I/O.
+    if not await hass.async_add_executor_job(hass.config.is_allowed_path, url):
         raise VIGIError(f"path not allowed by Home Assistant configuration: {url}")
     return await hass.async_add_executor_job(Path(url).read_bytes), url
 
@@ -342,6 +349,12 @@ def _entry_data_for_entity(hass: HomeAssistant, entity_id: str) -> dict | None:
     if entry and entry.config_entry_id:
         return hass.data[DOMAIN].get(entry.config_entry_id)
     return None
+
+
+async def _refresh_presets(coordinator: VIGICoordinator) -> None:
+    """Re-read presets after a save or delete so the select and goto_preset see them."""
+    coordinator.presets = await coordinator.camera.get_presets()
+    coordinator.async_update_listeners()
 
 
 async def _openapi_get_presets(openapi) -> list[dict]:
@@ -726,7 +739,9 @@ def _register_services(hass: HomeAssistant) -> None:
                     used_ids = {int(p["id"]) for p in existing if p["id"].isdigit()}
                     preset_id = next((i for i in range(1, 9) if i not in used_ids), 1)
                 await openapi.call("setPresetPoint", {"id": str(preset_id), "name": name})
-                data["coordinator"].presets = []  # invalidate cache; select refreshes on next poll
+                # Refresh now rather than clearing: an empty list left every preset
+                # "not found" (select and goto_preset) until the next poll.
+                await _refresh_presets(data["coordinator"])
                 _LOGGER.debug(
                     "vigicam.ptz_save_preset: saved '%s' as id %d on %s", name, preset_id, eid
                 )
@@ -750,7 +765,7 @@ def _register_services(hass: HomeAssistant) -> None:
                     )
                     continue
                 await openapi.call("removePresetPoint", {"id": preset["id"]})
-                data["coordinator"].presets = []
+                await _refresh_presets(data["coordinator"])
                 _LOGGER.debug("vigicam.ptz_delete_preset: deleted preset '%s' on %s", name, eid)
             except Exception as exc:
                 _LOGGER.error("vigicam.ptz_delete_preset failed for %s: %s", eid, exc)
@@ -821,7 +836,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await coordinator.async_config_entry_first_refresh()
 
-    has_sd_card = bool(coordinator.has_sd_card)
+    # None means the first storage read failed. Fall back to the last answer we had rather
+    # than "no card": otherwise a camera whose storage read is flaky at startup builds no SD
+    # entities, sees the card on the next poll, reloads — and can repeat that every time,
+    # each reload making a new ONVIF subscription.
+    if coordinator.has_sd_card is None:
+        has_sd_card = bool(entry.data.get("_has_sd_card", False))
+    else:
+        has_sd_card = coordinator.has_sd_card
+        if entry.data.get("_has_sd_card") != has_sd_card:
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "_has_sd_card": has_sd_card}
+            )
 
     # Clear any stale SD card repair issue if the card is now present.
     if has_sd_card:
@@ -884,6 +910,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if want_detection:
         await onvif_events.async_start()
+        # HA does not unload config entries on shutdown, so without this the subscription
+        # is abandoned on the camera on every restart (held up to an hour; see #95).
+        async def _release_onvif(_event: Event) -> None:
+            await onvif_events.async_stop()
+        entry.async_on_unload(
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _release_onvif)
+        )
         coordinator.stop_on_auth_failure.append(onvif_events.async_stop)
         if openapi_events:
             await openapi_events.async_start()

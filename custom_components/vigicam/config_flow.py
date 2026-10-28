@@ -12,7 +12,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import VIGIAuthError, VIGICamera, VIGIError
+from .api import VIGIAuthError, VIGICamera, VIGIError, camera_unique_id
 from .const import (
     CAMERA_STREAM_SUFFIXES,
     CONF_FEATURE_CAMERA_STREAM,
@@ -261,7 +261,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug("Connection failed for %s: %s", ip, exc, exc_info=True)
                 errors["base"] = "cannot_connect"
             else:
-                unique_id = (info.get("mac") or ip).replace(":", "").lower()
+                unique_id = camera_unique_id(info, ip)
                 existing = await self.async_set_unique_id(unique_id)
                 if existing is not None and existing.source != config_entries.SOURCE_IGNORE:
                     # Same camera (by MAC) added again — most likely its IP changed. Update
@@ -345,7 +345,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # entry holds can be reassigned to a different camera; since most installs
                 # use one password everywhere, reauth would then succeed against the wrong
                 # device and silently repoint every entity under this device at it.
-                found_id = (info.get("mac") or self._host).replace(":", "").lower()
+                found_id = camera_unique_id(info, self._host)
                 if entry.unique_id and found_id != entry.unique_id:
                     _LOGGER.warning(
                         "Reauth for %s reached a different camera (expected %s, found %s)",

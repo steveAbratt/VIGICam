@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import VIGIAuthError, VIGICamera, VIGIError
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .api import VIGIAuthError, VIGICamera, VIGIError, camera_unique_id
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, REPAIRS_WRONG_CAMERA
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -77,6 +78,38 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
         return data
 
+    def check_identity(self, device_info: dict) -> None:
+        """Refuse to drive a different camera that now answers at this entry's address.
+
+        Two cameras that swap DHCP addresses and share a password otherwise swap
+        identities silently: each entry shows the other's picture and its switches act on
+        the other camera. Raises UpdateFailed so the entities go unavailable, and raises a
+        repair telling the user how to fix it. Compared only when both sides have a MAC.
+        """
+        expected = self.config_entry.unique_id
+        found = device_info.get("mac")
+        issue_id = f"{REPAIRS_WRONG_CAMERA}_{self.config_entry.entry_id}"
+        # An entry created when the camera reported no MAC is keyed on its IP address
+        # (dotted); comparing that against a real MAC would reject every such camera.
+        if (
+            not expected or not found or "." in expected
+            or camera_unique_id(device_info, "") == expected
+        ):
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        ir.async_create_issue(
+            self.hass, DOMAIN, issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=REPAIRS_WRONG_CAMERA,
+            translation_placeholders={
+                "title": self.config_entry.title, "host": self.camera.host,
+            },
+        )
+        raise UpdateFailed(
+            f"A different camera is answering at {self.camera.host} — its address changed"
+        )
+
     async def _fetch_all(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
         answered: set[str] = set()
@@ -99,6 +132,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if "device_info" not in answered:
             # Unreachable: fail the poll so entities go unavailable instead of reading "off".
             raise UpdateFailed("Camera not responding")
+        self.check_identity(results["device_info"])
         await safe_get("motion", self.camera.get_motion_detection())
         await safe_get("image_switch", self.camera.get_image_switch())
         await safe_get("image_common", self.camera.get_image_common())

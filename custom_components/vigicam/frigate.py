@@ -1,6 +1,8 @@
 """Helpers for detecting a Frigate camera integration at a given IP address."""
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass
 
 from homeassistant.core import HomeAssistant
@@ -13,6 +15,15 @@ class FrigateCamera:
     config_entry_id: str
     camera_name: str
 
+
+
+def _contains_host(text: str, ip: str) -> bool:
+    """True if *ip* appears in *text* as a whole address.
+
+    A plain substring test matched 192.168.1.1 inside 192.168.1.10 to .19, linking a
+    camera to another camera's Frigate input.
+    """
+    return re.search(rf"(?<![\d.]){re.escape(ip)}(?![\d.])", text) is not None
 
 def detect_frigate_camera(hass: HomeAssistant, ip: str) -> FrigateCamera | None:
     """Return FrigateCamera if Frigate has a camera stream at *ip*, otherwise None.
@@ -27,7 +38,7 @@ def detect_frigate_camera(hass: HomeAssistant, ip: str) -> FrigateCamera | None:
             for camera_name, cam_cfg in cameras.items():
                 inputs = ((cam_cfg.get("ffmpeg") or {}).get("inputs") or [])
                 for inp in inputs:
-                    if ip in inp.get("path", ""):
+                    if _contains_host(inp.get("path", ""), ip):
                         return FrigateCamera(
                             config_entry_id=ce.entry_id,
                             camera_name=camera_name,
@@ -40,7 +51,7 @@ def detect_frigate_camera(hass: HomeAssistant, ip: str) -> FrigateCamera | None:
     try:
         from homeassistant.helpers import entity_registry as er
         for ent in er.async_get(hass).entities.values():
-            if ent.platform == "frigate" and ip in (ent.unique_id or ""):
+            if ent.platform == "frigate" and _contains_host(ent.unique_id or "", ip):
                 return FrigateCamera(
                     config_entry_id=ent.config_entry_id or "",
                     camera_name="",
