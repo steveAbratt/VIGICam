@@ -18,13 +18,14 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   cameras new addresses (after a power cut, for instance) and they share a password, each
   entry used to start controlling the other camera — showing its picture and sending it
   commands. VIGICam now checks the camera's MAC address on every poll; if a different camera
-  answers, its entities go unavailable, its `vigicam.*` services refuse to run, and a repair
+  answers, its entities go unavailable, its `vigicam.*` services stop acting on it, and a repair
   notice explains how to move it to its new address. Cameras added before they reported a MAC
   address can't be checked.
 
   **If you replaced a camera with a new one at the same address**, it will now go unavailable
   after this update: the new camera has a different MAC. Delete the old camera and add the new
-  one; giving it the same name keeps the same entity IDs.
+  one, then rename the new device to the old name on its device page and accept the offer to
+  rename its entity IDs.
 - **Event subscriptions are released when Home Assistant shuts down.** Home Assistant doesn't
   unload integrations on a restart, so every restart left an ONVIF subscription on each camera
   for up to an hour — the subscription exhaustion suspected in #95.
@@ -34,7 +35,8 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   holding a poll for up to five minutes, and a timeout or an unreadable reply during startup
   now retries instead of failing outright.
 - **Saving or deleting a PTZ preset no longer empties the preset list** until the next poll;
-  the list is re-read straight away, and again on the next poll.
+  the list is re-read straight away, and again on the next poll (deleting the last preset
+  shows only after that poll).
 - Frigate detection matches a camera's address exactly (192.168.1.1 used to match
   192.168.1.10). Detection itself remains best-effort.
 - A file-path check in the audio services no longer runs on Home Assistant's event loop.

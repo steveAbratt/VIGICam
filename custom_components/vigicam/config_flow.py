@@ -12,7 +12,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import VIGIAuthError, VIGICamera, VIGIError, camera_unique_id
+from .api import VIGIAuthError, VIGICamera, VIGIError, camera_unique_id, canonical_mac
 from .const import (
     CAMERA_STREAM_SUFFIXES,
     CONF_FEATURE_CAMERA_STREAM,
@@ -263,6 +263,18 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 unique_id = camera_unique_id(info, ip)
                 existing = await self.async_set_unique_id(unique_id)
+                if existing is None:
+                    # Stored ids are frozen, so a firmware change of MAC format (dashes to
+                    # colons, say) means an exact lookup misses the camera's existing entry
+                    # and re-adding it would create a duplicate. Match on the MAC itself.
+                    found_mac = canonical_mac(info.get("mac"))
+                    existing = next(
+                        (
+                            e for e in self._async_current_entries(include_ignore=False)
+                            if found_mac and canonical_mac(e.unique_id) == found_mac
+                        ),
+                        None,
+                    )
                 if existing is not None and existing.source != config_entries.SOURCE_IGNORE:
                     # Same camera (by MAC) added again — most likely its IP changed. Update
                     # the entry in place, credentials included since they were just proven,
@@ -346,7 +358,14 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # use one password everywhere, reauth would then succeed against the wrong
                 # device and silently repoint every entity under this device at it.
                 found_id = camera_unique_id(info, self._host)
-                if entry.unique_id and found_id != entry.unique_id:
+                # Compare MACs when both sides have one, so a firmware change of MAC
+                # format doesn't make reauth reject the right camera.
+                same = (
+                    canonical_mac(found_id) == canonical_mac(entry.unique_id)
+                    if canonical_mac(found_id) and canonical_mac(entry.unique_id)
+                    else found_id == entry.unique_id
+                )
+                if entry.unique_id and not same:
                     _LOGGER.warning(
                         "Reauth for %s reached a different camera (expected %s, found %s)",
                         self._host, entry.unique_id, found_id,

@@ -5,14 +5,13 @@ from datetime import timedelta
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
-from urllib.parse import unquote
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import VIGIAuthError, VIGICamera, VIGIError
+from .api import VIGIAuthError, VIGICamera, VIGIError, canonical_mac
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, REPAIRS_WRONG_CAMERA
 
 if TYPE_CHECKING:
@@ -26,19 +25,6 @@ _LOGGER = logging.getLogger(__name__)
 _OPENAPI_RECHECK_TICKS = 10
 _PRESET_REFRESH_TICKS = 10   # ~5 min at the default 30 s scan interval
 
-
-
-def _canonical_mac(value: str | None) -> str | None:
-    """12 lowercase hex digits, or None if *value* isn't a MAC.
-
-    For comparison only — entries stay keyed by camera_unique_id(), which must never
-    change. Accepts dashes, colons, none, upper case and URL-encoded separators, so a
-    firmware update that changes the MAC's format can't lock every camera out.
-    """
-    if not value:
-        return None
-    digits = "".join(c for c in unquote(value).lower() if c in "0123456789abcdef")
-    return digits if len(digits) == 12 else None
 
 class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
@@ -100,8 +86,8 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         identities silently. Deliberately called outside safe_get: its broad except would
         swallow the UpdateFailed and the check would do nothing.
         """
-        expected = _canonical_mac(self.config_entry.unique_id)
-        found = _canonical_mac(device_info.get("mac"))
+        expected = canonical_mac(self.config_entry.unique_id)
+        found = canonical_mac(device_info.get("mac"))
         issue_id = f"{REPAIRS_WRONG_CAMERA}_{self.config_entry.entry_id}"
         if expected is None or found is None:
             # Entry keyed on an address (camera reported no MAC when added), or this

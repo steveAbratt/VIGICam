@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import ssl
 import urllib.parse
+from urllib.parse import unquote
 from typing import Any
 
 import aiohttp
@@ -34,14 +36,30 @@ _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=TIMEOUT)
 
 
 def camera_unique_id(info: dict, fallback: str) -> str:
-    """The identity a config entry is keyed on: the camera's MAC, normalised.
+    """The value config entries are keyed on: the camera's MAC, or the address if none.
 
-    Shared by the config flow and setup so the identity check compares like with like.
-    Falls back to the address only when the camera reports no MAC. This must stay
-    byte-for-byte the normalisation existing entries were created with — changing it
-    (stripping dashes, say) would make every installed camera fail the identity check.
+    Frozen. Every installed entry's unique_id is this exact output, so changing it (even
+    just to strip dashes) would stop re-adding a camera from finding its existing entry and
+    create duplicates. Identity comparison uses canonical_mac instead.
     """
     return (info.get("mac") or fallback).replace(":", "").lower()
+
+
+_MAC_SHAPE = re.compile(r"[0-9a-f]{2}([-:]?)[0-9a-f]{2}(?:\1[0-9a-f]{2}){4}")
+
+
+def canonical_mac(value: str | None) -> str | None:
+    """12 lowercase hex digits if *value* is shaped like a MAC, else None.
+
+    For comparison only — entries stay keyed by camera_unique_id(), which must never
+    change. Accepts six hex pairs separated consistently by '-', ':' or nothing, in any
+    case and URL-encoded, so a firmware change of MAC format can't lock cameras out.
+    A shape test, not a digit count: 192.168.100.110 has twelve digits but is an address.
+    """
+    if not value:
+        return None
+    m = _MAC_SHAPE.fullmatch(unquote(value).strip().lower())
+    return m.group(0).replace("-", "").replace(":", "") if m else None
 
 
 class VIGIError(Exception):

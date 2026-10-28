@@ -1896,14 +1896,6 @@ controlling one it doesn't recognise, including its `vigicam.*` services, so it 
 the wrong camera. Follow the steps below once for each camera, using the address where that
 camera is now; each notice clears itself once its camera is fixed.
 
-### I replaced a camera with a new one
-
-A replacement camera has a different MAC address, so if you put it at the old one's address
-VIGICam treats it as a different camera: the entities go unavailable and the repair above
-appears. Delete the old camera from **Settings → Devices & Services → VIGI & InSight
-Cameras**, then add the new one. Give it the same name and the entity IDs come out the same,
-so most automations keep working.
-
 1. Find the new address in your router's client list or in the VIGI app.
 2. Settings → **Devices & Services** → **+ Add Integration** → **VIGI & InSight Cameras**, and
    enter the new IP address, username and password.
@@ -1914,11 +1906,22 @@ so most automations keep working.
 To stop this happening again, give each camera a fixed address (a DHCP reservation) in your
 router.
 
+### I replaced a camera with a new one
+
+A replacement camera has a different MAC address, so if you put it at the old one's address
+VIGICam treats it as a different camera: the entities go unavailable and the repair above
+appears. Delete the old camera from **Settings → Devices & Services → VIGI & InSight
+Cameras**, then add the new one. Its entities take their names from the name set on the camera
+itself, not from the name you type when adding it — so to get the old entity IDs back, open
+the new device's page, rename the device to the old camera's name, and accept Home Assistant's
+offer to rename its entity IDs too.
+
 ### Do not delete and re-add a camera to fix it
 
 Deleting a camera throws away its entity customisations — renamed entity IDs, areas, disabled
 entities — and any automation, script or dashboard card that refers to them stops working
-until you fix it by hand. Both problems above have a fix that keeps everything.
+until you fix it by hand. A password change and an address change both have a fix that
+keeps everything; a replaced camera is the one case where deleting is the answer.
 
 ### Getting a diagnostics report
 

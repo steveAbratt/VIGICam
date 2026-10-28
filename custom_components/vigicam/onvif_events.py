@@ -120,8 +120,18 @@ class VIGIOnvifEvents:
         that was rebooting when HA started left events dead until the integration was
         reloaded by hand; the loop now simply retries.
         """
+        if self._stop_task is not None:
+            return  # stopped before starting (HA shut down while this entry was set up)
         self._session = aiohttp.ClientSession()
-        if not await self._subscribe():
+        subscribed = await self._subscribe()
+        if self._stop_task is not None:
+            # A stop arrived during the subscribe: it found nothing to release, so release
+            # what the subscribe just created rather than leaking it on the camera.
+            await self._unsubscribe()
+            if not self._session.closed:
+                await self._session.close()
+            return
+        if not subscribed:
             _LOGGER.warning(
                 "ONVIF subscribe failed for %s — retrying in the background; "
                 "binary sensors will not update in real time until it succeeds",

@@ -263,8 +263,8 @@ def _iter_targets(
     """Return [(entity_id, entry_data), ...] for every camera the call targets.
 
     entity_id accepts a single id or a list, so one service call can address
-    several cameras. Entities we do not own are logged and skipped rather than
-    aborting the whole call.
+    several cameras. Entities we do not own are logged and skipped. A camera that fails
+    the identity check aborts the whole call before anything is sent to any camera.
     """
     raw = call.data["entity_id"]
     targets: list[tuple[str, dict]] = []
