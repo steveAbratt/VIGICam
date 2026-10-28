@@ -93,6 +93,29 @@ Every later request goes to `POST /stok=<stok>/ds` with a body of
 `{"method":"get"|"set"|"do"|"add"|"delete", …}`. `error_code: 0` means success;
 `-40401` means the stok expired (log in again), `-40107` means permissions changed.
 
+**Several modules in one `get`.** A single body may name any number of modules, and
+the reply carries each under its own key. The integration polls this way (one request
+instead of about twelve). Probed 2026-10-28 on a VIGI C540V and an InSight S245:
+
+```json
+{"method": "get",
+ "device_info": {"name": "basic_info"},
+ "image": {"name": ["switch", "common"]},
+ "harddisk_manage": {"table": "hd_info"},
+ "lens_mask": {"name": "lens_mask"}}
+```
+
+- Every module's data is identical to asking for it alone.
+- A module that fails alone with `-40106` (unsupported) comes back as `{}` inside the
+  batch; the others are unaffected, and the top-level `error_code` is `0`. An unknown
+  module name does the same.
+- Tapo's `{"method": "multipleRequest", …}` is refused with `-40105`.
+- C540V: 0.33 s for the batch against 2.3 s for the same reads one at a time; S245:
+  0.2 s against 1.5 s.
+
+Other models are untested. The coordinator falls back to one request per module if a
+camera refuses the batch repeatedly, or leaves out a module it answers alone.
+
 Two extra password derivations the UI keeps in `sessionStorage`, both needed later:
 
 | key        | value                                        |

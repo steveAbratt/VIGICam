@@ -318,8 +318,9 @@ diagnostics report and debug log that make a bug report actionable.
 
 ## Dependencies
 
-`pycryptodome` and `ffmpeg` are handled automatically by Home Assistant from the
-manifest.
+Nothing to install on Home Assistant OS or Container. VIGICam uses `cryptography`, part
+of Home Assistant, and `ffmpeg`, bundled with HA OS and Container; on a Core (venv)
+install, install ffmpeg from your OS's package manager.
 
 ---
 

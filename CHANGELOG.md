@@ -14,6 +14,26 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.5b8] - 2026-10-28
+
+Nothing to do after updating.
+
+### Changed
+
+- **Each 30-second poll is now one request to the camera instead of about twelve**
+  (2.3 s → 0.3 s on a C540V), so the camera is busy for far less time. A camera that
+  refuses the combined request, or leaves something out of it, is detected and polled
+  the old way.
+- **PTZ presets added, renamed or deleted in the VIGI app or the camera's web page now
+  appear within about 30 seconds** instead of up to 5 minutes.
+- **No extra Python package is installed any more.** VIGICam now uses the encryption
+  library Home Assistant already includes, instead of `pycryptodome`.
+
+Tested on a VIGI C540V and an InSight S245 only. If a switch or sensor goes unavailable or
+reads wrongly after this update, please open an issue with a diagnostics download.
+
+---
+
 ## [0.7.5b7] - 2026-10-28
 
 ### Changed
