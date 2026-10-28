@@ -12,6 +12,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Changed
+
+- `hacs.json` declares a minimum of Home Assistant **2024.11**. From the next release, HACS
+  and the Marketplace won't offer VIGICam updates to older versions, which can't load them.
+  On an older version, VIGICam stays on its current release until you upgrade Home Assistant.
+
+### Documentation
+
+- Install and beta instructions cover the Home Assistant Marketplace (HACS built in from
+  2026.11), including its **Pre-release** switch.
+
 ---
 
 ## [0.7.5b6] - 2026-10-28

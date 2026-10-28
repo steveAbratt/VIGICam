@@ -126,25 +126,31 @@ feature set competes with cameras three times the price.
 
 ---
 
-## Installation via HACS
+## Installation via HACS / Marketplace
 
-VIGICam is in the **HACS default store**, so there is no custom repository to add.
+VIGICam is in the **HACS default catalog** (built into Home Assistant 2026.11+ as
+**Settings → Marketplace**), so there is no custom repository to add. The button opens
+whichever your Home Assistant has.
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=steveAbratt&repository=VIGICam&category=integration)
+Requires Home Assistant **2024.11 or newer**.
 
-1. Open **HACS** in Home Assistant
+[![Open in HACS / Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=steveAbratt&repository=VIGICam&category=integration)
+
+1. Open **HACS** (before 2026.11) or **Settings → Marketplace** (2026.11+)
 2. Search for **VIGI** and open **VIGI & InSight Cameras**
 3. Click **Download**
 4. Restart Home Assistant
 
-> **Beta releases:** new features land in a beta first. To opt in, go to
-> HACS → **VIGI & InSight Cameras** → **⋮** → **Enable Beta Versions**, then update as
-> normal. Betas are marked as pre-releases and are skipped unless you opt in.
+> **Beta releases:** new features land in a pre-release first. Without opting in you only
+> get stable releases. To opt in, turn on pre-releases for **VIGI & InSight Cameras**, then
+> update as normal:
+> - **Marketplace (2026.11+):** its **Pre-release** switch (on its page or under its **⋮** menu).
+> - **HACS (before 2026.11):** **⋮** → **Enable Beta Versions**.
 
 ## Manual Installation
 
 Copy `custom_components/vigicam/` into your HA `config/custom_components/` directory
-and restart.
+and restart. Requires Home Assistant 2024.11 or newer; older versions fail to load it.
 
 ---
 
