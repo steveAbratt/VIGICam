@@ -12,6 +12,10 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b6] - 2026-10-28
+
 ### Fixed
 
 - **Two cameras that swap addresses no longer swap identities.** If the router gives the
