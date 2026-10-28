@@ -12,6 +12,30 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Documentation
+
+No code changes. Corrections to docs, `services.yaml`, the setup dialog text and the blueprints.
+
+- **Examples that could never work are fixed.** `vigicam.ptz_move_to` takes -1.0 to 1.0, not
+  degrees. Six automation examples used binary-sensor entity IDs that don't exist; a trigger on
+  a missing entity never fires and never errors.
+- **The PTZ move and preset services now have forms** in Developer Tools and the automation
+  editor. `ptz_save_preset` documents that with all eight slots full, slot 1 is used again;
+  `ptz_move_to` that leaving `zoom` out sends 0.0.
+- **The Frigate guides no longer break your announcements.** Turning off Camera Stream removes
+  the entity every `vigicam.*` example targets; the guides now say to repoint those calls
+  first. Frigate auto-detection is described as best-effort, and the README no longer claims
+  entities merge onto the Frigate device.
+- **Blueprints:** the camera picker is no longer empty for Frigate users, and the pause slider
+  can no longer pick a value the service rejects. **Re-import the blueprints to pick this up**
+  (or copy the `blueprints/` folder again, if that's how you installed them) — Home Assistant
+  keeps the copy made at install.
+- Smaller corrections: long audio is trimmed silently at 15 seconds rather than refused; media
+  paths (`/media/` except on Core installs); slider limits matching the services; spotlight
+  brightness levels; which diagnostic sensors are hidden by default; Intrusion is always
+  created; the C340i white-LED claim; the setup name step; the SD repair's non-existent Fix
+  button; example location names; `docs/TESTING.md` known gaps.
+
 ---
 
 ## [0.7.5b5] - 2026-10-27
@@ -1261,7 +1285,7 @@ Everything from the 0.7.4 beta series (b1–b5), now stable.
     with configurable `speed` (0.0–1.0) and optional `duration` (auto-stops after N seconds).
     If no duration is given, call `vigicam.ptz_stop` to stop.
   - `vigicam.ptz_stop` — stop all camera movement immediately.
-  - `vigicam.goto_preset` — move to a named preset by name (e.g. `"Full Stable Yard"`);
+  - `vigicam.goto_preset` — move to a named preset by name (e.g. `"Front Gate"`);
     cleaner alternative to `select.select_option` for automations with many presets.
 - **PTZ direction buttons** — six button entities per PTZ camera (Pan Left/Right, Tilt
   Up/Down, Zoom In/Out) that each jog the camera for 1 second then stop. Useful for
@@ -1289,7 +1313,7 @@ Everything from the 0.7.4 beta series (b1–b5), now stable.
   `[]`, causing `has_ptz = False` at startup. Preset buttons and the PTZ Preset select
   entity were therefore never registered for any camera. Now only reads `id` and `name`
   (neither buttons nor select use the position values).
-- **Preset names shown URL-encoded** — camera returns `"Zoomed%20Stable%20View"`;
+- **Preset names shown URL-encoded** — camera returns `"Zoomed%20Gate%20View"`;
   now decoded with `urllib.parse.unquote()` so entity names and select options show
   the correct human-readable name.
 

@@ -21,15 +21,15 @@ blueprint:
 
     **Audio length limit:** The camera accepts a maximum of 15 seconds / 256 KB of audio.
     Keep messages to around 10 seconds or less to be safe. A typical spoken sentence is
-    3–5 seconds. Messages that exceed the limit will fail silently (check the HA log for
-    details).
+    3–5 seconds. Messages that exceed the limit are trimmed at 15 seconds and cut off,
+    with no log message.
 
 
     **Example messages:**
 
     - Static: `"Motion detected at the front gate"`
 
-    - Dynamic: `"{{ now().strftime('%-I:%M %p') }} — person detected at stables"`
+    - Dynamic: `"{{ now().strftime('%-I:%M %p') }} — person detected at the front gate"`
 
   domain: automation
   input:
@@ -40,17 +40,16 @@ blueprint:
         trigger: {}
     camera_entity:
       name: Camera
-      description: The VIGI camera to speak through.
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off.
       selector:
         entity:
-          domain: camera
           integration: vigicam
     message:
       name: Announcement message
       description: >
         Text to speak. Supports Jinja2 templates — reference trigger data, entity states,
         or time. Keep messages to ~10 seconds or less (camera hard limit: 15 s / 256 KB).
-        A typical sentence is 3–5 seconds. Longer messages will fail — check the HA log.
+        A typical sentence is 3–5 seconds. Longer messages are trimmed and cut off.
         Example: "Motion detected at the front gate"
       selector:
         template: {}
@@ -104,7 +103,7 @@ blueprint:
       default: 1
       selector:
         number:
-          min: 0
+          min: 0.5
           max: 30
           step: 0.5
           unit_of_measurement: s

@@ -9,7 +9,7 @@ blueprint:
 
     Upload it via the HA Media section (sidebar → Media → My media → Upload), then paste
     the URL from the media browser into the field below. Files in the HA `www/` folder
-    (`/local/` URLs) and direct file paths also work.
+    (`/local/` URLs) and file paths inside an allowed folder (such as /media) also work.
 
 
     **Getting the URL from the media browser:**
@@ -23,7 +23,7 @@ blueprint:
 
 
     **Audio length limit:** The camera accepts a maximum of 15 seconds / 256 KB of audio
-    after conversion. Longer files will fail — check the HA log for details.
+    after conversion. Longer files are cut off at 15 seconds, with no log message.
 
 
     **Requirements:**
@@ -39,10 +39,9 @@ blueprint:
         trigger: {}
     camera_entity:
       name: Camera
-      description: The VIGI camera to play the audio through.
+      description: Any entity of the camera — e.g. its IP Address sensor if Camera Stream is off.
       selector:
         entity:
-          domain: camera
           integration: vigicam
     media_url:
       name: Audio file URL or path
@@ -92,7 +91,7 @@ blueprint:
       default: 1
       selector:
         number:
-          min: 0
+          min: 0.5
           max: 30
           step: 0.5
           unit_of_measurement: s

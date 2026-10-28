@@ -75,14 +75,9 @@ With `aioresponses`, no HA harness needed:
 
 ## Known gaps this plan would expose
 
-Found in review, **not yet fixed**, listed so a test written against current behaviour does
+Found in review, **not yet fixed** as of 0.7.5b5, listed so a test written against current behaviour does
 not accidentally enshrine the bug:
 
-- **No `async_step_reauth`.** `async_setup_entry` raises `ConfigEntryAuthFailed`, which makes
-  HA call `entry.async_start_reauth()` — and the config flow has no reauth step, so the user
-  who rotates a camera password gets an `UnknownStep` traceback and no way to enter the new
-  one. Also `coordinator.py` turns a *runtime* `VIGIAuthError` into `UpdateFailed`, so a
-  password changed while HA runs retries forever without telling anyone why.
 - **Username is interpolated into SOAP XML unescaped** (`onvif_events.py`, `onvif_ptz.py`). A
   username containing `&`, `<` or `>` produces a malformed envelope and an endless
   "ONVIF subscribe failed" loop with no hint as to the cause.
@@ -91,10 +86,20 @@ not accidentally enshrine the bug:
 - **`has_openapi` has two sources of truth.** `coordinator._recheck_openapi` promotes the
   coordinator's copy but leaves `entry_data["openapi"]` as `None` until a reload — which
   re-creates the exact read/write split `_openapi_writable` exists to prevent.
-- **A transient poll failure permanently removes entities.** `safe_get` turns any error into
-  `{}`, and platforms decide whether an entity exists at all from that dict at setup. One
-  failed `get_image_common` on first refresh and the image controls, night-vision select and
-  spotlight are gone until the user notices and reloads.
+- **A transient poll failure permanently removes entities.** `safe_get` turns any per-key
+  error into `{}`, and platforms decide whether an entity exists at all from that dict at
+  setup. One failed `get_image_common` on first refresh and the image controls, night-vision
+  select and spotlight are gone until the user notices and reloads. (A *whole-camera* outage
+  is handled since 0.7.5b5 — entities go unavailable — but a single failed key still reads
+  as "off" or "not supported".)
+- **No MAC check at setup or polling.** Two cameras that swap DHCP addresses and share a
+  password silently swap identities; only reauth compares the MAC.
+- **`is_allowed_path` is called in the event loop** (`_fetch_audio_bytes`); HA documents it as
+  blocking I/O.
+- **The SD-card False→True reload can repeat** on a camera whose storage read keeps failing
+  during the first refresh, each reload creating a new ONVIF subscription.
+- **Frigate detection matches the IP as a substring** (`frigate.py`), so `192.168.1.1`
+  matches `.10`–`.19`, and the config shape it reads may not match the real integration.
 - **`number.py` coerces with bare `int()`** on a field that can be `""`.
 - **Snapshot cache has no staleness limit on the failure path** (`camera.py`), so a dead
   camera serves an hours-old frame instead of going unavailable.
@@ -104,7 +109,7 @@ not accidentally enshrine the bug:
 Per [ADR-0004](https://github.com/home-assistant/architecture/blob/master/adr/0004-webscraping.md),
 device communication belongs in a PyPI library, not in the integration. ~1,500 lines of
 protocol live here. That is also *why* there are no tests — and the single biggest blocker to
-Phase 3 is that all 13 service handlers are closures inside `_register_services`, so they
+Phase 3 is that all 11 service handlers are closures inside `_register_services`, so they
 cannot be imported, so they cannot be exercised without booting HA. Moving them to module
 level taking `(hass, call)` is worth more than any individual test below.
 
