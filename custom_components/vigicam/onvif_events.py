@@ -116,17 +116,17 @@ class VIGIOnvifEvents:
     async def async_start(self) -> None:
         """Start the polling loop, which subscribes and keeps re-subscribing.
 
-        The task is always created, even if the first subscribe fails. Previously a camera
-        that was rebooting when HA started left events dead until the integration was
-        reloaded by hand; the loop now simply retries.
+        The first subscribe happens inside the loop task, not here, so _do_stop can cancel
+        and await it before unsubscribing and closing the session. Subscribing here instead
+        left a window where a stop during startup closed the session under an in-flight
+        CreatePullPointSubscription and orphaned whatever the camera had already created.
+        The loop also retries on its own, so a camera rebooting at HA start recovers.
         """
+        if self._stop_task is not None:
+            # Already stopped (HA shut down while this entry was being set up). Without this
+            # the loop would start anyway and run on after shutdown.
+            return
         self._session = aiohttp.ClientSession()
-        if not await self._subscribe():
-            _LOGGER.warning(
-                "ONVIF subscribe failed for %s — retrying in the background; "
-                "binary sensors will not update in real time until it succeeds",
-                self._ip,
-            )
         self._task = self._hass.async_create_background_task(
             self._poll_loop(),
             f"vigicam_onvif_{self._entry_id}",

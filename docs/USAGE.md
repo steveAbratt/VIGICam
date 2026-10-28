@@ -1889,9 +1889,12 @@ the camera shows **Failed to set up – Retrying setup** on the integration page
 way the fix is the same: **add the camera again at its new address. Do not delete the old one
 first.**
 
-If two cameras **swapped** addresses — likely after a power cut if they share a password —
-nothing shows as unavailable: each camera in Home Assistant shows the other's picture and its
-switches act on the other camera. Add *both* cameras again at their current addresses.
+If two cameras **swapped** addresses (likely after a power cut), both go **unavailable** and
+**Settings → Repairs** shows "… has moved: a different camera is at …" for each, with the MAC
+address to look for in your router. VIGICam checks every camera's MAC address and stops
+controlling one it doesn't recognise, including its `vigicam.*` services, so it never acts on
+the wrong camera. Follow the steps below once for each camera, using the address where that
+camera is now; each notice clears itself once its camera is fixed.
 
 1. Find the new address in your router's client list or in the VIGI app.
 2. Settings → **Devices & Services** → **+ Add Integration** → **VIGI & InSight Cameras**, and
@@ -1903,11 +1906,23 @@ switches act on the other camera. Add *both* cameras again at their current addr
 To stop this happening again, give each camera a fixed address (a DHCP reservation) in your
 router.
 
+### I replaced a camera with a new one
+
+A replacement camera has a different MAC address, so if you put it at the old one's address
+VIGICam treats it as a different camera: the entities go unavailable and the repair above
+appears. Delete the old camera from **Settings → Devices & Services → VIGI & InSight
+Cameras**, then add the new one. Its entities take their names from the name set on the camera
+itself, not from the name you type when adding it. To get the old entity IDs back, open the
+new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_main_stream`, use "Front Door"), then accept Home Assistant's offer to rename its entity IDs. Entity IDs you had renamed individually won't come back
+this way. Alternatively, set the new camera's name in the VIGI app to match the old one before
+adding it, and the IDs come out the same with no renaming.
+
 ### Do not delete and re-add a camera to fix it
 
 Deleting a camera throws away its entity customisations — renamed entity IDs, areas, disabled
 entities — and any automation, script or dashboard card that refers to them stops working
-until you fix it by hand. Both problems above have a fix that keeps everything.
+until you fix it by hand. A password change and an address change both have a fix that
+keeps everything; a replaced camera is the one case where deleting is the answer.
 
 ### Getting a diagnostics report
 

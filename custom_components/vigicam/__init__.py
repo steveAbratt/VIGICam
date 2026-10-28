@@ -7,9 +7,19 @@ import logging
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    EVENT_HOMEASSISTANT_STOP,
+    Platform,
+)
+from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 
@@ -29,6 +39,7 @@ from .const import (
     IMAGE_CONTROL_SUFFIXES,
     REPAIRS_FRIGATE_GONE,
     REPAIRS_SD_CARD_MISSING,
+    REPAIRS_WRONG_CAMERA,
 )
 from .frigate import detect_frigate_camera
 from .coordinator import VIGICoordinator
@@ -252,8 +263,8 @@ def _iter_targets(
     """Return [(entity_id, entry_data), ...] for every camera the call targets.
 
     entity_id accepts a single id or a list, so one service call can address
-    several cameras. Entities we do not own are logged and skipped rather than
-    aborting the whole call.
+    several cameras. Entities we do not own are logged and skipped. A camera that fails
+    the identity check aborts the whole call before anything is sent to any camera.
     """
     raw = call.data["entity_id"]
     targets: list[tuple[str, dict]] = []
@@ -262,6 +273,13 @@ def _iter_targets(
         if data is None:
             _LOGGER.error("vigicam.%s: cannot find camera for %s", service, eid)
             continue
+        if not data["coordinator"].identity_ok:
+            # Services bypass entities, so unavailable entities don't stop them. Without
+            # this a preset save would write into the other camera's preset table.
+            raise HomeAssistantError(
+                f"vigicam.{service}: a different camera is answering at "
+                f"{data['ip']} — see Settings → Repairs"
+            )
         targets.append((eid, data))
     return targets
 
@@ -295,7 +313,8 @@ async def _fetch_audio_bytes(hass: HomeAssistant, url: str) -> tuple[bytes, str]
 
     # A local path must sit inside HA's allowlist (allowlist_external_dirs, media dirs,
     # www). Without this a service call could read any file the HA process can.
-    if not hass.config.is_allowed_path(url):
+    # is_allowed_path touches the filesystem; HA documents it as blocking I/O.
+    if not await hass.async_add_executor_job(hass.config.is_allowed_path, url):
         raise VIGIError(f"path not allowed by Home Assistant configuration: {url}")
     return await hass.async_add_executor_job(Path(url).read_bytes), url
 
@@ -726,7 +745,7 @@ def _register_services(hass: HomeAssistant) -> None:
                     used_ids = {int(p["id"]) for p in existing if p["id"].isdigit()}
                     preset_id = next((i for i in range(1, 9) if i not in used_ids), 1)
                 await openapi.call("setPresetPoint", {"id": str(preset_id), "name": name})
-                data["coordinator"].presets = []  # invalidate cache; select refreshes on next poll
+                await data["coordinator"].async_refresh_presets()
                 _LOGGER.debug(
                     "vigicam.ptz_save_preset: saved '%s' as id %d on %s", name, preset_id, eid
                 )
@@ -750,7 +769,7 @@ def _register_services(hass: HomeAssistant) -> None:
                     )
                     continue
                 await openapi.call("removePresetPoint", {"id": preset["id"]})
-                data["coordinator"].presets = []
+                await data["coordinator"].async_refresh_presets()
                 _LOGGER.debug("vigicam.ptz_delete_preset: deleted preset '%s' on %s", name, eid)
             except Exception as exc:
                 _LOGGER.error("vigicam.ptz_delete_preset failed for %s: %s", eid, exc)
@@ -821,7 +840,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await coordinator.async_config_entry_first_refresh()
 
-    has_sd_card = bool(coordinator.has_sd_card)
+    # None means the first storage read failed. Fall back to the last answer we had rather
+    # than "no card": otherwise a camera whose storage read is flaky at startup builds no SD
+    # entities, sees the card on the next poll, reloads — and can repeat that every time,
+    # each reload making a new ONVIF subscription.
+    if coordinator.has_sd_card is None:
+        has_sd_card = bool(entry.data.get("_has_sd_card", False))
+    else:
+        has_sd_card = coordinator.has_sd_card
+        if entry.data.get("_has_sd_card") != has_sd_card:
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "_has_sd_card": has_sd_card}
+            )
 
     # Clear any stale SD card repair issue if the card is now present.
     if has_sd_card:
@@ -883,6 +913,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     if want_detection:
+        # HA does not unload config entries on shutdown, so without this the subscription
+        # is abandoned on the camera on every restart (held up to an hour). Registered
+        # before start so a stop during startup is not missed; the unsub is cleared once
+        # it fires, as HA's own coordinator does, so a later unload doesn't remove it twice.
+        stop_unsub: list = []
+
+        async def _release_onvif(_event: Event) -> None:
+            stop_unsub.clear()
+            await onvif_events.async_stop()
+
+        stop_unsub.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _release_onvif))
+        entry.async_on_unload(lambda: stop_unsub and stop_unsub.pop()())
         await onvif_events.async_start()
         coordinator.stop_on_auth_failure.append(onvif_events.async_stop)
         if openapi_events:
@@ -937,3 +979,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await data["onvif_ptz"].close()
         await data["api"].close()
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clear this camera's repair notices when it is deleted, so none are left behind."""
+    from homeassistant.helpers import issue_registry as ir
+
+    for issue in (REPAIRS_WRONG_CAMERA, REPAIRS_SD_CARD_MISSING, REPAIRS_FRIGATE_GONE):
+        ir.async_delete_issue(hass, DOMAIN, f"{issue}_{entry.entry_id}")

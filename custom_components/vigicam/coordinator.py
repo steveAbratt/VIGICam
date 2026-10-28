@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import VIGIAuthError, VIGICamera, VIGIError
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .api import VIGIAuthError, VIGICamera, VIGIError, canonical_mac
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, REPAIRS_WRONG_CAMERA
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -55,6 +56,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # old password (account lockout); a later successful poll reloads the entry.
         self.stop_on_auth_failure: list[Callable[[], Awaitable[None]]] = []
         self._auth_failed = False
+        self.identity_ok = True
         self.last_preset: str | None = None  # last preset selected from HA; None = unknown
         self._openapi_recheck_counter: int = 0
         self._preset_refresh_counter: int = 0
@@ -76,6 +78,54 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self.stop_on_auth_failure:
                 self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
         return data
+
+    def check_identity(self, device_info: dict) -> None:
+        """Refuse to drive a different camera that now answers at this entry's address.
+
+        Two cameras that swap DHCP addresses and share a password otherwise swap
+        identities silently. Deliberately called outside safe_get: its broad except would
+        swallow the UpdateFailed and the check would do nothing.
+        """
+        expected = canonical_mac(self.config_entry.unique_id)
+        found = canonical_mac(device_info.get("mac"))
+        issue_id = f"{REPAIRS_WRONG_CAMERA}_{self.config_entry.entry_id}"
+        if expected is None or found is None:
+            # Entry keyed on an address (camera reported no MAC when added), or this
+            # reply carried none: nothing to compare. Leave any existing issue alone —
+            # only a positive match may clear it.
+            return
+        if found == expected:
+            self.identity_ok = True
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        self.identity_ok = False
+        ir.async_create_issue(
+            self.hass, DOMAIN, issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=REPAIRS_WRONG_CAMERA,
+            translation_placeholders={
+                "title": self.config_entry.title,
+                "host": self.camera.host,
+                "mac": "-".join(expected[k:k + 2] for k in range(0, 12, 2)).upper(),
+            },
+        )
+        raise UpdateFailed(
+            f"A different camera is answering at {self.camera.host} — its address changed"
+        )
+
+    async def async_refresh_presets(self) -> None:
+        """Re-read presets after a save or delete.
+
+        Keeps the old list if the read comes back empty (a failed read looks the same),
+        and forces the next poll to re-read anyway: presets are written through OpenAPI
+        and read through the JSON API, which may lag.
+        """
+        presets = await self.camera.get_presets()
+        if presets or not self.presets:
+            self.presets = presets
+        self._preset_refresh_counter = _PRESET_REFRESH_TICKS
+        self.async_update_listeners()
 
     async def _fetch_all(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
@@ -99,6 +149,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if "device_info" not in answered:
             # Unreachable: fail the poll so entities go unavailable instead of reading "off".
             raise UpdateFailed("Camera not responding")
+        self.check_identity(results["device_info"])
         await safe_get("motion", self.camera.get_motion_detection())
         await safe_get("image_switch", self.camera.get_image_switch())
         await safe_get("image_common", self.camera.get_image_common())

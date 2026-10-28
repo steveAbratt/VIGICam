@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import ssl
 import urllib.parse
+from urllib.parse import unquote
 from typing import Any
 
 import aiohttp
@@ -28,6 +30,36 @@ from .const import TAPO_PASSWORD_PREFIX, TIMEOUT
 
 class VIGIAuthError(Exception):
     pass
+
+
+_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=TIMEOUT)
+
+
+def camera_unique_id(info: dict, fallback: str) -> str:
+    """The value config entries are keyed on: the camera's MAC, or the address if none.
+
+    Frozen. Every installed entry's unique_id is this exact output, so changing it (even
+    just to strip dashes) would stop re-adding a camera from finding its existing entry and
+    create duplicates. Identity comparison uses canonical_mac instead.
+    """
+    return (info.get("mac") or fallback).replace(":", "").lower()
+
+
+_MAC_SHAPE = re.compile(r"[0-9a-f]{2}([-:]?)[0-9a-f]{2}(?:\1[0-9a-f]{2}){4}")
+
+
+def canonical_mac(value: str | None) -> str | None:
+    """12 lowercase hex digits if *value* is shaped like a MAC, else None.
+
+    For comparison only — entries stay keyed by camera_unique_id(), which must never
+    change. Accepts six hex pairs separated consistently by '-', ':' or nothing, in any
+    case and URL-encoded, so a firmware change of MAC format can't lock cameras out.
+    A shape test, not a digit count: 192.168.100.110 has twelve digits but is an address.
+    """
+    if not value:
+        return None
+    m = _MAC_SHAPE.fullmatch(unquote(value).strip().lower())
+    return m.group(0).replace("-", "").replace(":", "") if m else None
 
 
 class VIGIError(Exception):
@@ -80,12 +112,22 @@ class VIGICamera:
     async def _post(self, url: str, body: dict) -> dict:
         session = self._get_session()
         try:
-            async with session.post(url, json=body) as resp:
+            # Per-request timeout: the session normally comes from HA and carries no
+            # TIMEOUT of its own, so a camera that accepted the connection and then went
+            # silent held a poll for aiohttp's 5-minute default.
+            async with session.post(
+                url, json=body, timeout=_REQUEST_TIMEOUT
+            ) as resp:
                 return await resp.json(content_type=None)
         except (aiohttp.ClientSSLError, aiohttp.ClientConnectorCertificateError):
             raise  # Let SSL errors propagate as-is so config flow can retry without SSL
         except aiohttp.ClientError as exc:
             raise VIGIError(f"HTTP error communicating with {self._ip}: {exc}") from exc
+        except TimeoutError as exc:
+            raise VIGIError(f"Timed out communicating with {self._ip}") from exc
+        except ValueError as exc:
+            # A non-JSON body (an HTML error page from a busy camera).
+            raise VIGIError(f"Unreadable response from {self._ip}: {exc}") from exc
 
     def _encrypt_password(self, nonce: str, key_b64: str) -> str:
         """RSA-encrypt the password+nonce. Synchronous but fast (<1ms)."""
@@ -218,9 +260,11 @@ class VIGICamera:
                 await self.get(module, name)
                 return True
             except VIGIError:
-                continue        # this module is unsupported; try the other
+                # Unsupported, or the request failed (timeouts and connection errors are
+                # VIGIError too): try the other module. Both failing returns False below.
+                continue
             except Exception:   # noqa: BLE001
-                return False    # unreachable — don't claim PTZ we could not verify
+                return False    # unexpected error — don't claim PTZ we could not verify
         return False
 
     # ── Night vision / spotlight ──────────────────────────────────────────────

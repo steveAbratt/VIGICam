@@ -1,7 +1,9 @@
 # Testing plan
 
-**Status: not started.** This is a plan, not a description of something that exists. There is
-no `tests/` directory, no `conftest.py`, and no test dependency in CI.
+**Status: started.** `tests/test_identity.py` covers the camera-identity functions in `api.py`
+(the frozen keying function and the MAC comparison), loaded without Home Assistant by
+`tests/conftest.py`. Run with `pip install pytest aiohttp pycryptodome && pytest tests/`. CI
+does not run the tests yet. The rest of this page is still a plan.
 
 It was written up from a code review on 2026-10-23 so the work can be picked up later without
 re-deriving it. **Everything here is a proposal and may be revised** — if you are returning to
