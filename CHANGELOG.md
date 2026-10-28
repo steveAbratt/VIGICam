@@ -12,6 +12,10 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b7] - 2026-10-28
+
 ### Changed
 
 - `hacs.json` declares a minimum of Home Assistant **2024.11**. From the next release, HACS
