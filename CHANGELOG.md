@@ -24,8 +24,8 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
   **If you replaced a camera with a new one at the same address**, it will now go unavailable
   after this update: the new camera has a different MAC. Delete the old camera and add the new
-  one, then rename the new device to the old name on its device page and accept the offer to
-  rename its entity IDs.
+  one, then on its device page rename it to match the start of the old entity IDs and accept
+  the offer to rename its entity IDs.
 - **Event subscriptions are released when Home Assistant shuts down.** Home Assistant doesn't
   unload integrations on a restart, so every restart left an ONVIF subscription on each camera
   for up to an hour — the subscription exhaustion suspected in #95.

@@ -1912,9 +1912,10 @@ A replacement camera has a different MAC address, so if you put it at the old on
 VIGICam treats it as a different camera: the entities go unavailable and the repair above
 appears. Delete the old camera from **Settings → Devices & Services → VIGI & InSight
 Cameras**, then add the new one. Its entities take their names from the name set on the camera
-itself, not from the name you type when adding it — so to get the old entity IDs back, open
-the new device's page, rename the device to the old camera's name, and accept Home Assistant's
-offer to rename its entity IDs too.
+itself, not from the name you type when adding it. To get the old entity IDs back, open the
+new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_main_stream`, use "Front Door"), then accept Home Assistant's offer to rename its entity IDs. Entity IDs you had renamed individually won't come back
+this way. Alternatively, set the new camera's name in the VIGI app to match the old one before
+adding it, and the IDs come out the same with no renaming.
 
 ### Do not delete and re-add a camera to fix it
 
