@@ -1,9 +1,11 @@
 # Testing plan
 
-**Status: started.** `tests/test_identity.py` covers the camera-identity functions in `api.py`
-(the frozen keying function and the MAC comparison), loaded without Home Assistant by
-`tests/conftest.py`. Run with `pip install pytest aiohttp cryptography && pytest tests/`. CI
-does not run the tests yet. The rest of this page is still a plan.
+**Status: started.** The tests cover the parts of `api.py` that run without Home Assistant,
+loaded by `tests/conftest.py`: camera identity (`test_identity.py`), the batched poll read
+(`test_batched_reads.py`) and the login key formats (`test_login_key.py`). Run with
+`pip install pytest aiohttp cryptography && pytest tests/`. CI runs them on every push and pull
+request (`.github/workflows/tests.yaml`, Python 3.13 and 3.14). Nothing yet covers code that
+needs Home Assistant, the coordinator included. The rest of this page is still a plan.
 
 It was written up from a code review on 2026-10-23 so the work can be picked up later without
 re-deriving it. **Everything here is a proposal and may be revised** — if you are returning to
@@ -13,7 +15,7 @@ this and the shape no longer fits, change it rather than following it out of obl
 
 ## Why bother
 
-CI today is `validate` (HACS) and `validate-hacs` (hassfest). Both check manifest and
+Before the tests, CI was only `validate-hacs` (HACS) and `validate` (hassfest). Both check manifest and
 repository structure. **Neither executes a single line of the integration.** 5,300 lines,
 four device protocols, zero assertions.
 
