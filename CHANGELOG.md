@@ -12,6 +12,17 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Alarm switch now says why it won't turn on** (#79). It only arms the camera's alarm:
+  with **Alarm Light** and **Alarm Sound** both off, turning it on did nothing and the switch
+  flickered back. It now refuses with "Turn on Alarm Light or Alarm Sound first". Cameras
+  without separate Light and Sound settings aren't affected.
+
+  **If an automation turns Alarm on while Alarm Light and Alarm Sound are both off, it now
+  stops at that step with this error** instead of quietly carrying on. Turn an output on in
+  the same action or an earlier step, or add `continue_on_error: true` to that step.
+
 ---
 
 ## [0.7.5b8] - 2026-10-28

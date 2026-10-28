@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -9,10 +10,16 @@ from homeassistant.components.switch import SwitchEntity, SwitchEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import VIGICamera
-from .const import CONF_FEATURE_IMAGE_CONTROLS, DEFAULT_FEATURE_IMAGE_CONTROLS, DOMAIN
+from .api import VIGICamera, VIGIError
+from .const import (
+    CONF_FEATURE_IMAGE_CONTROLS,
+    DEFAULT_FEATURE_IMAGE_CONTROLS,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 from .entity import VIGIEntity
 from .openapi import VIGIOpenAPIError
 
@@ -38,6 +45,31 @@ class VIGISwitchDescription(SwitchEntityDescription):
     # write would echo the last 30s poll, so changing one of the sibling settings in the
     # VIGI app and then toggling here would silently revert that change.
     openapi_get_method: str | None = None
+    # Checked before turning on, as (allowed_fn, fresh_read_fn, translation_key):
+    # allowed_fn(data, keys switched on in the last poll interval) -> False refuses with
+    # that translated exception rather than sending a write that would do nothing. It is
+    # re-checked against fresh_read_fn's data before refusing, since the last poll may
+    # predate a sibling switch turned on moments ago.
+    turn_on_guard: tuple[
+        Callable[[dict, set[str]], bool], Callable[[VIGICamera], Any], str
+    ] | None = None
+
+
+def _alarm_has_output(data: dict, recently_on: set[str]) -> bool:
+    """The Alarm master only arms the camera's alarm: with Alarm Light and Alarm Sound
+    both off it stores "on" and does nothing (#79, C540S and C350; the camera's own web
+    page behaves the same). Firmware without the separate outputs is not blocked, and
+    any value other than "off" counts as on.
+    """
+    if recently_on & {"light_alarm", "sound_alarm"}:
+        return True
+    alarm = data.get("alarm", {})
+    outputs = [alarm[k] for k in ("light_alarm_enabled", "sound_alarm_enabled") if k in alarm]
+    return not outputs or any(v != "off" for v in outputs)
+
+
+async def _read_alarm(api: VIGICamera) -> dict:
+    return {"alarm": await api.get_alarm()}
 
 
 # Fields getPeople/VehicleDetectionSwitch returns, and that their setters appear to want
@@ -152,6 +184,7 @@ SWITCHES: tuple[VIGISwitchDescription, ...] = (
         turn_on_fn=lambda api: api.set_alarm(True),
         turn_off_fn=lambda api: api.set_alarm(False),
         supported_fn=lambda d: bool(d.get("alarm")),
+        turn_on_guard=(_alarm_has_output, _read_alarm, "alarm_needs_output"),
     ),
     VIGISwitchDescription(
         key="light_alarm",
@@ -362,12 +395,35 @@ class VIGISwitch(VIGIEntity, SwitchEntity):
                 )
         await api_fn(self._entry_data["api"])
 
+    def _recently_on(self) -> set[str]:
+        cutoff = time.monotonic() - DEFAULT_SCAN_INTERVAL
+        turned_on_at = self._entry_data.get("switch_turned_on_at", {})
+        return {key for key, at in turned_on_at.items() if at > cutoff}
+
+    async def _check_turn_on_guard(self) -> None:
+        allowed_fn, fresh_read_fn, translation_key = self.entity_description.turn_on_guard
+        if allowed_fn(self.coordinator.data or {}, self._recently_on()):
+            return
+        try:
+            fresh = await fresh_read_fn(self._entry_data["api"])
+        except VIGIError:
+            return  # can't tell: send the write rather than refuse wrongly
+        if not allowed_fn(fresh, self._recently_on()):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key=translation_key
+            )
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         desc = self.entity_description
+        # Recorded first, so a sibling's guard running in the same service call sees it.
+        self._entry_data.setdefault("switch_turned_on_at", {})[desc.key] = time.monotonic()
+        if desc.turn_on_guard:
+            await self._check_turn_on_guard()
         await self._write(desc.openapi_turn_on_fn, desc.turn_on_fn)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         desc = self.entity_description
+        self._entry_data.setdefault("switch_turned_on_at", {}).pop(desc.key, None)
         await self._write(desc.openapi_turn_off_fn, desc.turn_off_fn)
         await self.coordinator.async_request_refresh()
