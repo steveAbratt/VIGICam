@@ -12,6 +12,11 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Documentation
+
+- Tested Cameras: the **C540** is confirmed working (thanks @BruceTheLoon), and the **C350**'s
+  Person / Vehicle toggles are confirmed fixed since v0.7.5b5 (thanks @ILikeSleeping000, #92).
+
 ---
 
 ## [0.7.5b9] - 2026-10-29
