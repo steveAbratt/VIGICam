@@ -130,7 +130,7 @@ class VIGIOpenAPIEventListener:
             except Exception as exc:
                 _LOGGER.warning(
                     "OpenAPI event stream dropped for %s: %s — reconnecting in %ds",
-                    self._openapi._ip, exc, backoff,
+                    self._openapi.host, exc, backoff,
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 120)
@@ -166,7 +166,7 @@ class VIGIOpenAPIEventListener:
                     payload["msg_push_enabled"] = "on"
                     await self._openapi.call(setter, payload)
                     _LOGGER.debug(
-                        "OpenAPI: enabled msg_push for %s on %s", getter, self._openapi._ip
+                        "OpenAPI: enabled msg_push for %s on %s", getter, self._openapi.host
                     )
             except Exception as exc:
                 _LOGGER.debug("OpenAPI: could not check/enable msg_push for %s: %s", getter, exc)
@@ -174,19 +174,18 @@ class VIGIOpenAPIEventListener:
     # ── Streaming connection ──────────────────────────────────────────────────
 
     async def _connect_and_stream(self) -> None:
-        stok = await self._openapi._ensure_stok()
-        url = f"{self._openapi._base}/stok={stok}"
+        url = await self._openapi.authed_url()
         body = {"method": "subscribeMsg", "params": {"event_type": ["all"], "heartbeat": 15}}
 
         # Persistent connection — must NOT use force_close.
-        conn = aiohttp.TCPConnector(ssl=self._openapi._ssl)
+        conn = aiohttp.TCPConnector(ssl=self._openapi.ssl_context)
         timeout = aiohttp.ClientTimeout(total=None, connect=10, sock_read=None)
 
         async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
             async with session.post(url, json=body) as resp:
                 if resp.status != 200:
                     raise VIGIOpenAPIError(f"subscribeMsg returned HTTP {resp.status}")
-                _LOGGER.debug("OpenAPI event stream connected for %s", self._openapi._ip)
+                _LOGGER.debug("OpenAPI event stream connected for %s", self._openapi.host)
                 await self._read_stream(resp)
 
     async def _read_stream(self, resp: aiohttp.ClientResponse) -> None:
@@ -212,15 +211,15 @@ class VIGIOpenAPIEventListener:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 _LOGGER.debug(
                     "OpenAPI: unrecognised stream data from %s: %r",
-                    self._openapi._ip, line[:120],
+                    self._openapi.host, line[:120],
                 )
                 continue
 
             if "Heartbeat" in data:
-                _LOGGER.debug("OpenAPI heartbeat from %s", self._openapi._ip)
+                _LOGGER.debug("OpenAPI heartbeat from %s", self._openapi.host)
             elif "event_type" in data:
                 _LOGGER.debug(
-                    "OpenAPI raw event from %s: %s", self._openapi._ip, data
+                    "OpenAPI raw event from %s: %s", self._openapi.host, data
                 )
                 area: str | None = (
                     data.get("detection_area")
@@ -238,11 +237,11 @@ class VIGIOpenAPIEventListener:
             if event_type not in _EVENT_TYPE_MAP:
                 _LOGGER.debug(
                     "OpenAPI: unknown event type '%s' from %s — add to _EVENT_TYPE_MAP",
-                    event_type, self._openapi._ip,
+                    event_type, self._openapi.host,
                 )
             return
         _LOGGER.debug(
-            "OpenAPI event: %s → %s on %s", event_type, mapped, self._openapi._ip
+            "OpenAPI event: %s → %s on %s", event_type, mapped, self._openapi.host
         )
         async_dispatcher_send(
             self._hass,

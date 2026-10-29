@@ -22,6 +22,34 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   **If an automation turns Alarm on while Alarm Light and Alarm Sound are both off, it now
   stops at that step with this error** instead of quietly carrying on. Turn an output on in
   the same action or an earlier step, or add `continue_on_error: true` to that step.
+- **`vigicam.*` actions now fail when they fail.** If `speak`, `play_file`, a PTZ move or any
+  other VIGICam action couldn't be carried out, it used to log an error and report success, so
+  an automation carried on as if it had worked. It now raises an error naming the camera and
+  the reason, which stops the automation and shows in its trace. When several cameras are
+  targeted, the ones that can do it still do; the error lists the rest.
+
+  **An automation that calls a `vigicam.*` action which fails now stops at that step.** Add
+  `continue_on_error: true` to the step if it should carry on.
+- **An entity that isn't a VIGICam camera is now refused** before anything is sent, instead of
+  being skipped.
+- **`vigicam.speak` uses Home Assistant's standard text-to-speech route.** It replaces five
+  fallback methods, most of which no longer exist in current Home Assistant. Any TTS engine
+  works, given as an entity (`tts.piper`) or a provider name (`cloud`).
+- **A switch no longer reads "off" because one poll failed to read it.** It keeps showing the
+  last answer for up to three polls.
+
+### Fixed
+
+- `vigicam.play_audio` only accepts the slots that exist: 0 and 1 (built-in) and 101–103.
+- Audio of 15 seconds or more is still cut to the camera's 15-second limit, but now says so in
+  the log.
+
+### Documentation
+
+- `vigicam.ptz_move_to` takes positions, not steps (checked on a C540V), and the camera needs a
+  zoom value, so leaving zoom out sends 0.0.
+- Examples and blueprints use `action:` instead of the older `service:`. **Re-import the
+  blueprints** to pick this up; the old ones keep working.
 
 ---
 

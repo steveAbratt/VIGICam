@@ -99,7 +99,7 @@ blueprint:
 trigger: !input trigger_config
 
 action:
-  - service: vigicam.play_file
+  - action: vigicam.play_file
     data:
       entity_id: !input camera_entity
       url: !input media_url

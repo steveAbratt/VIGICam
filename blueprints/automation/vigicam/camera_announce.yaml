@@ -111,7 +111,7 @@ blueprint:
 trigger: !input trigger_config
 
 action:
-  - service: vigicam.speak
+  - action: vigicam.speak
     data:
       entity_id: !input camera_entity
       message: !input message

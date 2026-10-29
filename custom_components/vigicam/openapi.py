@@ -103,6 +103,18 @@ class VIGIOpenAPI:
             raise VIGIOpenAPIAuthError(f"doAuth failed (errCode={err})")
         return stok
 
+    @property
+    def host(self) -> str:
+        return self._ip
+
+    @property
+    def ssl_context(self) -> ssl.SSLContext:
+        return self._ssl
+
+    async def authed_url(self) -> str:
+        """The base URL with a valid stok, for callers that open their own connection."""
+        return f"{self._base}/stok={await self._ensure_stok()}"
+
     async def _ensure_stok(self) -> str:
         if self._stok and time.monotonic() < self._stok_expiry:
             return self._stok

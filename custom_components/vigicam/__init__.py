@@ -19,6 +19,7 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
     HomeAssistantError,
+    ServiceValidationError,
 )
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
@@ -190,7 +191,8 @@ _UPLOAD_AUDIO_SCHEMA = vol.Schema({
 
 _PLAY_AUDIO_SCHEMA = vol.Schema({
     vol.Required("entity_id"): _ENTITY_IDS,
-    vol.Optional("slot", default=101): vol.All(vol.Coerce(int), vol.Range(min=0, max=103)),
+    # 0 and 1 are the camera's built-in sounds, 101–103 the custom slots; nothing between.
+    vol.Optional("slot", default=101): vol.All(vol.Coerce(int), vol.In([0, 1, 101, 102, 103])),
     vol.Optional("times", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
     vol.Optional("pause", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=30.0)),
 })
@@ -222,6 +224,7 @@ _PTZ_MOVE_TO_SCHEMA = vol.Schema({
     vol.Required("entity_id"): _ENTITY_IDS,
     vol.Required("pan"): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
     vol.Required("tilt"): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
+    # Not truly optional: motorMove without z_coord is refused (-10010, C540V).
     vol.Optional("zoom", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-1.0, max=1.0)),
 })
 
@@ -257,22 +260,48 @@ def _wav_duration(wav: bytes) -> float:
     return (len(wav) - _WAV_HEADER_BYTES) / _WAV_BYTES_PER_SECOND
 
 
+class _Outcome:
+    """Per-camera problems in one service call, raised together once every camera has
+    been tried.
+
+    The cameras that worked still get the command; the call then fails, so an
+    automation stops and its trace names the camera and the reason, instead of
+    carrying on as if every camera had done it.
+    """
+
+    def __init__(self, service: str) -> None:
+        self.service = service
+        self.invalid: list[str] = []  # the request can't apply to this camera
+        self.failed: list[str] = []   # the camera, or fetching the audio, failed
+
+    def raise_if_any(self) -> None:
+        if self.failed:
+            raise HomeAssistantError(
+                f"vigicam.{self.service} failed: " + "; ".join(self.failed + self.invalid)
+            )
+        if self.invalid:
+            raise ServiceValidationError(
+                f"vigicam.{self.service}: " + "; ".join(self.invalid)
+            )
+
+
 def _iter_targets(
     hass: HomeAssistant, call: ServiceCall, service: str
 ) -> list[tuple[str, dict]]:
     """Return [(entity_id, entry_data), ...] for every camera the call targets.
 
     entity_id accepts a single id or a list, so one service call can address
-    several cameras. Entities we do not own are logged and skipped. A camera that fails
-    the identity check aborts the whole call before anything is sent to any camera.
+    several cameras. An entity that isn't a VIGICam camera, or a camera that fails the
+    identity check, aborts the whole call before anything is sent to any camera.
     """
     raw = call.data["entity_id"]
     targets: list[tuple[str, dict]] = []
     for eid in (raw if isinstance(raw, list) else [raw]):
         data = _entry_data_for_entity(hass, eid)
         if data is None:
-            _LOGGER.error("vigicam.%s: cannot find camera for %s", service, eid)
-            continue
+            raise ServiceValidationError(
+                f"vigicam.{service}: {eid} is not a VIGICam camera entity"
+            )
         if not data["coordinator"].identity_ok:
             # Services bypass entities, so unavailable entities don't stop them. Without
             # this a preset save would write into the other camera's preset table.
@@ -392,9 +421,10 @@ def _register_services(hass: HomeAssistant) -> None:
         pan_v, tilt_v, zoom_v = _DIRECTION_VECTORS[call.data["direction"]]
 
         moving: list[VIGIOnvifPtz] = []
+        outcome = _Outcome("ptz")
         for eid, data in _iter_targets(hass, call, "ptz"):
             if not data.get("onvif_ptz"):
-                _LOGGER.error("vigicam.ptz: no PTZ support for %s", eid)
+                outcome.invalid.append(f"{eid} has no PTZ")
                 continue
             ptz: VIGIOnvifPtz = data["onvif_ptz"]
             data["coordinator"].last_preset = None
@@ -402,7 +432,7 @@ def _register_services(hass: HomeAssistant) -> None:
             try:
                 await ptz.continuous_move(pan_v * speed, tilt_v * speed, zoom_v * speed)
             except Exception as exc:
-                _LOGGER.error("vigicam.ptz failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
                 continue
             moving.append(ptz)
 
@@ -411,18 +441,22 @@ def _register_services(hass: HomeAssistant) -> None:
             await asyncio.sleep(duration)
             for ptz in moving:
                 await ptz.stop()
+        outcome.raise_if_any()
 
     async def handle_ptz_stop(call: ServiceCall) -> None:
+        outcome = _Outcome("ptz_stop")
         for eid, data in _iter_targets(hass, call, "ptz_stop"):
             if not data.get("onvif_ptz"):
                 continue
             try:
                 await data["onvif_ptz"].stop()
             except Exception as exc:
-                _LOGGER.error("vigicam.ptz_stop failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def handle_goto_preset(call: ServiceCall) -> None:
         preset_name = call.data["preset"]
+        outcome = _Outcome("goto_preset")
         for eid, data in _iter_targets(hass, call, "goto_preset"):
             # The coordinator's copy, not entry_data["presets"]: the latter is captured
             # once at setup and never refreshed, so a preset added or renamed on the
@@ -431,18 +465,19 @@ def _register_services(hass: HomeAssistant) -> None:
             presets: list[dict] = data["coordinator"].presets or []
             preset = next((p for p in presets if p["name"] == preset_name), None)
             if not preset:
-                _LOGGER.error(
-                    "vigicam.goto_preset: preset '%s' not found on %s (available: %s)",
-                    preset_name, eid, [p["name"] for p in presets],
+                outcome.invalid.append(
+                    f"no preset '{preset_name}' on {eid} "
+                    f"(available: {', '.join(p['name'] for p in presets) or 'none'})"
                 )
                 continue
             try:
                 await data["api"].goto_preset(preset["id"])
             except Exception as exc:
-                _LOGGER.error("vigicam.goto_preset failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
                 continue
             data["coordinator"].last_preset = preset_name
             data["coordinator"].async_update_listeners()
+        outcome.raise_if_any()
 
     async def handle_upload_audio(call: ServiceCall) -> None:
         targets = _iter_targets(hass, call, "upload_audio")
@@ -457,20 +492,24 @@ def _register_services(hass: HomeAssistant) -> None:
             raw_bytes, source = await _fetch_audio_bytes(hass, call.data["url"])
             wav = await _audio_to_camera_wav(raw_bytes, source_label=source)
         except Exception as exc:
-            _LOGGER.error("vigicam.upload_audio: could not load %s: %s", call.data["url"], exc)
-            return
+            raise HomeAssistantError(
+                f"vigicam.upload_audio: could not load {call.data['url']}: {exc}"
+            ) from exc
         duration = _wav_duration(wav)
         _LOGGER.debug("vigicam.upload_audio: %d B (%.1fs) to slot %d", len(wav), duration, slot)
 
+        outcome = _Outcome("upload_audio")
         for eid, data in targets:
             try:
                 await data["api"].upload_audio(slot, name, wav)
                 if play:
                     await data["api"].play_audio(slot, audio_duration=duration)
             except Exception as exc:
-                _LOGGER.error("vigicam.upload_audio failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def handle_play_audio(call: ServiceCall) -> None:
+        outcome = _Outcome("play_audio")
         for eid, data in _iter_targets(hass, call, "play_audio"):
             try:
                 await data["api"].play_audio(
@@ -479,16 +518,19 @@ def _register_services(hass: HomeAssistant) -> None:
                     pause=call.data["pause"],
                 )
             except Exception as exc:
-                _LOGGER.error("vigicam.play_audio failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def handle_delete_audio(call: ServiceCall) -> None:
         slot = call.data["slot"]
+        outcome = _Outcome("delete_audio")
         for eid, data in _iter_targets(hass, call, "delete_audio"):
             try:
                 await data["api"].delete_audio(slot)
                 _LOGGER.debug("vigicam.delete_audio: deleted slot %d on %s", slot, eid)
             except Exception as exc:
-                _LOGGER.error("vigicam.delete_audio failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def _tts_to_camera_wav(tts_engine: str, message: str, language: str) -> bytes:
         """Generate TTS audio and convert it to 8 kHz mono 16-bit PCM WAV.
@@ -496,118 +538,25 @@ def _register_services(hass: HomeAssistant) -> None:
         The camera's format limit is WAV mono 8 kHz ≤15 s ≤256 KB (or MP3 ≤64 kbps ≤128 KB).
         Converting everything to 8 kHz WAV avoids bitrate guessing and is always in-spec.
         """
-        audio_bytes: bytes | None = None
+        from homeassistant.components import tts
 
-        # Approach 1: import DATA_TTS_MANAGER from HA so we always use the right key,
-        # regardless of which HA version renamed it.
-        try:
-            from homeassistant.components.tts import DATA_TTS_MANAGER as _TTS_KEY  # type: ignore[attr-defined]
-            _mgr = hass.data.get(_TTS_KEY)
-        except ImportError:
-            _mgr = None
-
-        # Approach 1b: fall back to known key strings if the import didn't work.
-        if _mgr is None:
-            for _key in ("tts_manager", "tts"):
-                _mgr = hass.data.get(_key)
-                if _mgr is not None and hasattr(_mgr, "async_get_tts_audio"):
-                    break
-                _mgr = None
-
-        if _mgr is not None and hasattr(_mgr, "async_get_tts_audio"):
-            for _engine in (tts_engine, tts_engine.removeprefix("tts.")):
-                try:
-                    _ext, audio_bytes = await _mgr.async_get_tts_audio(
-                        _engine, message, language=language or None, options={},
-                    )
-                    if audio_bytes:
-                        break
-                except Exception:
-                    audio_bytes = None
-
-        # Approach 2: module-level async_get_tts_audio (HA 2024.10+ public API).
-        if not audio_bytes:
+        # HA's public route to raw TTS audio, the one its own Assist satellites use. The
+        # engine is tried as given and without "tts.", so both an entity ID and a legacy
+        # provider name ("cloud") work.
+        errors: list[str] = []
+        for engine in dict.fromkeys((tts_engine, tts_engine.removeprefix("tts."))):
             try:
-                from homeassistant.components.tts import async_get_tts_audio as _tts_fn  # type: ignore[attr-defined]
-                _ext, audio_bytes = await _tts_fn(
-                    hass, tts_engine, message, language=language or None,
+                media_id = tts.generate_media_source_id(
+                    hass, message, engine=engine, language=language or None
                 )
-            except Exception:  # noqa: BLE001  — any failure falls through to the next approach
-                audio_bytes = None
-
-        # Approach 3: tts.get_tts_audio service (available in some HA builds).
-        if not audio_bytes:
-            tts_kwargs: dict = {"engine_id": tts_engine, "message": message}
-            if language:
-                tts_kwargs["language"] = language
-            try:
-                tts_resp = await hass.services.async_call(
-                    "tts", "get_tts_audio", tts_kwargs,
-                    blocking=True, return_response=True,
-                )
-                tts_url = (tts_resp or {}).get("url")
-                if tts_url:
-                    session = async_get_clientsession(hass)
-                    async with session.get(tts_url) as resp:
-                        resp.raise_for_status()
-                        audio_bytes = await resp.read()
-            except Exception:
-                audio_bytes = None
-
-        # Approach 4: entity_components lookup (HA 2025.x+ entity-based TTS).
-        if not audio_bytes:
-            try:
-                _ec = hass.data.get("entity_components", {})
-                _tts_component = _ec.get("tts") if hasattr(_ec, "get") else None
-                if _tts_component and hasattr(_tts_component, "get_entity"):
-                    _tts_entity = _tts_component.get_entity(tts_engine)
-                    if _tts_entity and hasattr(_tts_entity, "async_get_tts_audio"):
-                        _lang = language or getattr(_tts_entity, "default_language", "") or ""
-                        _ext, audio_bytes = await _tts_entity.async_get_tts_audio(
-                            message, _lang, {}
-                        )
-            except Exception:
-                audio_bytes = None
-
-        # Approach 5: brute-force scan hass.data for any object with async_get_tts_audio.
-        if not audio_bytes:
-            for _val in hass.data.values():
-                if hasattr(_val, "async_get_tts_audio"):
-                    for _engine in (tts_engine, tts_engine.removeprefix("tts.")):
-                        try:
-                            _ext, audio_bytes = await _val.async_get_tts_audio(
-                                _engine, message, language=language or None, options={},
-                            )
-                            if audio_bytes:
-                                break
-                        except Exception:
-                            audio_bytes = None
-                    if audio_bytes:
-                        break
-
-        if not audio_bytes:
-            import homeassistant as _ha
-            _ha_version = getattr(_ha, "__version__", "unknown")
-            _tts_keys = []
-            try:
-                _tts_keys = [
-                    str(k) for k in hass.data
-                    if isinstance(k, str) and "tts" in k.lower()
-                ]
-            except Exception:
-                pass
-            _LOGGER.error(
-                "vigicam.speak: all TTS access methods failed for '%s' on HA %s. "
-                "TTS-related hass.data keys: %s. "
-                "Please report this at https://github.com/steveAbratt/VIGICam/issues",
-                tts_engine, _ha_version, _tts_keys,
-            )
-            raise VIGIError(
-                f"Could not get TTS audio from '{tts_engine}' (HA {_ha_version}). "
-                "Check the HA log for diagnostic keys."
-            )
-
-        return await _audio_to_camera_wav(audio_bytes, source_label=tts_engine)
+                _ext, audio_bytes = await tts.async_get_media_source_audio(hass, media_id)
+            except Exception as exc:  # noqa: BLE001  — engines raise their own types
+                errors.append(f"{engine}: {exc}")
+                continue
+            if audio_bytes:
+                return await _audio_to_camera_wav(audio_bytes, source_label=engine)
+            errors.append(f"{engine}: no audio")
+        raise VIGIError(f"no audio from TTS engine '{tts_engine}' ({'; '.join(errors)})")
 
     async def _audio_to_camera_wav(audio_bytes: bytes, source_label: str = "audio") -> bytes:
         """Convert any ffmpeg-readable audio to 8 kHz mono 16-bit PCM WAV.
@@ -642,6 +591,12 @@ def _register_services(hass: HomeAssistant) -> None:
         if proc.returncode != 0 or not pcm_data:
             raise VIGIError(f"ffmpeg conversion failed for {source_label}: {stderr.decode()[:200]}")
 
+        if len(pcm_data) >= 15 * _WAV_BYTES_PER_SECOND:
+            _LOGGER.warning(
+                "vigicam: %s is 15 s or longer; the camera plays at most 15 s, so it was cut "
+                "there", source_label,
+            )
+
         import struct
         _sr, _ch, _bits = 8000, 1, 16
         # Belt-and-braces cap at the camera's 256 KB limit; the -t 15 above
@@ -674,11 +629,11 @@ def _register_services(hass: HomeAssistant) -> None:
                 call.data.get("language", ""),
             )
         except Exception as exc:
-            _LOGGER.error("vigicam.speak: TTS generation failed: %s", exc)
-            return
+            raise HomeAssistantError(f"vigicam.speak: TTS generation failed: {exc}") from exc
         duration = _wav_duration(wav)
         _LOGGER.debug("vigicam.speak: WAV %d B, %.1fs to slot %d", len(wav), duration, slot)
 
+        outcome = _Outcome("speak")
         for eid, data in targets:
             try:
                 await _replace_and_play(
@@ -686,7 +641,8 @@ def _register_services(hass: HomeAssistant) -> None:
                     call.data["times"], call.data["pause"],
                 )
             except Exception as exc:
-                _LOGGER.error("vigicam.speak failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def handle_play_file(call: ServiceCall) -> None:
         targets = _iter_targets(hass, call, "play_file")
@@ -699,11 +655,13 @@ def _register_services(hass: HomeAssistant) -> None:
             raw_bytes, source = await _fetch_audio_bytes(hass, call.data["url"])
             wav = await _audio_to_camera_wav(raw_bytes, source_label=source)
         except Exception as exc:
-            _LOGGER.error("vigicam.play_file: could not load %s: %s", call.data["url"], exc)
-            return
+            raise HomeAssistantError(
+                f"vigicam.play_file: could not load {call.data['url']}: {exc}"
+            ) from exc
         duration = _wav_duration(wav)
         _LOGGER.debug("vigicam.play_file: WAV %d B, %.1fs to slot %d", len(wav), duration, slot)
 
+        outcome = _Outcome("play_file")
         for eid, data in targets:
             try:
                 await _replace_and_play(
@@ -711,7 +669,8 @@ def _register_services(hass: HomeAssistant) -> None:
                     call.data["times"], call.data["pause"],
                 )
             except Exception as exc:
-                _LOGGER.error("vigicam.play_file failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def handle_ptz_move_to(call: ServiceCall) -> None:
         coords = {
@@ -719,22 +678,25 @@ def _register_services(hass: HomeAssistant) -> None:
             "y_coord": call.data["tilt"],
             "z_coord": call.data["zoom"],
         }
+        outcome = _Outcome("ptz_move_to")
         for eid, data in _iter_targets(hass, call, "ptz_move_to"):
             if not data.get("has_ptz") or not data.get("openapi"):
-                _LOGGER.error("vigicam.ptz_move_to: requires PTZ + OpenAPI for %s", eid)
+                outcome.invalid.append(f"{eid} needs PTZ and OpenAPI")
                 continue
             try:
                 await data["openapi"].call("motorMove", coords)
                 data["coordinator"].last_preset = None
                 data["coordinator"].async_update_listeners()
             except Exception as exc:
-                _LOGGER.error("vigicam.ptz_move_to failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def handle_ptz_save_preset(call: ServiceCall) -> None:
         name = call.data["name"]
+        outcome = _Outcome("ptz_save_preset")
         for eid, data in _iter_targets(hass, call, "ptz_save_preset"):
             if not data.get("has_ptz") or not data.get("openapi"):
-                _LOGGER.error("vigicam.ptz_save_preset: requires PTZ + OpenAPI for %s", eid)
+                outcome.invalid.append(f"{eid} needs PTZ and OpenAPI")
                 continue
             openapi = data["openapi"]
             # Re-read per camera: an auto-allocated id depends on that camera's presets.
@@ -750,29 +712,32 @@ def _register_services(hass: HomeAssistant) -> None:
                     "vigicam.ptz_save_preset: saved '%s' as id %d on %s", name, preset_id, eid
                 )
             except Exception as exc:
-                _LOGGER.error("vigicam.ptz_save_preset failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     async def handle_ptz_delete_preset(call: ServiceCall) -> None:
         name = call.data["name"]
+        outcome = _Outcome("ptz_delete_preset")
         for eid, data in _iter_targets(hass, call, "ptz_delete_preset"):
             if not data.get("has_ptz") or not data.get("openapi"):
-                _LOGGER.error("vigicam.ptz_delete_preset: requires PTZ + OpenAPI for %s", eid)
+                outcome.invalid.append(f"{eid} needs PTZ and OpenAPI")
                 continue
             openapi = data["openapi"]
             try:
                 presets = await _openapi_get_presets(openapi)
                 preset = next((p for p in presets if p["name"] == name), None)
                 if not preset:
-                    _LOGGER.error(
-                        "vigicam.ptz_delete_preset: preset '%s' not found on %s (available: %s)",
-                        name, eid, [p["name"] for p in presets],
+                    outcome.invalid.append(
+                        f"no preset '{name}' on {eid} "
+                        f"(available: {', '.join(p['name'] for p in presets) or 'none'})"
                     )
                     continue
                 await openapi.call("removePresetPoint", {"id": preset["id"]})
                 await data["coordinator"].async_refresh_presets()
                 _LOGGER.debug("vigicam.ptz_delete_preset: deleted preset '%s' on %s", name, eid)
             except Exception as exc:
-                _LOGGER.error("vigicam.ptz_delete_preset failed for %s: %s", eid, exc)
+                outcome.failed.append(f"{eid}: {exc}")
+        outcome.raise_if_any()
 
     hass.services.async_register(DOMAIN, "ptz", handle_ptz, schema=_PTZ_SCHEMA)
     hass.services.async_register(DOMAIN, "ptz_stop", handle_ptz_stop, schema=_PTZ_STOP_SCHEMA)

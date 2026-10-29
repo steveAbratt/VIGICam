@@ -283,12 +283,20 @@ play_audio:
           multiple: true
     slot:
       name: Slot
-      description: Audio slot to play. Custom slots 101–103 or built-in 0/1.
+      description: Audio slot to play. Custom slots 101–103 or the built-in sounds 0 and 1.
       selector:
-        number:
-          min: 0
-          max: 103
-          step: 1
+        select:
+          options:
+            - label: "101 (custom)"
+              value: "101"
+            - label: "102 (custom)"
+              value: "102"
+            - label: "103 (custom)"
+              value: "103"
+            - label: "0 (built-in)"
+              value: "0"
+            - label: "1 (built-in)"
+              value: "1"
     times:
       name: Times
       description: How many times to play the audio. Default 1.
@@ -372,7 +380,7 @@ ptz_move_to:
           mode: box
     zoom:
       name: Zoom
-      description: Zoom. Leaving it out sets zoom to 0.0 rather than leaving it where it is.
+      description: Zoom position. The camera needs one, so leaving it out sends 0.0 rather than keeping the current zoom.
       default: 0.0
       selector:
         number:
