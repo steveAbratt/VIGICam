@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
@@ -26,6 +27,10 @@ _LOGGER = logging.getLogger(__name__)
 # 10 ticks × 30 s = 5 minutes.
 _OPENAPI_RECHECK_TICKS = 10
 _PRESET_REFRESH_TICKS = 10   # ~5 min at the default 30 s scan interval
+
+# Polls a module may miss while its last answer is still shown, rather than its switches
+# reading "off" because one read failed.
+_MISSED_POLLS_ALLOWED = 3
 
 # Refused combined reads in a row before polling one module at a time until reload.
 _BATCH_REFUSALS_ALLOWED = 3
@@ -73,6 +78,7 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._batch_reads = True
         self._batch_refusals = 0
         self._batch_checked = False
+        self._missed_polls: dict[str, int] = {}
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -174,6 +180,16 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._openapi_recheck_counter >= _OPENAPI_RECHECK_TICKS:
                 self._openapi_recheck_counter = 0
                 await self._recheck_openapi()
+
+        # Modules that never answer stay empty; has_sd_card above used this poll's
+        # answers only.
+        previous = self.data or {}
+        for key, value in results.items():
+            if key in answered or value:
+                self._missed_polls.pop(key, None)
+            elif previous.get(key) and self._missed_polls.get(key, 0) < _MISSED_POLLS_ALLOWED:
+                self._missed_polls[key] = self._missed_polls.get(key, 0) + 1
+                results[key] = previous[key]
 
         return results
 
@@ -306,9 +322,11 @@ class VIGICoordinator(DataUpdateCoordinator[dict[str, Any]]):
         from .openapi import VIGIOpenAPI, try_openapi
 
         ip = self.camera.host
-        if await try_openapi(ip, self.camera._username, self.camera._password):
+        username = self.config_entry.data[CONF_USERNAME]
+        password = self.config_entry.data[CONF_PASSWORD]
+        if await try_openapi(ip, username, password):
             self.has_openapi = True
-            self.openapi = VIGIOpenAPI(ip, self.camera._username, self.camera._password)
+            self.openapi = VIGIOpenAPI(ip, username, password)
             _LOGGER.info(
                 "OpenAPI is now available on %s — reload the VIGICam integration "
                 "to enable Vehicle Detection and other OpenAPI sensors",

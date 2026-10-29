@@ -138,10 +138,10 @@ automation:
       after: sunset
       before: sunrise
   action:
-    - service: button.press
+    - action: button.press
       target:
         entity_id: button.vigi_c540v_alarm_trigger
-    - service: vigicam.speak
+    - action: vigicam.speak
       data:
         entity_id: sensor.vigi_c540v_ip_address   # any VIGICam entity of the camera works
         message: "Person detected at the front gate"
@@ -164,7 +164,7 @@ automation:
       to: "on"
   action:
     - delay: "00:00:05"   # wait for Frigate to capture the clip
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Intrusion Alert"
         message: "Zone intrusion detected"

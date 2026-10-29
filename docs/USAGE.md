@@ -269,7 +269,7 @@ automation:
       entity_id: person.your_name
       to: "home"
   action:
-    - service: switch.turn_on
+    - action: switch.turn_on
       target:
         entity_id: switch.vigi_c540v_privacy_mask
 ```
@@ -422,7 +422,7 @@ automation:
     - platform: sun
       event: sunset
   action:
-    - service: light.turn_on
+    - action: light.turn_on
       target:
         entity_id: light.vigi_c540v_spotlight
       data:
@@ -434,7 +434,7 @@ automation:
     - platform: sun
       event: sunrise
   action:
-    - service: light.turn_off
+    - action: light.turn_off
       target:
         entity_id: light.vigi_c540v_spotlight
 ```
@@ -449,13 +449,13 @@ automation:
       entity_id: binary_sensor.vigi_c540v_person_detected
       to: "on"
   action:
-    - service: light.turn_on
+    - action: light.turn_on
       target:
         entity_id: light.vigi_c540v_spotlight
       data:
         brightness: 40    # level 1 — minimal illumination
     - delay: "00:00:05"
-    - service: light.turn_on
+    - action: light.turn_on
       target:
         entity_id: light.vigi_c540v_spotlight
       data:
@@ -555,7 +555,7 @@ automation:
       entity_id: sensor.vigi_c540v_sd_card_status
       to: "full"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "SD Card Full"
         message: "Front Gate SD card is full — enable loop recording or swap the card"
@@ -631,7 +631,7 @@ automation:
     - condition: template
       value_template: "{{ (now() - this.last_changed).total_seconds() > 300 }}"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Camera Rebooted"
         message: "Front Gate camera appears to have restarted"
@@ -668,7 +668,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_motion
       to: "on"
   action:
-    - service: camera.record
+    - action: camera.record
       target:
         entity_id: camera.vigi_c540v_stream
       data:
@@ -690,7 +690,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_person_detected
       to: "on"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Person Detected"
         message: "Someone is at the front door"
@@ -713,7 +713,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_tamper
       to: "on"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Camera Tamper Alert"
         message: "Front Gate camera has been covered or moved"
@@ -734,11 +734,11 @@ automation:
       entity_id: binary_sensor.vigi_c540v_intrusion
       to: "on"
   action:
-    - service: switch.turn_on
+    - action: switch.turn_on
       target:
         entity_id: switch.vigi_c540v_alarm_light
     - delay: "00:00:10"
-    - service: switch.turn_off
+    - action: switch.turn_off
       target:
         entity_id: switch.vigi_c540v_alarm_light
 ```
@@ -758,7 +758,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_line_crossing
       to: "on"
   action:
-    - service: vigicam.speak
+    - action: vigicam.speak
       data:
         entity_id: camera.vigi_c540v_stream
         message: "Someone has crossed the driveway boundary"
@@ -786,7 +786,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_smart_detection
       to: "on"
   action:
-    - service: button.press
+    - action: button.press
       target:
         entity_id: button.vigi_c540v_alarm_trigger
 ```
@@ -813,7 +813,7 @@ automation:
       after: sunset
       before: sunrise
   action:
-    - service: vigicam.speak
+    - action: vigicam.speak
       data:
         entity_id: camera.vigi_c540v_stream
         message: "Vehicle detected outside"
@@ -835,7 +835,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_audio_anomaly
       to: "on"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Audio Anomaly"
         message: "Unusual sound detected at Front Gate"
@@ -856,7 +856,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_loitering
       to: "on"
   action:
-    - service: light.turn_on
+    - action: light.turn_on
       target:
         entity_id: light.driveway
 ```
@@ -876,7 +876,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_scene_change
       to: "on"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Camera Moved"
         message: "Front Gate camera scene has changed unexpectedly"
@@ -897,7 +897,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_object_left_or_taken
       to: "on"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Object Alert"
         message: "Something left or removed at Front Gate"
@@ -919,7 +919,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_area_entry
       to: "on"
   action:
-    - service: vigicam.play_audio
+    - action: vigicam.play_audio
       data:
         entity_id: camera.vigi_c540v_stream
         slot: 0       # built-in alarm tone
@@ -941,7 +941,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_area_exit
       to: "on"
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Vehicle Left"
         message: "Vehicle exited the monitored area"
@@ -963,7 +963,7 @@ automation:
       to: "off"
       for: "00:02:00"   # wait 2 min to avoid false alerts on startup
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Recording Stopped"
         message: "Front Gate loop recording is no longer active"
@@ -1007,7 +1007,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_ptz
       state: "on"
   action:
-    - service: vigicam.goto_preset
+    - action: vigicam.goto_preset
       data:
         entity_id: camera.vigi_c540v_stream
         preset: "Night Watch"
@@ -1023,7 +1023,7 @@ automation:
       to: "off"
       for: "00:01:00"   # wait 1 min to avoid alerts during a normal reload
   action:
-    - service: notify.mobile_app_your_phone
+    - action: notify.mobile_app_your_phone
       data:
         title: "Camera Events Offline"
         message: "Front Gate ONVIF subscription has dropped — detection sensors may not update"
@@ -1044,14 +1044,14 @@ automation:
               entity_id: binary_sensor.vigi_c540v_event_image_capture
               state: "on"
           sequence:
-            - service: notify.mobile_app_your_phone
+            - action: notify.mobile_app_your_phone
               data:
                 title: "Person Detected"
                 message: "Event-synchronised image available"
                 data:
                   image: /api/image_proxy/image.vigi_c540v_last_detection
       default:
-        - service: notify.mobile_app_your_phone
+        - action: notify.mobile_app_your_phone
           data:
             title: "Person Detected"
             message: "Snapshot available"
@@ -1100,7 +1100,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_motion
       to: "on"
   action:
-    - service: camera.snapshot
+    - action: camera.snapshot
       target:
         entity_id: camera.vigi_c540v_stream
       data:
@@ -1209,7 +1209,7 @@ automatically: generates TTS audio, converts it to the camera-compatible format,
 uploads it, and plays it.
 
 ```yaml
-service: vigicam.speak
+action: vigicam.speak
 data:
   entity_id: camera.vigi_c540v_stream
   message: "Motion detected at the front gate"
@@ -1242,7 +1242,7 @@ than generated speech. Record your clip on any device, drop it into HA, and play
 on demand from any automation.
 
 ```yaml
-service: vigicam.play_file
+action: vigicam.play_file
 data:
   entity_id: camera.vigi_c540v_stream
   url: http://192.168.1.x:8123/media/local/alert.wav
@@ -1329,7 +1329,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_person_detected
       to: "on"
   action:
-    - service: vigicam.play_file
+    - action: vigicam.play_file
       data:
         entity_id: camera.vigi_c540v_stream
         url: http://192.168.1.x:8123/media/local/there_you_are.wav
@@ -1345,7 +1345,7 @@ Uploads an audio file to one of three custom slots on the camera (101, 102, 103)
 The file is fetched from a URL accessible to HA (local file, TTS proxy URL, etc.).
 
 ```yaml
-service: vigicam.upload_audio
+action: vigicam.upload_audio
 data:
   entity_id: camera.vigi_c540v_stream
   url: "http://your-ha-ip:8123/local/gate_alert.wav"
@@ -1382,7 +1382,7 @@ automation:
     - platform: homeassistant
       event: start
   action:
-    - service: vigicam.upload_audio
+    - action: vigicam.upload_audio
       data:
         entity_id: camera.vigi_c540v_stream
         url: http://192.168.1.x:8123/media/local/chime.wav
@@ -1398,7 +1398,7 @@ Plays an audio slot through the camera speaker. Useful in automations where you 
 pre-uploaded a fixed sound to slot 102 or 103 and want to trigger it.
 
 ```yaml
-service: vigicam.play_audio
+action: vigicam.play_audio
 data:
   entity_id: camera.vigi_c540v_stream
   slot: 102     # 0 = Alarm Tone, 1 = Ring Tone, 101–103 = custom uploaded
@@ -1421,7 +1421,7 @@ automation:
       entity_id: binary_sensor.vigi_c540v_motion
       to: "on"
   action:
-    - service: vigicam.play_audio
+    - action: vigicam.play_audio
       data:
         entity_id: camera.vigi_c540v_stream
         slot: 102
@@ -1435,7 +1435,7 @@ automation:
 Deletes a custom audio slot from the camera. Safe to call on an empty slot.
 
 ```yaml
-service: vigicam.delete_audio
+action: vigicam.delete_audio
 data:
   entity_id: camera.vigi_c540v_stream
   slot: 101
@@ -1452,7 +1452,7 @@ automation:
     - repeat:
         count: 3
         sequence:
-          - service: vigicam.delete_audio
+          - action: vigicam.delete_audio
             data:
               entity_id: camera.vigi_c540v_stream
               slot: "{{ 101 + repeat.index - 1 }}"
@@ -1466,7 +1466,7 @@ Starts continuous movement in a direction. If `duration` is given the camera sto
 automatically; otherwise call `vigicam.ptz_stop` to stop it.
 
 ```yaml
-service: vigicam.ptz
+action: vigicam.ptz
 data:
   entity_id: camera.vigi_c540v_stream
   direction: right     # left / right / up / down / zoom_in / zoom_out
@@ -1482,7 +1482,7 @@ automation:
     - platform: state
       entity_id: input_button.pan_right
   action:
-    - service: vigicam.ptz
+    - action: vigicam.ptz
       data:
         entity_id: camera.vigi_c540v_stream
         direction: right
@@ -1498,7 +1498,7 @@ Stops any in-progress PTZ movement immediately. Use this after a `vigicam.ptz` c
 that did not include a `duration`.
 
 ```yaml
-service: vigicam.ptz_stop
+action: vigicam.ptz_stop
 data:
   entity_id: camera.vigi_c540v_stream
 ```
@@ -1511,7 +1511,7 @@ Moves the camera to a saved preset by name. Preset names must match exactly as t
 appear in the PTZ Preset select entity (case-sensitive).
 
 ```yaml
-service: vigicam.goto_preset
+action: vigicam.goto_preset
 data:
   entity_id: camera.vigi_c540v_stream
   preset: "Front Gate"
@@ -1525,7 +1525,7 @@ automation:
     - platform: sun
       event: sunset
   action:
-    - service: vigicam.goto_preset
+    - action: vigicam.goto_preset
       data:
         entity_id: camera.vigi_c540v_stream
         preset: "Home"
@@ -1539,11 +1539,12 @@ Moves the camera to an absolute pan/tilt/zoom position. Useful for positioning w
 named preset, or for patrol automations that step through fixed positions.
 
 All three values run from **-1.0 to 1.0 — they are not degrees**, and values outside that
-range are rejected. `zoom` is optional, but leaving it out sets zoom to `0.0`
-rather than leaving it where it is.
+range are rejected. These are positions, not steps: the same values always point the camera
+the same way, wherever it was before. `zoom` can be left out, but the camera won't move
+without one, so leaving it out sends `0.0` rather than keeping the current zoom.
 
 ```yaml
-service: vigicam.ptz_move_to
+action: vigicam.ptz_move_to
 data:
   entity_id: camera.vigi_c540v_stream
   pan: 0.5     # -1.0 to 1.0
@@ -1568,7 +1569,7 @@ preset appears in the **PTZ Preset** select entity on the next poll (within abou
 saving or deleting will report the preset as not found. Wait for the next poll first.
 
 ```yaml
-service: vigicam.ptz_save_preset
+action: vigicam.ptz_save_preset
 data:
   entity_id: camera.vigi_c540v_stream
   name: "Entrance View"
@@ -1582,14 +1583,14 @@ automation:
     - platform: time
       at: "22:00:00"
   action:
-    - service: vigicam.ptz_move_to
+    - action: vigicam.ptz_move_to
       data:
         entity_id: camera.vigi_c540v_stream
         pan: 0.9
         tilt: -0.05
         zoom: 0.0
     - delay: "00:00:02"
-    - service: vigicam.ptz_save_preset
+    - action: vigicam.ptz_save_preset
       data:
         entity_id: camera.vigi_c540v_stream
         name: "Night Watch"
@@ -1604,7 +1605,7 @@ Removes a named preset from the camera. The preset will no longer appear in the 
 Preset select entity after deletion.
 
 ```yaml
-service: vigicam.ptz_delete_preset
+action: vigicam.ptz_delete_preset
 data:
   entity_id: camera.vigi_c540v_stream
   name: "Old Position"

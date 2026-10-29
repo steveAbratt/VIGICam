@@ -199,7 +199,7 @@ services.
 Speak a message through the camera's speaker from any automation:
 
 ```yaml
-service: vigicam.speak
+action: vigicam.speak
 data:
   entity_id: camera.vigi_c540v_stream
   message: "Person detected at the front door — {{ now().strftime('%-I:%M %p') }}"
@@ -234,7 +234,7 @@ MP3, OGG, or any other format ffmpeg can read — the integration converts autom
 **From the HA media browser** (upload via sidebar → Media → My media):
 
 ```yaml
-service: vigicam.play_file
+action: vigicam.play_file
 data:
   entity_id: camera.vigi_c540v_stream
   url: http://192.168.1.x:8123/media/local/alert.wav
@@ -264,7 +264,7 @@ paths automatically. External URLs are fetched directly.
 ## PTZ Services
 
 ```yaml
-service: vigicam.ptz
+action: vigicam.ptz
 data:
   entity_id: camera.vigi_c540v_stream
   direction: right   # left / right / up / down / zoom_in / zoom_out
@@ -273,7 +273,7 @@ data:
 ```
 
 ```yaml
-service: vigicam.goto_preset
+action: vigicam.goto_preset
 data:
   entity_id: camera.vigi_c540v_stream
   preset: "Front Gate"
@@ -282,7 +282,7 @@ data:
 The following require [OpenAPI enabled](#openapi--extended-detection--sensors):
 
 ```yaml
-service: vigicam.ptz_move_to
+action: vigicam.ptz_move_to
 data:
   entity_id: camera.vigi_c540v_stream
   pan: 0.5     # -1.0 to 1.0 — not degrees
@@ -291,14 +291,14 @@ data:
 ```
 
 ```yaml
-service: vigicam.ptz_save_preset
+action: vigicam.ptz_save_preset
 data:
   entity_id: camera.vigi_c540v_stream
   name: "Entrance View"
 ```
 
 ```yaml
-service: vigicam.ptz_delete_preset
+action: vigicam.ptz_delete_preset
 data:
   entity_id: camera.vigi_c540v_stream
   name: "Old Position"
