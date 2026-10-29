@@ -12,6 +12,10 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b9] - 2026-10-29
+
 ### Changed
 
 - **The Alarm switch now says why it won't turn on** (#79). It only arms the camera's alarm:

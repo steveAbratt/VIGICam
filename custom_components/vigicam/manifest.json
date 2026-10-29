@@ -9,5 +9,5 @@
   "issue_tracker": "https://github.com/steveAbratt/VIGICam/issues",
   "loggers": ["custom_components.vigicam"],
   "requirements": [],
-  "version": "0.7.5b8"
+  "version": "0.7.5b9"
 }
