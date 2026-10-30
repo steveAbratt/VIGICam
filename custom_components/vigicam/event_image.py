@@ -29,6 +29,8 @@ import struct
 import urllib.parse
 from typing import TYPE_CHECKING
 
+from .api import make_ssl_context
+
 if TYPE_CHECKING:
     from .api import VIGICamera
 
@@ -58,11 +60,8 @@ _PROTO_HEADERS = {
 }
 
 
-def _make_ssl_ctx() -> ssl.SSLContext:
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+def _make_ssl_ctx(legacy_tls: bool = False) -> ssl.SSLContext:
+    return make_ssl_context(legacy_tls)
 
 
 def _subprotocol_value() -> str:
@@ -323,7 +322,7 @@ async def fetch_latest_event_image(
         return None
 
     frame = frames[0]
-    ssl_ctx = _make_ssl_ctx()
+    ssl_ctx = _make_ssl_ctx(camera.legacy_tls)
     h264 = await _ws_download_h264(
         ip, username, password, ssl_ctx,
         frame["file_id"], frame["start_time"],

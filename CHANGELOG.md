@@ -12,6 +12,19 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Older firmware that offers only static-RSA TLS suites** (seen on a VIGI C340, 3.0.0 Build
+  231229) could not be added: the strict handshake failed with *sslv3 alert handshake failure*
+  and the form said *Cannot connect to camera*. If the strict handshake fails, the camera is
+  now retried with `AES256-GCM-SHA384` / `AES128-GCM-SHA256` added to the cipher list (security
+  level unchanged, certificate verification off as before). The result is stored as
+  `legacy_tls` in the config entry and used for the camera's API session and event-image
+  download. Existing entries are unaffected.
+- **ONVIF on port 2020.** The same firmware serves ONVIF on port 2020 and closes port 80, so
+  every subscribe failed with *Server disconnected* and no detection event ever arrived. The
+  port is now probed (80, then 2020) at setup and used for event subscriptions and PTZ.
+
 ### Documentation
 
 - Tested Cameras: the **C540** is confirmed working (thanks @BruceTheLoon), and the **C350**'s

@@ -12,12 +12,20 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import VIGIAuthError, VIGICamera, VIGIError, camera_unique_id, canonical_mac
+from .api import (
+    VIGIAuthError,
+    VIGICamera,
+    VIGIError,
+    camera_unique_id,
+    canonical_mac,
+    is_tls_handshake_error,
+)
 from .const import (
     CAMERA_STREAM_SUFFIXES,
     CONF_FEATURE_CAMERA_STREAM,
     CONF_FEATURE_DETECTION_EVENTS,
     CONF_FEATURE_IMAGE_CONTROLS,
+    CONF_LEGACY_TLS,
     CONF_STREAM_USE_MAIN,
     CONF_VERIFY_SSL,
     DEFAULT_FEATURE_CAMERA_STREAM,
@@ -42,19 +50,23 @@ STEP_SCHEMA = vol.Schema(
 )
 
 
-async def _test_credentials(hass, ip: str, username: str, password: str) -> tuple[dict, bool]:
-    """Validate credentials. Returns (device_info, verify_ssl).
+async def _test_credentials(
+    hass, ip: str, username: str, password: str
+) -> tuple[dict, bool, bool]:
+    """Validate credentials. Returns (device_info, verify_ssl, legacy_tls).
 
     Tries SSL verification first (for cameras with proper certs), then falls
     back to unverified. Most VIGI/InSight cameras use a TP-Link internal CA
-    (CN=TPRI-CA) that is not in the system trust store.
+    (CN=TPRI-CA) that is not in the system trust store. If even the unverified
+    handshake fails, the camera is retried with the static-RSA cipher suites added (older
+    firmware offers only those, and OpenSSL 3's default list leaves them out).
     """
     # Attempt 1: verified (proper SSL cert) using HA's shared session
     session = async_get_clientsession(hass)
     cam = VIGICamera(ip, username, password, session=session)
     try:
         await cam.authenticate()
-        return await cam.get_device_info(), True
+        return await cam.get_device_info(), True, False
     except (aiohttp.ClientSSLError, aiohttp.ClientConnectorCertificateError):
         pass  # Untrusted/self-signed cert — retry with SSL verification disabled
     except (VIGIAuthError, VIGIError):
@@ -66,9 +78,21 @@ async def _test_credentials(hass, ip: str, username: str, password: str) -> tupl
     cam2 = VIGICamera(ip, username, password, session=None)
     try:
         await cam2.authenticate()
-        return await cam2.get_device_info(), False
+        return await cam2.get_device_info(), False, False
+    except aiohttp.ClientSSLError as exc:
+        if not is_tls_handshake_error(exc):
+            raise
+        # The handshake itself failed, not certificate verification: try legacy TLS.
     finally:
         await cam2.close()
+
+    # Attempt 3: legacy TLS (static-RSA suites added to the cipher list), still unverified.
+    cam3 = VIGICamera(ip, username, password, session=None, legacy_tls=True)
+    try:
+        await cam3.authenticate()
+        return await cam3.get_device_info(), False, True
+    finally:
+        await cam3.close()
 
 
 def _suggested_name(info: dict, fallback: str) -> str:
@@ -237,6 +261,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._username: str = ""
         self._password: str = ""
         self._verify_ssl: bool = False
+        self._legacy_tls: bool = False
         self._device_info: dict = {}
         self._suggested_name: str = ""
 
@@ -248,7 +273,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             username = user_input.get(CONF_USERNAME, DEFAULT_USERNAME)
             password = user_input[CONF_PASSWORD]
             try:
-                info, verify_ssl = await _test_credentials(
+                info, verify_ssl, legacy_tls = await _test_credentials(
                     self.hass, ip, username, password
                 )
             except VIGIAuthError as exc:
@@ -289,6 +314,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_USERNAME: username,
                             CONF_PASSWORD: password,
                             CONF_VERIFY_SSL: verify_ssl,
+                            CONF_LEGACY_TLS: legacy_tls,
                         },
                     )
                     # LOADED: the update listener reloads. Otherwise nothing will.
@@ -302,6 +328,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._username = username
                 self._password = password
                 self._verify_ssl = verify_ssl
+                self._legacy_tls = legacy_tls
                 self._device_info = info
                 self._suggested_name = _suggested_name(info, ip)
                 return await self.async_step_name()
@@ -340,7 +367,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             username = user_input.get(CONF_USERNAME, self._username).strip()
             password = user_input[CONF_PASSWORD]
             try:
-                info, verify_ssl = await _test_credentials(
+                info, verify_ssl, legacy_tls = await _test_credentials(
                     self.hass, self._host, username, password
                 )
             except VIGIAuthError as exc:
@@ -385,6 +412,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_USERNAME: username,
                         CONF_PASSWORD: password,
                         CONF_VERIFY_SSL: verify_ssl,
+                        CONF_LEGACY_TLS: legacy_tls,
                     },
                 )
                 # The update listener reloads only a LOADED entry whose data changed. Not
@@ -418,6 +446,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_USERNAME: self._username,
                     CONF_PASSWORD: self._password,
                     CONF_VERIFY_SSL: self._verify_ssl,
+                    CONF_LEGACY_TLS: self._legacy_tls,
                 },
             )
 
