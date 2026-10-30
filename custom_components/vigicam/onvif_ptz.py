@@ -1,7 +1,7 @@
 """ONVIF PTZ client for VIGI cameras.
 
 Provides ContinuousMove, Stop and GotoPreset via the ONVIF PTZ service
-(same endpoint as events, http://{ip}:80/onvif/service).
+(same endpoint as events, http://{ip}:{port}/onvif/service).
 
 Auth: same WS-Security PasswordDigest as onvif_events.py —
 SHA1(nonce_bytes + created_utf8 + raw_password_utf8).
@@ -19,6 +19,8 @@ import os
 from datetime import datetime, timezone
 
 import aiohttp
+
+from .onvif_port import DEFAULT_ONVIF_PORT, onvif_service_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,14 +41,16 @@ BUTTON_MOVE_S = 1.0
 class VIGIOnvifPtz:
     """On-demand ONVIF PTZ client — no background task, session reused per instance."""
 
-    def __init__(self, ip: str, username: str, password: str) -> None:
+    def __init__(
+        self, ip: str, username: str, password: str, onvif_port: int = DEFAULT_ONVIF_PORT
+    ) -> None:
         # A jog's auto-stop timer lives here, not in the caller: two buttons pressed in
         # quick succession used to have the first press's stop cancel the second move.
         self._stop_task: asyncio.Task | None = None
         self._ip = ip
         self._username = username
         self._password = password
-        self._url = f"http://{ip}:80/onvif/service"
+        self._url = onvif_service_url(ip, onvif_port)
         self._session: aiohttp.ClientSession | None = None
 
     def _get_session(self) -> aiohttp.ClientSession:

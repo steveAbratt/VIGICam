@@ -1818,6 +1818,27 @@ entities:
 
 ## Troubleshooting
 
+### "Cannot connect to camera" on an older firmware, or no detection events at all
+
+Two things older firmware (seen on a VIGI C340, 3.0.0 Build 231229) does differently, and the
+integration now handles both on its own:
+
+- **TLS.** The camera offers only static-RSA cipher suites, which OpenSSL 3's default list
+  leaves out, so the strict handshake fails ("sslv3 alert handshake failure") and adding the
+  camera used to end in *Cannot connect to camera* even with the right address and password.
+  If the strict handshake fails, the integration retries with `AES256-GCM-SHA384` and
+  `AES128-GCM-SHA256` added to the cipher list (security level unchanged) and remembers that
+  for the camera. Certificate verification stays off, as for every camera.
+- **ONVIF port.** ONVIF is on port 80 on most firmware and on port 2020 on older firmware,
+  where port 80 closes the connection. The log showed
+  `ONVIF subscribe failed ... Server disconnected` and the detection sensors never changed.
+  The integration now probes 80, then 2020, at setup.
+
+To check by hand, from any computer: `openssl s_client -connect <camera-ip>:443 -tls1_2`
+connects (with a certificate warning) while a plain Python `ssl` client fails, and
+`curl -m 3 -d '' http://<camera-ip>:80/onvif/service` is closed without a reply while the same
+request on port 2020 answers.
+
 ### A control shows the right state but won't change it
 
 This is the most common complaint, and it is almost always a **model difference** rather than

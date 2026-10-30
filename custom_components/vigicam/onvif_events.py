@@ -27,6 +27,8 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
+from .onvif_port import DEFAULT_ONVIF_PORT, onvif_service_url
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -44,7 +46,6 @@ def _parse_termination_time(resp: str) -> datetime | None:
     except ValueError:
         return None
 
-ONVIF_SERVICE_URL = "http://{}:80/onvif/service"
 PULL_TIMEOUT_S = 8          # camera holds connection this long if no events
 SUBSCRIPTION_DURATION = "PT1H"
 RENEW_MARGIN_S = 300        # renew 5 min before expiry
@@ -90,9 +91,11 @@ class VIGIOnvifEvents:
         username: str,
         password: str,
         entry_id: str,
+        onvif_port: int = DEFAULT_ONVIF_PORT,
     ) -> None:
         self._hass = hass
         self._ip = ip
+        self._onvif_port = onvif_port
         self._username = username
         self._password = password
         self._entry_id = entry_id
@@ -218,7 +221,7 @@ class VIGIOnvifEvents:
 
     async def _subscribe(self) -> bool:
         try:
-            url = ONVIF_SERVICE_URL.format(self._ip)
+            url = onvif_service_url(self._ip, self._onvif_port)
             resp = await self._soap(
                 url, _CREATE_ACTION,
                 "<tev:CreatePullPointSubscription>"

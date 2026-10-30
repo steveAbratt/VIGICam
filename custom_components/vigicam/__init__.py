@@ -30,6 +30,7 @@ from .const import (
     CONF_FEATURE_CAMERA_STREAM,
     CONF_FEATURE_DETECTION_EVENTS,
     CONF_FEATURE_IMAGE_CONTROLS,
+    CONF_LEGACY_TLS,
     CONF_VERIFY_SSL,
     DEFAULT_FEATURE_CAMERA_STREAM,
     DEFAULT_FEATURE_DETECTION_EVENTS,
@@ -45,6 +46,7 @@ from .const import (
 from .frigate import detect_frigate_camera
 from .coordinator import VIGICoordinator
 from .onvif_events import VIGIOnvifEvents
+from .onvif_port import discover_onvif_port
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
 from .openapi import VIGIOpenAPI, try_openapi
 from .openapi_events import VIGIOpenAPIEventListener
@@ -763,13 +765,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
     verify_ssl = entry.data.get(CONF_VERIFY_SSL, False)
+    legacy_tls = entry.data.get(CONF_LEGACY_TLS, False)
 
-    if verify_ssl:
+    if legacy_tls:
+        # HA's shared sessions can't take a custom cipher list: the camera makes its own.
+        session = None
+    elif verify_ssl:
         session = async_get_clientsession(hass)
     else:
         session = async_create_clientsession(hass, verify_ssl=False)
 
-    camera_api = VIGICamera(ip, username, password, session=session)
+    camera_api = VIGICamera(ip, username, password, session=session, legacy_tls=legacy_tls)
     try:
         await camera_api.authenticate()
         device_info = await camera_api.get_device_info()
@@ -782,7 +788,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Presets alone are not a PTZ test: a PTZ camera with none saved would look fixed.
     has_ptz = bool(presets) or await camera_api.check_ptz_support()
-    onvif_ptz = VIGIOnvifPtz(ip, username, password) if has_ptz else None
+    # ONVIF is on port 80 on most firmware, on 2020 on older ones.
+    onvif_port = await discover_onvif_port(ip)
+    onvif_ptz = VIGIOnvifPtz(ip, username, password, onvif_port) if has_ptz else None
 
     # Probe OpenAPI before the first coordinator refresh so smart-detection
     # switch state is available when platform entities are created.
@@ -846,7 +854,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Only start event listeners when detection events are enabled.
     want_detection = _feature(entry, CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
-    onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
+    onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id, onvif_port)
     openapi_events = (
         VIGIOpenAPIEventListener(hass, openapi, entry.entry_id)
         if (has_openapi and want_detection)
