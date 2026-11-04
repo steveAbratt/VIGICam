@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import aiohttp
+
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
@@ -778,8 +780,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session = async_create_clientsession(hass, verify_ssl=False)
 
     camera_api = VIGICamera(ip, username, password, session=session, legacy_tls=legacy_tls)
-    # A legacy camera opens its own session. HA runs on_unload callbacks when setup fails
-    # too, so a camera offline at boot doesn't leak one per setup retry.
+    # A legacy camera opens its own session. HA runs on_unload callbacks when setup raises
+    # ConfigEntryNotReady/AuthFailed/Error (any exception from 2026.1), so a camera offline
+    # at boot doesn't leak one per setup retry.
     entry.async_on_unload(camera_api.close)
     try:
         await camera_api.authenticate()
@@ -790,6 +793,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryAuthFailed(str(exc)) from exc
     except VIGIError as exc:
         raise ConfigEntryNotReady(str(exc)) from exc
+    except aiohttp.ClientError as exc:
+        # A TLS error reaches here unwrapped. Not ready, so HA retries and runs on_unload,
+        # rather than a bare SETUP_ERROR with no retry on HA before 2026.1.
+        raise ConfigEntryNotReady(f"{type(exc).__name__}: {exc}") from exc
 
     # Presets alone are not a PTZ test: a PTZ camera with none saved would look fixed.
     has_ptz = bool(presets) or await camera_api.check_ptz_support()

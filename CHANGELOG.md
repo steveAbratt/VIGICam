@@ -27,10 +27,9 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 - **Detection events on cameras that answer ONVIF on port 2020.** The same firmware answers
   ONVIF on port 2020, not 80, so detection sensors never changed and the log showed
   `ONVIF subscribe failed ... Server disconnected`. VIGICam now checks when a camera is set
-  up: port 80 is kept whenever it answers at all, and 2020 is used only when 80 refuses the
-  connection. Nothing to do after updating. If a camera like this never had working
-  detection events, any automation on its sensors will start firing. Thanks @denisvmiheev
-  (#110).
+  up: port 80 is kept whenever it answers at all, and 2020 is used only when 80 doesn't
+  reply. Nothing to do after updating. If a camera like this never had working detection
+  events, any automation on its sensors will start firing. Thanks @denisvmiheev (#110).
 
 ---
 
