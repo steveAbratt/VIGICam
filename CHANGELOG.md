@@ -12,6 +12,12 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Changed
+
+- **HACS now installs VIGICam from the release's `vigicam.zip`**, and shows a download count
+  for the current version. Every release, including older ones, has the zip, so updating
+  and rolling back work as before.
+
 ---
 
 ## [0.7.5b10] - 2026-11-04
