@@ -1,0 +1,31 @@
+name: Release zip
+
+# HACS installs vigicam.zip from the release (hacs.json zip_release), and counts its
+# downloads. Every release needs the asset, or HACS cannot install that version.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)build the zip for"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build vigicam.zip
+        run: cd custom_components/vigicam && zip -r ../../vigicam.zip . -x '__pycache__/*' '*.pyc'
+      - name: Attach to release
+        run: gh release upload "$TAG" vigicam.zip --clobber

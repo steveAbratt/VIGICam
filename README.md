@@ -190,6 +190,10 @@ duration, oldest recording, capacity remaining), the Uptime diagnostic, and the
 `vigicam.ptz_move_to` / `vigicam.ptz_save_preset` / `vigicam.ptz_delete_preset`
 services.
 
+Each of these detection sensors only fires if that detection type has notifications turned
+on in the camera (VIGI app or web page). VIGICam doesn't change this for you. If one is
+off, the Home Assistant log names it when the integration starts.
+
 > Requires firmware 2.1.x or later. If the OpenAPI menu is missing, update the camera
 > firmware via the VIGI app or camera web UI.
 

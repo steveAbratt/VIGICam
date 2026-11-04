@@ -12,6 +12,29 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b10] - 2026-11-04
+
+### Fixed
+
+- **VIGICam no longer changes your cameras' notification settings** (#95). With OpenAPI
+  enabled, each time the integration started it switched on push notifications for seven
+  detection types (Vehicle, Audio Anomaly, Loitering, Scene Change, Area Entry, Area Exit,
+  Object Left or Taken), including types you had turned off. The camera rejected this
+  before v0.7.5b5, so it took effect from that release. That coincided with NVR
+  recordings running to 30 minutes and Active Defense switching itself on in the VIGI app.
+
+  It now only reads these settings. If a detection type is on but its notifications are
+  off, the log says which, because Home Assistant won't receive those events until you
+  turn them on in the VIGI app or the camera's web page. **If you ran b5–b9, check those
+  settings in the VIGI app**: this release does not undo what earlier betas changed.
+
+### Changed
+
+- **Releases now include a `vigicam.zip`**, ready for HACS to install from and count
+  downloads.
+
 ### Documentation
 
 - Tested Cameras: the **C540** is confirmed working (thanks @BruceTheLoon), and the **C350**'s

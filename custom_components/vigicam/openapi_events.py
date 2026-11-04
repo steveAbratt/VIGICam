@@ -10,9 +10,10 @@ subscribeMsg handles: Vehicle, AudioAnomaly, Loitering, SceneChange,
 ObjectLeftTaken, AreaEntry, AreaExit — types that ONVIF bundles together as
 the SmartDetection catch-all.
 
-Note: msg_push_enabled must be "on" for each detection type (set per camera
-in the detection switch settings). The integration checks and enables these
-on first connection for the types it handles.
+Note: msg_push_enabled must be "on" for each detection type, or the camera does
+not send that type on the stream. The integration checks this on first connection
+and logs which types are off, but does not change it: writing detection settings
+behind the user's back changed camera behaviour outside Home Assistant (#95).
 """
 from __future__ import annotations
 
@@ -55,22 +56,17 @@ _EVENT_TYPE_MAP: dict[str, str | None] = {
     "InvasionDetection":     None,
 }
 
-# Detection types we ensure have msg_push_enabled="on" on first connection.
-# Format: (getter_method, setter_method)
-_MSG_PUSH_METHODS: tuple[tuple[str, str], ...] = (
-    ("getVehicleDetectionSwitch",      "setVehicleDetectionSwitch"),
-    ("getAudioAnomalyDetectionSwitch", "setAudioAnomalyDetectionSwitch"),
-    ("getLoiterDetectionSwitch",       "setLoiterDetectionSwitch"),
-    ("getSceneChangeDetectionSwitch",  "setSceneChangeDetectionSwitch"),
-    ("getAreaEntryDetectionSwitch",    "setAreaEntryDetectionSwitch"),
-    ("getAreaLeaveDetectionSwitch",    "setAreaLeaveDetectionSwitch"),
-    ("getDropAndTakeDetectionSwitch",  "setDropAndTakeDetectionSwitch"),
+# Detection-switch getters for the types this listener handles, read on first connection
+# to report any whose msg_push_enabled is off.
+_MSG_PUSH_GETTERS: tuple[str, ...] = (
+    "getVehicleDetectionSwitch",
+    "getAudioAnomalyDetectionSwitch",
+    "getLoiterDetectionSwitch",
+    "getSceneChangeDetectionSwitch",
+    "getAreaEntryDetectionSwitch",
+    "getAreaLeaveDetectionSwitch",
+    "getDropAndTakeDetectionSwitch",
 )
-
-
-# Status fields that arrive in a reply but are not settings — echoing them back into a
-# setter would be sending the camera its own error code as a parameter.
-_STATUS_KEYS = frozenset({"errCode", "error_code"})
 
 
 def _unwrap_switch(result: dict) -> dict:
@@ -98,7 +94,7 @@ class VIGIOpenAPIEventListener:
         self._openapi = openapi
         self._entry_id = entry_id
         self._task: asyncio.Task | None = None
-        self._msg_push_initialised = False
+        self._msg_push_checked = False
 
     async def async_start(self) -> None:
         self._task = self._hass.async_create_background_task(
@@ -120,9 +116,9 @@ class VIGIOpenAPIEventListener:
         backoff = 5
         while True:
             try:
-                if not self._msg_push_initialised:
-                    await self._ensure_msg_push()
-                    self._msg_push_initialised = True
+                if not self._msg_push_checked:
+                    await self._check_msg_push()
+                    self._msg_push_checked = True
                 await self._connect_and_stream()
                 backoff = 5
             except asyncio.CancelledError:
@@ -135,41 +131,34 @@ class VIGIOpenAPIEventListener:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 120)
 
-    # ── msg_push initialisation ───────────────────────────────────────────────
+    # ── msg_push check ────────────────────────────────────────────────────────
 
-    async def _ensure_msg_push(self) -> None:
-        """Enable msg_push_enabled for each detection type we handle."""
-        for getter, setter in _MSG_PUSH_METHODS:
+    async def _check_msg_push(self) -> None:
+        """Log the enabled detection types whose events the camera will not push.
+
+        Read-only. Up to 0.7.5b9 this turned msg_push_enabled on, which reached the
+        camera only from b5 (earlier setters rejected the payload) and coincided with
+        30-minute NVR recordings and Active Defense switching itself on (#95).
+        """
+        silent = []
+        for getter in _MSG_PUSH_GETTERS:
             try:
                 result = await self._openapi.call(getter, raise_on_error=False)
-                if self._openapi.err_code(result) != 0:
-                    continue  # method not supported on this model (-10030 etc.)
-                # Response may nest under a key; search top level first, then one level deep.
-                push_val = result.get("msg_push_enabled")
-                if push_val is None:
-                    for val in result.values():
-                        if isinstance(val, dict):
-                            push_val = val.get("msg_push_enabled")
-                            if push_val is not None:
-                                break
-                if push_val != "on":
-                    # Echo the whole object back with one value changed, not
-                    # {"msg_push_enabled": "on"} alone. These are the same setters that
-                    # reject single-field payloads with errCode -10009 (#92), and this
-                    # call failing is invisible — it sits in the broad except below at
-                    # debug level, so the only symptom is that the OpenAPI detection
-                    # sensors never fire and nothing says why.
-                    payload = {
-                        k: v for k, v in _unwrap_switch(result).items()
-                        if k not in _STATUS_KEYS and not isinstance(v, (dict, list))
-                    }
-                    payload["msg_push_enabled"] = "on"
-                    await self._openapi.call(setter, payload)
-                    _LOGGER.debug(
-                        "OpenAPI: enabled msg_push for %s on %s", getter, self._openapi.host
-                    )
             except Exception as exc:
-                _LOGGER.debug("OpenAPI: could not check/enable msg_push for %s: %s", getter, exc)
+                _LOGGER.debug("OpenAPI: could not read %s: %s", getter, exc)
+                continue
+            if self._openapi.err_code(result) != 0:
+                continue  # method not supported on this model (-10030 etc.)
+            switch = _unwrap_switch(result)
+            if switch.get("enabled") == "on" and switch.get("msg_push_enabled") == "off":
+                silent.append(getter.removeprefix("get").removesuffix("Switch"))
+        if silent:
+            _LOGGER.warning(
+                "%s: %s enabled but notifications off, so Home Assistant will not see "
+                "these events. Turn on notifications for them in the VIGI app or the "
+                "camera's web page.",
+                self._openapi.host, ", ".join(silent),
+            )
 
     # ── Streaming connection ──────────────────────────────────────────────────
 
