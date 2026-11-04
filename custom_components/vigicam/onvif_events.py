@@ -357,7 +357,12 @@ class VIGIOnvifEvents:
 
                 try:
                     events = await self._pull()
-                except (TimeoutError, asyncio.TimeoutError, aiohttp.ServerDisconnectedError) as exc:
+                except (
+                    TimeoutError,
+                    asyncio.TimeoutError,
+                    aiohttp.ServerDisconnectedError,
+                    aiohttp.ClientPayloadError,  # the same hang-up, mid-reply
+                ) as exc:
                     # A PullMessages timeout is not a subscription failure. The camera
                     # holds the request open for PULL_TIMEOUT_S and should answer with an
                     # empty result; if it is merely slow — busy serving another ONVIF

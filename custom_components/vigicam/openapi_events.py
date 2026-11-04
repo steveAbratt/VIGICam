@@ -222,5 +222,5 @@ class VIGIOpenAPIEventListener:
         async_dispatcher_send(
             self._hass,
             SIGNAL_VIGICAM_EVENT.format(self._entry_id),
-            {"type": mapped, "active": True, "area": area},
+            {"type": mapped, "active": True, "area": area, "source": "openapi"},
         )

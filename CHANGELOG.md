@@ -28,12 +28,16 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ### Changed
 
-- **Last Detection no longer updates on Audio Anomaly.** A sound gives a still of an
-  empty scene, and a camera near a road can report dozens a day, each one replacing the
-  last real detection on your dashboard. The ONVIF Smart Detection catch-all is ignored
-  for the image too when OpenAPI reports the event by name, because it reports sounds as
-  well. To keep the old behaviour, turn on **Update Last Detection on Audio Anomaly** in
-  the camera's options. The **Audio Anomaly** sensor is unchanged.
+- **Last Detection no longer updates on sounds (cameras with OpenAPI).** To keep the old
+  behaviour, turn on **Update Last Detection on Audio Anomaly** in the camera's options.
+  A sound gives a still of an empty scene, and a camera near a road can report dozens a
+  day, each one replacing the last real detection on your dashboard. The **Smart
+  Detection** catch-all also fires for sounds, so with OpenAPI the image now follows the
+  named event (Vehicle, Loitering…) instead, and only falls back to Smart Detection when
+  OpenAPI reports nothing. The **Audio Anomaly** sensor is unchanged.
+
+  Without OpenAPI the camera reports sounds only inside Smart Detection, where VIGICam
+  can't tell them from vehicles, so on those cameras sounds still update the image.
 - **HACS now installs VIGICam from the release's `vigicam.zip`**, and shows a download count
   for the current version. Every release, including older ones, has the zip, so updating
   and rolling back work as before.

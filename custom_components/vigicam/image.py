@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import urllib.parse
 from datetime import datetime, timezone
 
@@ -46,19 +47,8 @@ _POST_EVENT_DELAY_SF = 3.0    # seconds to wait for event image SD card write
 _POST_EVENT_DELAY_RTSP = 2.0  # seconds to wait for subject to enter RTSP frame
 
 
-def _skipped_types(include_audio: bool, has_openapi_events: bool) -> frozenset[str]:
-    """Event types that must not replace the Last Detection image.
-
-    An audio anomaly gives a still of an empty scene. The ONVIF smart_event catch-all
-    reports the same events OpenAPI reports by name (sounds included, a second or so
-    earlier), so with OpenAPI it adds nothing but a way for a sound to slip through.
-    """
-    skip = set()
-    if not include_audio:
-        skip.add("audio_anomaly")
-        if has_openapi_events:
-            skip.add("smart_event")
-    return frozenset(skip)
+# An ONVIF smart_event arrives ~0.5 s before OpenAPI reports the same event by name.
+_OPENAPI_WAIT_S = 2.0
 
 
 async def async_setup_entry(
@@ -86,7 +76,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._unsub_dispatcher: object = None
         self._attr_extra_state_attributes: dict = {}
         self._has_event_capture: bool = entry_data.get("has_event_capture", False)
-        self._skip_types = _skipped_types(include_audio, entry_data.get("openapi_events") is not None)
+        self._include_audio = include_audio
+        self._last_openapi_event = float("-inf")
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -107,11 +98,32 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
     async def async_will_remove_from_hass(self) -> None:
         if self._unsub_dispatcher:
             self._unsub_dispatcher()
+            self._unsub_dispatcher = None
 
     @callback
     def _handle_event(self, event: dict) -> None:
-        if not event.get("active") or event.get("type") in self._skip_types:
+        if event.get("source") == "openapi":
+            self._last_openapi_event = time.monotonic()
+        if not event.get("active"):
             return
+        if not self._include_audio:
+            if event["type"] == "audio_anomaly":
+                return  # a still of a sound shows an empty scene
+            if event["type"] == "smart_event":
+                # The ONVIF catch-all also fires for sounds. Let OpenAPI's named event
+                # decide; fall back to this one if OpenAPI says nothing (no OpenAPI, the
+                # type's Push Notifications off, or the stream down).
+                self.hass.async_create_task(self._smart_event_fallback(event))
+                return
+        self._start_grab(event)
+
+    async def _smart_event_fallback(self, event: dict) -> None:
+        seen = time.monotonic()
+        await asyncio.sleep(_OPENAPI_WAIT_S)
+        if self._last_openapi_event < seen - _OPENAPI_WAIT_S and self._unsub_dispatcher:
+            self._start_grab(event)
+
+    def _start_grab(self, event: dict) -> None:
         if self._grabbing:
             return
         self._grabbing = True
