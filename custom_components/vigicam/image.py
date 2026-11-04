@@ -28,7 +28,13 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS, DOMAIN
+from .const import (
+    CONF_DETECTION_IMAGE_AUDIO,
+    CONF_FEATURE_DETECTION_EVENTS,
+    DEFAULT_DETECTION_IMAGE_AUDIO,
+    DEFAULT_FEATURE_DETECTION_EVENTS,
+    DOMAIN,
+)
 from . import communicate_or_kill
 from .entity import VIGIEntity
 from .onvif_events import SIGNAL_VIGICAM_EVENT
@@ -40,13 +46,29 @@ _POST_EVENT_DELAY_SF = 3.0    # seconds to wait for event image SD card write
 _POST_EVENT_DELAY_RTSP = 2.0  # seconds to wait for subject to enter RTSP frame
 
 
+def _skipped_types(include_audio: bool, has_openapi_events: bool) -> frozenset[str]:
+    """Event types that must not replace the Last Detection image.
+
+    An audio anomaly gives a still of an empty scene. The ONVIF smart_event catch-all
+    reports the same events OpenAPI reports by name (sounds included, a second or so
+    earlier), so with OpenAPI it adds nothing but a way for a sound to slip through.
+    """
+    skip = set()
+    if not include_audio:
+        skip.add("audio_anomaly")
+        if has_openapi_events:
+            skip.add("smart_event")
+    return frozenset(skip)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     if not entry.options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS):
         return
     data = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([VIGILastDetectionImage(data["coordinator"], data)])
+    include_audio = entry.options.get(CONF_DETECTION_IMAGE_AUDIO, DEFAULT_DETECTION_IMAGE_AUDIO)
+    async_add_entities([VIGILastDetectionImage(data["coordinator"], data, include_audio)])
 
 
 class VIGILastDetectionImage(VIGIEntity, ImageEntity):
@@ -55,7 +77,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
     _attr_name = "Last Detection"
     _attr_icon = "mdi:image-search"
 
-    def __init__(self, coordinator, entry_data: dict) -> None:
+    def __init__(self, coordinator, entry_data: dict, include_audio: bool) -> None:
         VIGIEntity.__init__(self, coordinator, entry_data)
         ImageEntity.__init__(self, coordinator.hass)
         self._cached_image: bytes | None = None
@@ -64,6 +86,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._unsub_dispatcher: object = None
         self._attr_extra_state_attributes: dict = {}
         self._has_event_capture: bool = entry_data.get("has_event_capture", False)
+        self._skip_types = _skipped_types(include_audio, entry_data.get("openapi_events") is not None)
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -87,7 +110,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
 
     @callback
     def _handle_event(self, event: dict) -> None:
-        if not event.get("active"):
+        if not event.get("active") or event.get("type") in self._skip_types:
             return
         if self._grabbing:
             return

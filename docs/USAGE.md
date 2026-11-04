@@ -1072,10 +1072,19 @@ automation:
 ### Last Detection
 
 Shows a snapshot from the most recent detection event. The entity appears on all cameras
-and updates automatically each time any detection fires — intrusion, line crossing,
-motion, person detected, or smart detection. It uses the same real-time ONVIF
-subscription as the binary sensors, so it refreshes within seconds of a detection,
+and updates automatically each time a detection fires — intrusion, line crossing,
+motion, person, vehicle and the other smart detections. It uses the same real-time
+event connections as the binary sensors, so it refreshes within seconds of a detection,
 not on the 30-second poll cycle.
+
+**Audio Anomaly does not update it by default.** A sound gives a still of an empty scene,
+and a camera near a road can report dozens a day, each one replacing the last real
+detection. To include sounds, turn on **Update Last Detection on Audio Anomaly** in the
+camera's options (**Settings → Devices & Services → VIGI & InSight Cameras → Configure**).
+The **Audio Anomaly** sensor fires either way.
+
+The image's `detection_type` attribute says what caused it (`person`, `vehicle`,
+`audio_anomaly`…), so a dashboard can show or hide it by type with a conditional card.
 
 For users who do not want the complexity or extra hardware of a dedicated NVR like
 Frigate, the Last Detection entity provides a lightweight alternative that runs
