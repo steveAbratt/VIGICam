@@ -1842,26 +1842,29 @@ entities:
 
 ## Troubleshooting
 
-### "Cannot connect to camera" on an older firmware, or no detection events at all
+### "Cannot connect to camera" on older firmware, or no detection events at all
 
-Two things older firmware (seen on a VIGI C340, 3.0.0 Build 231229) does differently, and the
-integration now handles both on its own:
+Older firmware (seen on a VIGI C340, 3.0.0 Build 231229) does two things differently. From
+**v0.7.5b12** VIGICam handles both on its own:
 
-- **TLS.** The camera offers only static-RSA cipher suites, which OpenSSL 3's default list
-  leaves out, so the strict handshake fails ("sslv3 alert handshake failure") and adding the
-  camera used to end in *Cannot connect to camera* even with the right address and password.
-  If the strict handshake fails, the integration retries with `AES256-GCM-SHA384` and
-  `AES128-GCM-SHA256` added to the cipher list (security level unchanged) and remembers that
-  for the camera. Certificate verification stays off, as for every camera.
-- **ONVIF port.** ONVIF is on port 80 on most firmware and on port 2020 on older firmware,
-  where port 80 closes the connection. The log showed
-  `ONVIF subscribe failed ... Server disconnected` and the detection sensors never changed.
-  The integration now probes 80, then 2020, at setup.
+- **Adding the camera failed with *Cannot connect to camera*** even though the address and
+  password were right. The camera uses an older form of HTTPS security. VIGICam now notices
+  and connects anyway. Update, restart, and add the camera as normal.
+- **The camera was added but its detection sensors never changed**, and the log showed
+  `ONVIF subscribe failed ... Server disconnected`. The camera answers ONVIF on port 2020,
+  not 80. VIGICam now checks when the camera is set up, and the log says
+  `serves ONVIF on port 2020` when it finds it.
 
-To check by hand, from any computer: `openssl s_client -connect <camera-ip>:443 -tls1_2`
-connects (with a certificate warning) while a plain Python `ssl` client fails, and
-`curl -m 3 -d '' http://<camera-ip>:80/onvif/service` is closed without a reply while the same
-request on port 2020 answers.
+If detection events still don't arrive, the camera may not have been ready when Home
+Assistant started. Reload it (**Settings → Devices & Services → VIGI & InSight Cameras → ⋮ →
+Reload**) and the check runs again.
+
+If a camera you added earlier starts showing *Cannot connect* after a firmware change, **add
+it again at the same address. Don't delete it first**: VIGICam recognises the camera and
+updates its existing entry, keeping all its entities.
+
+To check from a computer: `curl -m 3 -d '' http://<camera-ip>:80/onvif/service` gets no reply
+on these cameras, while the same command with `:2020` does.
 
 ### A control shows the right state but won't change it
 

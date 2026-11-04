@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import aiohttp
+
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
@@ -31,6 +33,7 @@ from .const import (
     CONF_FEATURE_DETECTION_EVENTS,
     CONF_FEATURE_IMAGE_CONTROLS,
     CONF_LEGACY_TLS,
+    CONF_ONVIF_PORT,
     CONF_VERIFY_SSL,
     DEFAULT_FEATURE_CAMERA_STREAM,
     DEFAULT_FEATURE_DETECTION_EVENTS,
@@ -47,7 +50,7 @@ from .const import (
 from .frigate import detect_frigate_camera
 from .coordinator import VIGICoordinator
 from .onvif_events import VIGIOnvifEvents
-from .onvif_port import discover_onvif_port
+from .onvif_port import DEFAULT_ONVIF_PORT, discover_onvif_port
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
 from .openapi import VIGIOpenAPI, try_openapi
 from .openapi_events import VIGIOpenAPIEventListener
@@ -777,6 +780,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session = async_create_clientsession(hass, verify_ssl=False)
 
     camera_api = VIGICamera(ip, username, password, session=session, legacy_tls=legacy_tls)
+    # A legacy camera opens its own session. HA runs on_unload callbacks when setup raises
+    # ConfigEntryNotReady/AuthFailed/Error (any exception from 2026.1), so a camera offline
+    # at boot doesn't leak one per setup retry.
+    entry.async_on_unload(camera_api.close)
     try:
         await camera_api.authenticate()
         device_info = await camera_api.get_device_info()
@@ -786,11 +793,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryAuthFailed(str(exc)) from exc
     except VIGIError as exc:
         raise ConfigEntryNotReady(str(exc)) from exc
+    except aiohttp.ClientError as exc:
+        # A TLS error reaches here unwrapped. Not ready, so HA retries and runs on_unload,
+        # rather than a bare SETUP_ERROR with no retry on HA before 2026.1.
+        raise ConfigEntryNotReady(f"{type(exc).__name__}: {exc}") from exc
 
     # Presets alone are not a PTZ test: a PTZ camera with none saved would look fixed.
     has_ptz = bool(presets) or await camera_api.check_ptz_support()
-    # ONVIF is on port 80 on most firmware, on 2020 on older ones.
-    onvif_port = await discover_onvif_port(ip)
+    # ONVIF is on port 80 on most firmware, on 2020 on older ones. Only events and PTZ use it.
+    want_detection = _feature(entry, CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
+    known_port = entry.data.get(CONF_ONVIF_PORT, DEFAULT_ONVIF_PORT)
+    onvif_port = (
+        await discover_onvif_port(ip, fallback=known_port)
+        if want_detection or has_ptz
+        else known_port
+    )
+    if onvif_port != known_port:
+        # Before the update listener exists, so this doesn't trigger a reload.
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_ONVIF_PORT: onvif_port}
+        )
+    if onvif_port != DEFAULT_ONVIF_PORT:
+        _LOGGER.info("VIGICam: %s serves ONVIF on port %s", ip, onvif_port)
     onvif_ptz = VIGIOnvifPtz(ip, username, password, onvif_port) if has_ptz else None
 
     # Probe OpenAPI before the first coordinator refresh so smart-detection
@@ -854,7 +878,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _raise_frigate_repair(hass, entry, camera_name)
 
     # Only start event listeners when detection events are enabled.
-    want_detection = _feature(entry, CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
     onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id, onvif_port)
     openapi_events = (
         VIGIOpenAPIEventListener(hass, openapi, entry.entry_id, camera_name)

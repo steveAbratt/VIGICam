@@ -62,9 +62,11 @@ def canonical_mac(value: str | None) -> str | None:
     return m.group(0).replace("-", "").replace(":", "") if m else None
 
 
-# Static-RSA key exchange suites. Older firmware offers only these; OpenSSL 3's default list
-# leaves them out, so against such a camera the strict handshake ends in "sslv3 alert
-# handshake failure" and the camera cannot be added at all.
+# Older firmware offers only static-RSA key exchange suites, which Python's default cipher
+# list leaves out, so against such a camera the strict handshake ends in "sslv3 alert
+# handshake failure" and the camera cannot be added at all. This swaps Python's list for
+# OpenSSL's DEFAULT one (wider: it also allows CBC and SHA-1 suites) and names the two GCM
+# suites the camera uses. Verification is off for these cameras either way.
 _LEGACY_TLS_CIPHERS = "DEFAULT:AES256-GCM-SHA384:AES128-GCM-SHA256:@SECLEVEL=2"
 
 
@@ -87,6 +89,15 @@ def make_ssl_context(legacy_tls: bool = False) -> ssl.SSLContext:
     return ctx
 
 
+# OpenSSL reasons for "no cipher suite in common". Anything else (a reset or EOF while a
+# camera is busy or rebooting) must not mark a normal camera as legacy for good.
+_NO_SHARED_CIPHER = frozenset({
+    "SSLV3_ALERT_HANDSHAKE_FAILURE",
+    "NO_SHARED_CIPHER",
+    "NO_CIPHERS_AVAILABLE",
+})
+
+
 def is_tls_handshake_error(exc: BaseException) -> bool:
     """True for a TLS failure that a certificate-verification switch cannot fix.
 
@@ -94,9 +105,12 @@ def is_tls_handshake_error(exc: BaseException) -> bool:
     off. What remains, a failed handshake itself (no cipher suite in common), is what the
     legacy TLS retry is for.
     """
-    return isinstance(exc, aiohttp.ClientSSLError) and not isinstance(
+    if not isinstance(exc, aiohttp.ClientSSLError) or isinstance(
         exc, aiohttp.ClientConnectorCertificateError
-    )
+    ):
+        return False
+    reason = getattr(getattr(exc, "os_error", None), "reason", None)
+    return reason in _NO_SHARED_CIPHER
 
 
 class VIGIError(Exception):

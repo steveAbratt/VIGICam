@@ -122,7 +122,22 @@ def test_handshake_failure_is_recognised():
         host = "h"
         port = 443
 
-    assert is_tls_handshake_error(aiohttp.ClientConnectorSSLError(_Key(), ssl.SSLError(1, "handshake failure")))
+    alert = ssl.SSLError(1, "handshake failure")
+    alert.reason = "SSLV3_ALERT_HANDSHAKE_FAILURE"
+    assert is_tls_handshake_error(aiohttp.ClientConnectorSSLError(_Key(), alert))
+
+
+def test_other_tls_failures_do_not_mark_a_camera_legacy():
+    # A camera that drops the connection mid-handshake while busy or rebooting is not a
+    # legacy camera: storing legacy_tls for it would stick until the next reauth.
+    class _Key:
+        ssl = None
+        host = "h"
+        port = 443
+
+    eof = ssl.SSLError(1, "EOF")
+    eof.reason = "UNEXPECTED_EOF_WHILE_READING"
+    assert not is_tls_handshake_error(aiohttp.ClientConnectorSSLError(_Key(), eof))
 
 
 def test_legacy_camera_ignores_the_shared_ha_session():
