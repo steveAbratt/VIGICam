@@ -34,31 +34,40 @@ def onvif_service_url(ip: str, port: int) -> str:
 
 async def discover_onvif_port(
     ip: str,
+    fallback: int = DEFAULT_ONVIF_PORT,
     ports: tuple[int, ...] = ONVIF_PORTS,
     timeout: float = 3.0,
 ) -> int:
-    """The first port in *ports* where the camera answers an ONVIF request.
+    """The port the camera serves ONVIF on: 80, or 2020 on older firmware.
 
-    Falls back to the default port when none does (camera unreachable right now), so a
-    camera that is off at startup keeps the behaviour it always had and the subscribe
-    loop's own retries sort it out.
+    Port 80 wins if it answers anything at all, so a camera that has always worked on 80
+    never moves because of a slow reply or a SOAP fault. 2020 is used only when 80 drops or
+    refuses the connection and 2020 really answers ONVIF. If neither can be reached right
+    now (camera still booting), *fallback* is used: the port found last time.
     """
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(force_close=True),
         timeout=aiohttp.ClientTimeout(total=timeout),
     ) as session:
-        for port in ports:
-            try:
-                async with session.post(
-                    onvif_service_url(ip, port),
-                    data=_PROBE_BODY.encode(),
-                    headers={"Content-Type": "application/soap+xml; charset=utf-8"},
-                ) as resp:
-                    body = await resp.text()
-            except (aiohttp.ClientError, TimeoutError, OSError) as exc:
-                _LOGGER.debug("ONVIF probe %s:%s failed: %s", ip, port, exc)
-                continue
-            if "GetSystemDateAndTimeResponse" in body:
+        if await _answers(session, ip, ports[0]) is not None:
+            return ports[0]
+        for port in ports[1:]:
+            body = await _answers(session, ip, port)
+            if body is not None and b"GetSystemDateAndTimeResponse" in body:
                 return port
-    _LOGGER.debug("No ONVIF port answered on %s, using %s", ip, DEFAULT_ONVIF_PORT)
-    return DEFAULT_ONVIF_PORT
+    _LOGGER.debug("No ONVIF port answered on %s, using %s", ip, fallback)
+    return fallback
+
+
+async def _answers(session: aiohttp.ClientSession, ip: str, port: int) -> bytes | None:
+    """The body of the camera's reply on *port*, or None if it gave no HTTP reply."""
+    try:
+        async with session.post(
+            onvif_service_url(ip, port),
+            data=_PROBE_BODY.encode(),
+            headers={"Content-Type": "application/soap+xml; charset=utf-8"},
+        ) as resp:
+            return await resp.read()
+    except (aiohttp.ClientError, TimeoutError, OSError) as exc:
+        _LOGGER.debug("ONVIF probe %s:%s failed: %s", ip, port, exc)
+        return None

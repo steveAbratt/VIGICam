@@ -12,18 +12,25 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b12] - 2026-11-04
+
 ### Fixed
 
-- **Older firmware that offers only static-RSA TLS suites** (seen on a VIGI C340, 3.0.0 Build
-  231229) could not be added: the strict handshake failed with *sslv3 alert handshake failure*
-  and the form said *Cannot connect to camera*. If the strict handshake fails, the camera is
-  now retried with `AES256-GCM-SHA384` / `AES128-GCM-SHA256` added to the cipher list (security
-  level unchanged, certificate verification off as before). The result is stored as
-  `legacy_tls` in the config entry and used for the camera's API session and event-image
-  download. Existing entries are unaffected.
-- **ONVIF on port 2020.** The same firmware serves ONVIF on port 2020 and closes port 80, so
-  every subscribe failed with *Server disconnected* and no detection event ever arrived. The
-  port is now probed (80, then 2020) at setup and used for event subscriptions and PTZ.
+- **Older VIGI firmware can now be added** (seen on a VIGI C340 with firmware 3.0.0 Build
+  231229). These cameras use an older form of HTTPS security that Home Assistant doesn't
+  accept by default, so adding one ended in *Cannot connect to camera* even with the right
+  address and password. VIGICam now notices this and connects anyway. **To use it:** update,
+  restart, then add the camera as normal. Cameras you've already added are not changed.
+  Thanks @denisvmiheev (#110).
+- **Detection events on cameras that answer ONVIF on port 2020.** The same firmware answers
+  ONVIF on port 2020, not 80, so detection sensors never changed and the log showed
+  `ONVIF subscribe failed ... Server disconnected`. VIGICam now checks when a camera is set
+  up: port 80 is kept whenever it answers at all, and 2020 is used only when 80 refuses the
+  connection. Nothing to do after updating. If a camera like this never had working
+  detection events, any automation on its sensors will start firing. Thanks @denisvmiheev
+  (#110).
 
 ---
 

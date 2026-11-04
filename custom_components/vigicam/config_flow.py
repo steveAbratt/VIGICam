@@ -52,6 +52,17 @@ STEP_SCHEMA = vol.Schema(
 )
 
 
+def _legacy_tls_data(current: dict, legacy_tls: bool) -> dict:
+    """The legacy_tls key to merge into entry data: absent unless it is or was set.
+
+    Writing False into every existing entry would make re-adding an unchanged camera
+    report "host updated" and reload it, where it used to say "already configured".
+    """
+    if legacy_tls or CONF_LEGACY_TLS in current:
+        return {CONF_LEGACY_TLS: legacy_tls}
+    return {}
+
+
 async def _test_credentials(
     hass, ip: str, username: str, password: str
 ) -> tuple[dict, bool, bool]:
@@ -320,7 +331,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_USERNAME: username,
                             CONF_PASSWORD: password,
                             CONF_VERIFY_SSL: verify_ssl,
-                            CONF_LEGACY_TLS: legacy_tls,
+                            **_legacy_tls_data(existing.data, legacy_tls),
                         },
                     )
                     # LOADED: the update listener reloads. Otherwise nothing will.
@@ -418,7 +429,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_USERNAME: username,
                         CONF_PASSWORD: password,
                         CONF_VERIFY_SSL: verify_ssl,
-                        CONF_LEGACY_TLS: legacy_tls,
+                        **_legacy_tls_data(entry.data, legacy_tls),
                     },
                 )
                 # The update listener reloads only a LOADED entry whose data changed. Not
@@ -452,7 +463,7 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_USERNAME: self._username,
                     CONF_PASSWORD: self._password,
                     CONF_VERIFY_SSL: self._verify_ssl,
-                    CONF_LEGACY_TLS: self._legacy_tls,
+                    **_legacy_tls_data({}, self._legacy_tls),
                 },
             )
 
