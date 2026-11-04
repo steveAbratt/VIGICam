@@ -39,6 +39,7 @@ from .const import (
     DOMAIN,
     IMAGE_CONTROL_SUFFIXES,
     REPAIRS_FRIGATE_GONE,
+    REPAIRS_PUSH_OFF,
     REPAIRS_SD_CARD_MISSING,
     REPAIRS_WRONG_CAMERA,
 )
@@ -950,5 +951,5 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Clear this camera's repair notices when it is deleted, so none are left behind."""
     from homeassistant.helpers import issue_registry as ir
 
-    for issue in (REPAIRS_WRONG_CAMERA, REPAIRS_SD_CARD_MISSING, REPAIRS_FRIGATE_GONE):
+    for issue in (REPAIRS_WRONG_CAMERA, REPAIRS_SD_CARD_MISSING, REPAIRS_FRIGATE_GONE, REPAIRS_PUSH_OFF):
         ir.async_delete_issue(hass, DOMAIN, f"{issue}_{entry.entry_id}")

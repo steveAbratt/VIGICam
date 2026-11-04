@@ -138,10 +138,10 @@ The integration probes port 20443 at startup and activates the additional sensor
 automatically. No further configuration in HA is needed.
 
 The seven OpenAPI detection sensors (Vehicle, Audio Anomaly, Loitering, Scene Change, Object
-Left or Taken, Area Entry, Area Exit) also need that detection type switched on **with its
-notifications on** in the VIGI app or the camera's web page. VIGICam doesn't change these
-settings. When the integration starts, the log lists any type that is on but has
-notifications off.
+Left or Taken, Area Entry, Area Exit) also need that detection type switched on with
+**Processing Mode → Push Notifications** ticked, in the VIGI app or the camera's web page.
+VIGICam doesn't change these settings. If a type is on with Push Notifications off, a
+Repairs notice names it.
 
 > **Firmware note:** OpenAPI requires firmware 2.1.x or later. If the Settings → Network
 > menu does not have an OpenAPI section, update the camera firmware via the VIGI app or
@@ -804,7 +804,7 @@ groups all smart event types, this sensor fires only for vehicle events and clea
 independently.
 
 **Requirements:** OpenAPI enabled and vehicle detection active on the camera (Detection
-Vehicle switch on), with notifications on for vehicle detection.
+Vehicle switch on), with Processing Mode → Push Notifications ticked.
 
 #### Example: alert on vehicle detection at night
 
@@ -1855,8 +1855,9 @@ two read as opposites while both being correct. See [Microphone Mute](#microphon
 ### Vehicle, Loitering or another OpenAPI sensor never turns on
 
 Check three things on the camera: OpenAPI is enabled, that detection type is on, and its
-notifications are on (VIGI app or the camera's web page). VIGICam logs a line at startup
-naming any detection type that is on but has notifications off.
+**Processing Mode → Push Notifications** box is ticked (VIGI app or the camera's web page).
+If a type is on with Push Notifications off, VIGICam raises a Repairs notice naming it
+(Settings → System → Repairs).
 
 ### Detection events arrive sometimes and not others
 

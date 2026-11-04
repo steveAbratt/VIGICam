@@ -74,6 +74,10 @@
     "wrong_camera_at_address": {
       "title": "{title} has moved: a different camera is at {host}",
       "description": "**{title}** is set up at `{host}`, but a different camera is answering there now — most likely your router gave the cameras new addresses, for example after a power cut. To avoid acting on the wrong camera, VIGICam has stopped controlling **{title}** until this is fixed.\n\n1. Find **{title}**'s current address: look for MAC address `{mac}` in your router's client list, or check the VIGI app.\n2. Go to **Settings → Devices & Services → Add Integration → VIGI & InSight Cameras** and enter that address with the camera's username and password. Do **not** delete the existing camera first — Home Assistant recognises it, moves it to the new address and keeps its entities and history.\n3. If more than one camera shows this notice, repeat for each.\n\nThis notice clears itself once the right camera answers. Giving each camera a fixed address (a DHCP reservation in your router) stops it happening again.\n\nIf you **replaced** {title} with a new camera at the same address, delete {title} and add the new camera instead. To get the old entity IDs back, open the new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_main_stream`, use \"Front Door\"), then accept Home Assistant's offer to rename its entity IDs."
+    },
+    "push_notifications_off": {
+      "title": "{camera_name}: some detections won't reach Home Assistant",
+      "description": "On **{camera_name}**, these detection types are on but have **Push Notifications** off, so the camera doesn't send them and their Home Assistant sensors never turn on: **{types}**.\n\nIf you want those sensors, turn on Push Notifications under the detection type's **Processing Mode**, in the VIGI app or the camera's web page. This may also send VIGI app notifications to your phone.\n\nIf you don't need them, ignore this notice. VIGICam never changes these settings itself. The notice clears on the next restart after they're all on."
     }
   },
   "exceptions": {

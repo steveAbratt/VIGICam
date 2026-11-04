@@ -10,9 +10,9 @@ subscribeMsg handles: Vehicle, AudioAnomaly, Loitering, SceneChange,
 ObjectLeftTaken, AreaEntry, AreaExit — types that ONVIF bundles together as
 the SmartDetection catch-all.
 
-Each detection type has a msg_push_enabled setting that controls whether the camera
-pushes it. The integration reads it on first connection and logs the enabled types
-that have it off. It never writes it: that is the user's camera configuration, and up
+Each detection type has a msg_push_enabled setting (Processing Mode → Push Notifications
+in the VIGI app) that controls whether the camera pushes it. The integration reads it on
+first connection and raises a Repairs notice for enabled types that have it off. It never writes it: that is the user's camera configuration, and up
 to 0.7.5b9 the integration switched it on for all seven types, including ones the
 user had turned off (#95).
 """
@@ -26,10 +26,12 @@ from typing import TYPE_CHECKING
 import aiohttp
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
+from .const import DOMAIN, REPAIRS_PUSH_OFF
 from .onvif_events import SIGNAL_VIGICAM_EVENT
-from .openapi import VIGIOpenAPIAuthError, VIGIOpenAPIError, push_off
+from .openapi import VIGIOpenAPIAuthError, VIGIOpenAPIError, read_push_off
 
 if TYPE_CHECKING:
     from .openapi import VIGIOpenAPI
@@ -57,17 +59,8 @@ _EVENT_TYPE_MAP: dict[str, str | None] = {
     "InvasionDetection":     None,
 }
 
-# Detection-switch getters for the types this listener handles, with the names the
-# entities use, read on first connection to report any whose msg_push_enabled is off.
-_MSG_PUSH_GETTERS: tuple[tuple[str, str], ...] = (
-    ("getVehicleDetectionSwitch",      "Vehicle"),
-    ("getAudioAnomalyDetectionSwitch", "Audio Anomaly"),
-    ("getLoiterDetectionSwitch",       "Loitering"),
-    ("getSceneChangeDetectionSwitch",  "Scene Change"),
-    ("getAreaEntryDetectionSwitch",    "Area Entry"),
-    ("getAreaLeaveDetectionSwitch",    "Area Exit"),
-    ("getDropAndTakeDetectionSwitch",  "Object Left or Taken"),
-)
+# Attempts at the push-notification check before giving up on it for this load.
+_MSG_PUSH_ATTEMPTS = 3
 
 
 class VIGIOpenAPIEventListener:
@@ -81,7 +74,8 @@ class VIGIOpenAPIEventListener:
         self._openapi = openapi
         self._entry_id = entry_id
         self._task: asyncio.Task | None = None
-        self._msg_push_checked = False
+        self._msg_push_attempts = 0
+        self._connected = False
 
     async def async_start(self) -> None:
         self._task = self._hass.async_create_background_task(
@@ -103,13 +97,17 @@ class VIGIOpenAPIEventListener:
         backoff = 5
         while True:
             try:
-                if not self._msg_push_checked:
-                    self._msg_push_checked = await self._check_msg_push()
+                if self._msg_push_attempts < _MSG_PUSH_ATTEMPTS:
+                    await self._check_msg_push()
                 await self._connect_and_stream()
-                backoff = 5
             except asyncio.CancelledError:
                 return
             except Exception as exc:
+                if self._connected:
+                    # The stream only ends by raising, so a drop after a healthy connection
+                    # starts the backoff again rather than carrying it from earlier failures.
+                    self._connected = False
+                    backoff = 5
                 _LOGGER.warning(
                     "OpenAPI event stream dropped for %s: %s — reconnecting in %ds",
                     self._openapi.host, exc, backoff,
@@ -119,33 +117,34 @@ class VIGIOpenAPIEventListener:
 
     # ── msg_push check ────────────────────────────────────────────────────────
 
-    async def _check_msg_push(self) -> bool:
-        """Log the enabled detection types the camera won't push. Read-only, never write.
+    async def _check_msg_push(self) -> None:
+        """Raise or clear the Repairs notice for detection types with Push Notifications off.
 
-        Returns False if the camera couldn't be read, so the check runs again on the next
-        connection. An auth failure is raised rather than retried per type: seven failed
-        logins in a row is how an account gets locked.
+        Read-only. A failure here must never stop the event stream connecting, so anything
+        but an auth failure counts as an attempt and is otherwise ignored.
         """
-        silent = []
-        for getter, label in _MSG_PUSH_GETTERS:
-            try:
-                result = await self._openapi.call(getter, raise_on_error=False)
-            except VIGIOpenAPIAuthError:
-                raise
-            except (aiohttp.ClientError, TimeoutError, VIGIOpenAPIError) as exc:
-                _LOGGER.debug("OpenAPI: could not read %s on %s: %r", getter, self._openapi.host, exc)
-                return False
-            if self._openapi.err_code(result) != 0:
-                continue  # method not supported on this model (-10030 etc.)
-            if push_off(result):
-                silent.append(label)
-        if silent:
-            _LOGGER.info(
-                "%s: %s detection is on but its notifications are off, so Home Assistant "
-                "will not receive those events",
-                self._camera_name, ", ".join(silent),
+        self._msg_push_attempts += 1
+        try:
+            off = await read_push_off(self._openapi)
+        except VIGIOpenAPIAuthError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("OpenAPI: push notification check failed on %s: %r", self._openapi.host, exc)
+            return
+        if off is None:
+            return
+        self._msg_push_attempts = _MSG_PUSH_ATTEMPTS
+        issue_id = f"{REPAIRS_PUSH_OFF}_{self._entry_id}"
+        if off:
+            ir.async_create_issue(
+                self._hass, DOMAIN, issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=REPAIRS_PUSH_OFF,
+                translation_placeholders={"camera_name": self._camera_name, "types": ", ".join(off)},
             )
-        return True
+        else:
+            ir.async_delete_issue(self._hass, DOMAIN, issue_id)
 
     # ── Streaming connection ──────────────────────────────────────────────────
 
@@ -162,6 +161,7 @@ class VIGIOpenAPIEventListener:
                 if resp.status != 200:
                     raise VIGIOpenAPIError(f"subscribeMsg returned HTTP {resp.status}")
                 _LOGGER.debug("OpenAPI event stream connected for %s", self._openapi.host)
+                self._connected = True
                 await self._read_stream(resp)
 
     async def _read_stream(self, resp: aiohttp.ClientResponse) -> None:
