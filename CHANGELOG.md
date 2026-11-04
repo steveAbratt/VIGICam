@@ -12,8 +12,32 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b11] - 2026-11-04
+
+### Fixed
+
+- **Detection events were missed for about 30 seconds of every two minutes on some
+  cameras.** Some firmware hangs up on the held-open ONVIF poll every couple of minutes.
+  VIGICam treated that as a dead subscription: it released it, waited 15 seconds and
+  subscribed again, and nothing was listening in between. A person walking up the drive
+  in that window was never reported. It now polls again straight away on the same
+  subscription, as it already did for a slow camera, and only rebuilds after three
+  failures in a row. The **ONVIF Events** sensor stays on instead of dropping out.
+
 ### Changed
 
+- **Last Detection no longer updates on sounds (cameras with OpenAPI).** To keep the old
+  behaviour, turn on **Update Last Detection on Audio Anomaly** in the camera's options.
+  A sound gives a still of an empty scene, and a camera near a road can report dozens a
+  day, each one replacing the last real detection on your dashboard. The **Smart
+  Detection** catch-all also fires for sounds, so with OpenAPI the image now follows the
+  named event (Vehicle, Loitering…) instead, and only falls back to Smart Detection when
+  OpenAPI reports nothing. The **Audio Anomaly** sensor is unchanged.
+
+  Without OpenAPI the camera reports sounds only inside Smart Detection, where VIGICam
+  can't tell them from vehicles, so on those cameras sounds still update the image.
 - **HACS now installs VIGICam from the release's `vigicam.zip`**, and shows a download count
   for the current version. Every release, including older ones, has the zip, so updating
   and rolling back work as before.

@@ -357,13 +357,24 @@ class VIGIOnvifEvents:
 
                 try:
                     events = await self._pull()
-                except (TimeoutError, asyncio.TimeoutError):
+                except (
+                    TimeoutError,
+                    asyncio.TimeoutError,
+                    aiohttp.ServerDisconnectedError,
+                    aiohttp.ClientPayloadError,  # the same hang-up, mid-reply
+                ) as exc:
                     # A PullMessages timeout is not a subscription failure. The camera
                     # holds the request open for PULL_TIMEOUT_S and should answer with an
                     # empty result; if it is merely slow — busy serving another ONVIF
                     # client, say — the subscription is still perfectly good. Tearing it
                     # down here was what orphaned subscriptions and lost every event in
                     # the 15s re-subscribe window (#95). Just pull again.
+                    #
+                    # The same goes for the camera hanging up on a held-open pull, which
+                    # some firmware does every couple of minutes (seen on more than one
+                    # model). Treating that as fatal left the camera deaf for ~30 s of every
+                    # two minutes, long enough to miss a person walking up the drive.
+                    _LOGGER.debug("ONVIF pull unanswered for %s (%s)", self._ip, type(exc).__name__)
                     self._consecutive_timeouts += 1
                     if self._consecutive_timeouts >= _TIMEOUT_TOLERANCE:
                         if not self._timeout_warned:
@@ -371,8 +382,9 @@ class VIGIOnvifEvents:
                             # camera would otherwise log this every ~40s indefinitely,
                             # which is the kind of log noise this release set out to end.
                             _LOGGER.warning(
-                                "ONVIF pull keeps timing out for %s — the camera is slow "
-                                "to answer and events may be delayed. If another ONVIF "
+                                "ONVIF pull keeps failing for %s — the camera is slow "
+                                "to answer or keeps dropping the connection, and events "
+                                "may be delayed. If another ONVIF "
                                 "client (an NVR, Synology Surveillance Station, a second "
                                 "Home Assistant) also subscribes to this camera, it may "
                                 "be at its subscription limit.",

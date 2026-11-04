@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import urllib.parse
 from datetime import datetime, timezone
 
@@ -28,7 +29,13 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS, DOMAIN
+from .const import (
+    CONF_DETECTION_IMAGE_AUDIO,
+    CONF_FEATURE_DETECTION_EVENTS,
+    DEFAULT_DETECTION_IMAGE_AUDIO,
+    DEFAULT_FEATURE_DETECTION_EVENTS,
+    DOMAIN,
+)
 from . import communicate_or_kill
 from .entity import VIGIEntity
 from .onvif_events import SIGNAL_VIGICAM_EVENT
@@ -40,13 +47,18 @@ _POST_EVENT_DELAY_SF = 3.0    # seconds to wait for event image SD card write
 _POST_EVENT_DELAY_RTSP = 2.0  # seconds to wait for subject to enter RTSP frame
 
 
+# An ONVIF smart_event arrives ~0.5 s before OpenAPI reports the same event by name.
+_OPENAPI_WAIT_S = 2.0
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     if not entry.options.get(CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS):
         return
     data = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([VIGILastDetectionImage(data["coordinator"], data)])
+    include_audio = entry.options.get(CONF_DETECTION_IMAGE_AUDIO, DEFAULT_DETECTION_IMAGE_AUDIO)
+    async_add_entities([VIGILastDetectionImage(data["coordinator"], data, include_audio)])
 
 
 class VIGILastDetectionImage(VIGIEntity, ImageEntity):
@@ -55,7 +67,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
     _attr_name = "Last Detection"
     _attr_icon = "mdi:image-search"
 
-    def __init__(self, coordinator, entry_data: dict) -> None:
+    def __init__(self, coordinator, entry_data: dict, include_audio: bool) -> None:
         VIGIEntity.__init__(self, coordinator, entry_data)
         ImageEntity.__init__(self, coordinator.hass)
         self._cached_image: bytes | None = None
@@ -64,6 +76,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._unsub_dispatcher: object = None
         self._attr_extra_state_attributes: dict = {}
         self._has_event_capture: bool = entry_data.get("has_event_capture", False)
+        self._include_audio = include_audio
+        self._last_openapi_event = float("-inf")
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -84,11 +98,32 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
     async def async_will_remove_from_hass(self) -> None:
         if self._unsub_dispatcher:
             self._unsub_dispatcher()
+            self._unsub_dispatcher = None
 
     @callback
     def _handle_event(self, event: dict) -> None:
+        if event.get("source") == "openapi":
+            self._last_openapi_event = time.monotonic()
         if not event.get("active"):
             return
+        if not self._include_audio:
+            if event["type"] == "audio_anomaly":
+                return  # a still of a sound shows an empty scene
+            if event["type"] == "smart_event":
+                # The ONVIF catch-all also fires for sounds. Let OpenAPI's named event
+                # decide; fall back to this one if OpenAPI says nothing (no OpenAPI, the
+                # type's Push Notifications off, or the stream down).
+                self.hass.async_create_task(self._smart_event_fallback(event))
+                return
+        self._start_grab(event)
+
+    async def _smart_event_fallback(self, event: dict) -> None:
+        seen = time.monotonic()
+        await asyncio.sleep(_OPENAPI_WAIT_S)
+        if self._last_openapi_event < seen - _OPENAPI_WAIT_S and self._unsub_dispatcher:
+            self._start_grab(event)
+
+    def _start_grab(self, event: dict) -> None:
         if self._grabbing:
             return
         self._grabbing = True

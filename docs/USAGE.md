@@ -47,6 +47,7 @@ integration reloads and creates or removes entities accordingly.
 | **Camera Stream** | The RTSP live stream entity used in dashboards and `camera.*` services | On |
 | **Use main stream (HD, stream1)** | Which RTSP stream is used for live view — see [Stream quality](#stream-quality) below | Off (sub-stream) |
 | **Detection Events** | All binary sensors — motion, person, intrusion, line crossing, smart detection, vehicle, audio anomaly, and all OpenAPI detection sensors. Also controls the ONVIF event subscription. | On |
+| **Update Last Detection on Audio Anomaly** | Whether a sound replaces the Last Detection image. Needs OpenAPI; only applies when Detection Events is on. See [Last Detection](#last-detection). | Off |
 | **Image Controls** | Camera tuning entities (brightness, contrast, WDR, flip, etc.) in the Configuration category | Off |
 
 > **Frigate users:** If Frigate is already providing the stream and object detection,
@@ -781,7 +782,8 @@ level.
 > **Want individual sensors?** When [OpenAPI is enabled](#openapi--unlocking-additional-sensors),
 > separate binary sensors are created for each type — Vehicle Detected, Audio Anomaly,
 > Loitering, Scene Change, Object Left or Taken, Area Entry, and Area Exit. The Smart
-> Detection sensor continues to fire alongside them.
+> Detection sensor continues to fire alongside them, but Last Detection follows the named
+> event instead, so a sound doesn't replace the picture.
 
 #### Example: trigger the alarm on any smart detection event
 
@@ -1072,10 +1074,26 @@ automation:
 ### Last Detection
 
 Shows a snapshot from the most recent detection event. The entity appears on all cameras
-and updates automatically each time any detection fires — intrusion, line crossing,
-motion, person detected, or smart detection. It uses the same real-time ONVIF
-subscription as the binary sensors, so it refreshes within seconds of a detection,
+and updates automatically each time a detection fires — intrusion, line crossing,
+motion, person, vehicle and the other smart detections. It uses the same real-time
+event connections as the binary sensors, so it refreshes within seconds of a detection,
 not on the 30-second poll cycle.
+
+**On cameras with [OpenAPI](#openapi--unlocking-additional-sensors), sounds don't
+update it by default.** A sound gives a still of an empty scene, and a camera near a
+road can report dozens a day, each one replacing the last real detection. To include
+sounds, turn on **Update Last Detection on Audio Anomaly** in the camera's options
+(**Settings → Devices & Services → VIGI & InSight Cameras → Configure**). The **Audio
+Anomaly** sensor fires either way.
+
+Without OpenAPI the camera reports sounds only inside the **Smart Detection** catch-all,
+together with vehicles, loitering and the rest, and VIGICam can't tell them apart. On
+those cameras Last Detection still updates on sounds, and the option has no effect.
+
+The image's `detection_type` attribute says what caused it (`person`, `vehicle`,
+`smart_event`…). It describes the image as it is, so it can't bring back an earlier
+picture; for an alert that only shows people and vehicles, trigger on those sensors and
+take your own snapshot.
 
 For users who do not want the complexity or extra hardware of a dedicated NVR like
 Frigate, the Last Detection entity provides a lightweight alternative that runs
@@ -1140,7 +1158,7 @@ The `source` attribute on the entity tells you which method was used.
 
 | Attribute | Example | Description |
 |---|---|---|
-| `detection_type` | `motion`, `smart_event` | ONVIF event type that triggered the grab |
+| `detection_type` | `person`, `vehicle`, `motion` | Event that triggered the grab (from ONVIF or OpenAPI) |
 | `source` | `event_capture`, `rtsp_snapshot` | Which capture method was used |
 | `detection_zone` | `Area1`, `Line2` | Detection zone name from the camera, when available |
 | `event_label` | `Person`, `Smart Detection` | AI classification label (event capture only) |
