@@ -1,0 +1,36 @@
+name: Release zip
+
+# Attaches vigicam.zip to each release, for HACS to install from and count downloads once
+# hacs.json sets zip_release. Run it by hand with a tag to add the zip to an older release.
+# Releases created by another workflow's GITHUB_TOKEN do not trigger it.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)build the zip for"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Check manifest version matches the tag
+        run: |
+          version=$(jq -r .version custom_components/vigicam/manifest.json)
+          [ "v$version" = "$TAG" ] || { echo "manifest.json is $version, tag is $TAG"; exit 1; }
+      - name: Build vigicam.zip
+        run: cd custom_components/vigicam && zip -r ../../vigicam.zip .
+      - name: Attach to release
+        run: gh release upload "$TAG" vigicam.zip --clobber --repo "$GITHUB_REPOSITORY"

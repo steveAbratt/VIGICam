@@ -10,9 +10,11 @@ subscribeMsg handles: Vehicle, AudioAnomaly, Loitering, SceneChange,
 ObjectLeftTaken, AreaEntry, AreaExit — types that ONVIF bundles together as
 the SmartDetection catch-all.
 
-Note: msg_push_enabled must be "on" for each detection type (set per camera
-in the detection switch settings). The integration checks and enables these
-on first connection for the types it handles.
+Each detection type has a msg_push_enabled setting (Processing Mode → Push Notifications
+in the VIGI app) that controls whether the camera pushes it. The integration reads it on
+first connection and raises a Repairs notice for enabled types that have it off. It never writes it: that is the user's camera configuration, and up
+to 0.7.5b9 the integration switched it on for all seven types, including ones the
+user had turned off (#95).
 """
 from __future__ import annotations
 
@@ -24,10 +26,12 @@ from typing import TYPE_CHECKING
 import aiohttp
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
+from .const import DOMAIN, REPAIRS_PUSH_OFF
 from .onvif_events import SIGNAL_VIGICAM_EVENT
-from .openapi import VIGIOpenAPIError
+from .openapi import VIGIOpenAPIAuthError, VIGIOpenAPIError, read_push_off
 
 if TYPE_CHECKING:
     from .openapi import VIGIOpenAPI
@@ -55,50 +59,23 @@ _EVENT_TYPE_MAP: dict[str, str | None] = {
     "InvasionDetection":     None,
 }
 
-# Detection types we ensure have msg_push_enabled="on" on first connection.
-# Format: (getter_method, setter_method)
-_MSG_PUSH_METHODS: tuple[tuple[str, str], ...] = (
-    ("getVehicleDetectionSwitch",      "setVehicleDetectionSwitch"),
-    ("getAudioAnomalyDetectionSwitch", "setAudioAnomalyDetectionSwitch"),
-    ("getLoiterDetectionSwitch",       "setLoiterDetectionSwitch"),
-    ("getSceneChangeDetectionSwitch",  "setSceneChangeDetectionSwitch"),
-    ("getAreaEntryDetectionSwitch",    "setAreaEntryDetectionSwitch"),
-    ("getAreaLeaveDetectionSwitch",    "setAreaLeaveDetectionSwitch"),
-    ("getDropAndTakeDetectionSwitch",  "setDropAndTakeDetectionSwitch"),
-)
-
-
-# Status fields that arrive in a reply but are not settings — echoing them back into a
-# setter would be sending the camera its own error code as a parameter.
-_STATUS_KEYS = frozenset({"errCode", "error_code"})
-
-
-def _unwrap_switch(result: dict) -> dict:
-    """Return the settings object from a get*DetectionSwitch reply.
-
-    Some firmware returns the fields at the top level, others nest them one level deep
-    under a key whose name varies by method, which is why this searches rather than
-    indexing a known key.
-    """
-    if "enabled" in result:
-        return result
-    for value in result.values():
-        if isinstance(value, dict) and "enabled" in value:
-            return value
-    return result
+# Attempts at the push-notification check before giving up on it for this load.
+_MSG_PUSH_ATTEMPTS = 3
 
 
 class VIGIOpenAPIEventListener:
     """Persistent subscribeMsg connection for a single VIGI camera."""
 
     def __init__(
-        self, hass: HomeAssistant, openapi: "VIGIOpenAPI", entry_id: str
+        self, hass: HomeAssistant, openapi: "VIGIOpenAPI", entry_id: str, camera_name: str
     ) -> None:
         self._hass = hass
+        self._camera_name = camera_name
         self._openapi = openapi
         self._entry_id = entry_id
         self._task: asyncio.Task | None = None
-        self._msg_push_initialised = False
+        self._msg_push_attempts = 0
+        self._connected = False
 
     async def async_start(self) -> None:
         self._task = self._hass.async_create_background_task(
@@ -120,14 +97,17 @@ class VIGIOpenAPIEventListener:
         backoff = 5
         while True:
             try:
-                if not self._msg_push_initialised:
-                    await self._ensure_msg_push()
-                    self._msg_push_initialised = True
+                if self._msg_push_attempts < _MSG_PUSH_ATTEMPTS:
+                    await self._check_msg_push()
                 await self._connect_and_stream()
-                backoff = 5
             except asyncio.CancelledError:
                 return
             except Exception as exc:
+                if self._connected:
+                    # The stream only ends by raising, so a drop after a healthy connection
+                    # starts the backoff again rather than carrying it from earlier failures.
+                    self._connected = False
+                    backoff = 5
                 _LOGGER.warning(
                     "OpenAPI event stream dropped for %s: %s — reconnecting in %ds",
                     self._openapi.host, exc, backoff,
@@ -135,41 +115,36 @@ class VIGIOpenAPIEventListener:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 120)
 
-    # ── msg_push initialisation ───────────────────────────────────────────────
+    # ── msg_push check ────────────────────────────────────────────────────────
 
-    async def _ensure_msg_push(self) -> None:
-        """Enable msg_push_enabled for each detection type we handle."""
-        for getter, setter in _MSG_PUSH_METHODS:
-            try:
-                result = await self._openapi.call(getter, raise_on_error=False)
-                if self._openapi.err_code(result) != 0:
-                    continue  # method not supported on this model (-10030 etc.)
-                # Response may nest under a key; search top level first, then one level deep.
-                push_val = result.get("msg_push_enabled")
-                if push_val is None:
-                    for val in result.values():
-                        if isinstance(val, dict):
-                            push_val = val.get("msg_push_enabled")
-                            if push_val is not None:
-                                break
-                if push_val != "on":
-                    # Echo the whole object back with one value changed, not
-                    # {"msg_push_enabled": "on"} alone. These are the same setters that
-                    # reject single-field payloads with errCode -10009 (#92), and this
-                    # call failing is invisible — it sits in the broad except below at
-                    # debug level, so the only symptom is that the OpenAPI detection
-                    # sensors never fire and nothing says why.
-                    payload = {
-                        k: v for k, v in _unwrap_switch(result).items()
-                        if k not in _STATUS_KEYS and not isinstance(v, (dict, list))
-                    }
-                    payload["msg_push_enabled"] = "on"
-                    await self._openapi.call(setter, payload)
-                    _LOGGER.debug(
-                        "OpenAPI: enabled msg_push for %s on %s", getter, self._openapi.host
-                    )
-            except Exception as exc:
-                _LOGGER.debug("OpenAPI: could not check/enable msg_push for %s: %s", getter, exc)
+    async def _check_msg_push(self) -> None:
+        """Raise or clear the Repairs notice for detection types with Push Notifications off.
+
+        Read-only. A failure here must never stop the event stream connecting, so anything
+        but an auth failure counts as an attempt and is otherwise ignored.
+        """
+        self._msg_push_attempts += 1
+        try:
+            off = await read_push_off(self._openapi)
+        except VIGIOpenAPIAuthError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("OpenAPI: push notification check failed on %s: %r", self._openapi.host, exc)
+            return
+        if off is None:
+            return
+        self._msg_push_attempts = _MSG_PUSH_ATTEMPTS
+        issue_id = f"{REPAIRS_PUSH_OFF}_{self._entry_id}"
+        if off:
+            ir.async_create_issue(
+                self._hass, DOMAIN, issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=REPAIRS_PUSH_OFF,
+                translation_placeholders={"camera_name": self._camera_name, "types": ", ".join(off)},
+            )
+        else:
+            ir.async_delete_issue(self._hass, DOMAIN, issue_id)
 
     # ── Streaming connection ──────────────────────────────────────────────────
 
@@ -186,6 +161,7 @@ class VIGIOpenAPIEventListener:
                 if resp.status != 200:
                     raise VIGIOpenAPIError(f"subscribeMsg returned HTTP {resp.status}")
                 _LOGGER.debug("OpenAPI event stream connected for %s", self._openapi.host)
+                self._connected = True
                 await self._read_stream(resp)
 
     async def _read_stream(self, resp: aiohttp.ClientResponse) -> None:

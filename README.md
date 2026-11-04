@@ -190,6 +190,12 @@ duration, oldest recording, capacity remaining), the Uptime diagnostic, and the
 `vigicam.ptz_move_to` / `vigicam.ptz_save_preset` / `vigicam.ptz_delete_preset`
 services.
 
+The seven detection sensors (Vehicle to Area Exit) only fire if, on the camera, that
+detection type is on **and** its **Processing Mode → Push Notifications** box is ticked
+(VIGI app or the camera's web page). VIGICam doesn't change either setting for you. If a
+type is on with Push Notifications off, a Repairs notice names it. If the detection itself is off, the sensor
+stays quiet and nothing is logged.
+
 > Requires firmware 2.1.x or later. If the OpenAPI menu is missing, update the camera
 > firmware via the VIGI app or camera web UI.
 

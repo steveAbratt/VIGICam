@@ -39,6 +39,7 @@ from .const import (
     DOMAIN,
     IMAGE_CONTROL_SUFFIXES,
     REPAIRS_FRIGATE_GONE,
+    REPAIRS_PUSH_OFF,
     REPAIRS_SD_CARD_MISSING,
     REPAIRS_WRONG_CAMERA,
 )
@@ -848,7 +849,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     want_detection = _feature(entry, CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
     onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
     openapi_events = (
-        VIGIOpenAPIEventListener(hass, openapi, entry.entry_id)
+        VIGIOpenAPIEventListener(hass, openapi, entry.entry_id, camera_name)
         if (has_openapi and want_detection)
         else None
     )
@@ -950,5 +951,5 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Clear this camera's repair notices when it is deleted, so none are left behind."""
     from homeassistant.helpers import issue_registry as ir
 
-    for issue in (REPAIRS_WRONG_CAMERA, REPAIRS_SD_CARD_MISSING, REPAIRS_FRIGATE_GONE):
+    for issue in (REPAIRS_WRONG_CAMERA, REPAIRS_SD_CARD_MISSING, REPAIRS_FRIGATE_GONE, REPAIRS_PUSH_OFF):
         ir.async_delete_issue(hass, DOMAIN, f"{issue}_{entry.entry_id}")

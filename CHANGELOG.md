@@ -12,6 +12,36 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+---
+
+## [0.7.5b10] - 2026-11-04
+
+### Fixed
+
+- **VIGICam no longer changes your cameras' notification settings.** If you ran v0.7.5b5–b9
+  with OpenAPI enabled, open the VIGI app and check **Processing Mode → Push Notifications**
+  for Vehicle, Audio Anomaly, Loitering, Scene Change, Area Entry, Area Exit and Object Left
+  or Taken on each camera. Those betas could switch it on, even for detection types you had
+  turned off, and updating does not switch it back.
+
+  Turning a type's Push Notifications off also stops its Home Assistant sensor, because the
+  camera no longer sends that event. VIGICam now only reads these settings. If a type is on
+  but its Push Notifications are off, a Repairs notice names it (Settings → System →
+  Repairs), and you can ignore it if that's what you want.
+
+  This came up while investigating #95 (long NVR recordings, Active Defense switching itself
+  on). It is **not known to be the cause**: the reporter's symptoms stopped while VIGICam
+  was disabled, which a setting written once doesn't explain. That investigation continues.
+
+- **OpenAPI detection events could take two minutes to resume after a camera reconnect.**
+  The reconnect delay grew with each drop and never reset, even after hours of healthy
+  streaming. It now starts again from 5 seconds once a connection has succeeded.
+
+### Changed
+
+- **Releases now include a `vigicam.zip`.** Nothing changes for you yet. It lets a later
+  release have HACS install from the zip and show a download count.
+
 ### Documentation
 
 - Tested Cameras: the **C540** is confirmed working (thanks @BruceTheLoon), and the **C350**'s
