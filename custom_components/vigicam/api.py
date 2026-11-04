@@ -62,6 +62,43 @@ def canonical_mac(value: str | None) -> str | None:
     return m.group(0).replace("-", "").replace(":", "") if m else None
 
 
+# Static-RSA key exchange suites. Older firmware offers only these; OpenSSL 3's default list
+# leaves them out, so against such a camera the strict handshake ends in "sslv3 alert
+# handshake failure" and the camera cannot be added at all.
+_LEGACY_TLS_CIPHERS = "DEFAULT:AES256-GCM-SHA384:AES128-GCM-SHA256:@SECLEVEL=2"
+
+
+def make_ssl_context(legacy_tls: bool = False) -> ssl.SSLContext:
+    """TLS context for talking to a camera: no certificate verification.
+
+    Cameras use a TP-Link internal CA, so verification is off. With *legacy_tls* the
+    cipher list also gets the two static-RSA GCM suites (see _LEGACY_TLS_CIPHERS); the
+    security level stays at 2. Seen on a VIGI C340, firmware 3.0.0 Build 231229. Only used
+    for a camera that has already failed the strict handshake.
+
+    SSLContext() is used directly to avoid the blocking load_default_certs() call that
+    ssl.create_default_context() triggers (HA loop guard, Python 3.14+).
+    """
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    if legacy_tls:
+        ctx.set_ciphers(_LEGACY_TLS_CIPHERS)
+    return ctx
+
+
+def is_tls_handshake_error(exc: BaseException) -> bool:
+    """True for a TLS failure that a certificate-verification switch cannot fix.
+
+    A certificate error (untrusted or self-signed) is handled by turning verification
+    off. What remains, a failed handshake itself (no cipher suite in common), is what the
+    legacy TLS retry is for.
+    """
+    return isinstance(exc, aiohttp.ClientSSLError) and not isinstance(
+        exc, aiohttp.ClientConnectorCertificateError
+    )
+
+
 class VIGIError(Exception):
     pass
 
@@ -132,12 +169,16 @@ class VIGICamera:
         username: str,
         password: str,
         session: aiohttp.ClientSession | None = None,
+        legacy_tls: bool = False,
     ) -> None:
         self._ip = ip
         self._username = username
         self._password = password
         self._stok: str | None = None
         self._base_url = f"https://{ip}"
+        # Cameras whose strict TLS handshake fails (see make_ssl_context). HA's shared
+        # session can't be given a custom SSL context, so such a camera always uses its own.
+        self._legacy_tls = legacy_tls
         # When HA provides a session (via async_get/create_clientsession) it
         # manages that session's lifecycle — we must not close it ourselves.
         self._ha_session = session
@@ -147,18 +188,21 @@ class VIGICamera:
     def host(self) -> str:
         return self._ip
 
+    @property
+    def legacy_tls(self) -> bool:
+        return self._legacy_tls
+
     def _get_session(self) -> aiohttp.ClientSession:
-        if self._ha_session is not None and not self._ha_session.closed:
+        if (
+            self._ha_session is not None
+            and not self._ha_session.closed
+            and not self._legacy_tls
+        ):
             return self._ha_session
         # Standalone use (probe scripts, config-flow test) — own no-verify session.
-        # SSLContext() is used directly to avoid the blocking load_default_certs()
-        # call that ssl.create_default_context() triggers (HA loop guard, Python 3.14+).
         if self._own_session is None or self._own_session.closed:
-            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = ssl.CERT_NONE
             self._own_session = aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(ssl=ssl_ctx),
+                connector=aiohttp.TCPConnector(ssl=make_ssl_context(self._legacy_tls)),
                 timeout=aiohttp.ClientTimeout(total=TIMEOUT),
             )
         return self._own_session

@@ -5,6 +5,7 @@ DEFAULT_USERNAME = "admin"
 DEFAULT_SCAN_INTERVAL = 30
 TIMEOUT = 10
 CONF_VERIFY_SSL = "verify_ssl"
+CONF_LEGACY_TLS = "legacy_tls"
 
 # Password hash prefix required by the VIGI/Tapo local API
 TAPO_PASSWORD_PREFIX = "TPCQ75NF2Y:"
