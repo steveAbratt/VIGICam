@@ -10,10 +10,11 @@ subscribeMsg handles: Vehicle, AudioAnomaly, Loitering, SceneChange,
 ObjectLeftTaken, AreaEntry, AreaExit — types that ONVIF bundles together as
 the SmartDetection catch-all.
 
-Note: msg_push_enabled must be "on" for each detection type, or the camera does
-not send that type on the stream. The integration checks this on first connection
-and logs which types are off, but does not change it: writing detection settings
-behind the user's back changed camera behaviour outside Home Assistant (#95).
+Each detection type has a msg_push_enabled setting that controls whether the camera
+pushes it. The integration reads it on first connection and logs the enabled types
+that have it off. It never writes it: that is the user's camera configuration, and up
+to 0.7.5b9 the integration switched it on for all seven types, including ones the
+user had turned off (#95).
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .onvif_events import SIGNAL_VIGICAM_EVENT
-from .openapi import VIGIOpenAPIError
+from .openapi import VIGIOpenAPIAuthError, VIGIOpenAPIError, push_off
 
 if TYPE_CHECKING:
     from .openapi import VIGIOpenAPI
@@ -56,41 +57,27 @@ _EVENT_TYPE_MAP: dict[str, str | None] = {
     "InvasionDetection":     None,
 }
 
-# Detection-switch getters for the types this listener handles, read on first connection
-# to report any whose msg_push_enabled is off.
-_MSG_PUSH_GETTERS: tuple[str, ...] = (
-    "getVehicleDetectionSwitch",
-    "getAudioAnomalyDetectionSwitch",
-    "getLoiterDetectionSwitch",
-    "getSceneChangeDetectionSwitch",
-    "getAreaEntryDetectionSwitch",
-    "getAreaLeaveDetectionSwitch",
-    "getDropAndTakeDetectionSwitch",
+# Detection-switch getters for the types this listener handles, with the names the
+# entities use, read on first connection to report any whose msg_push_enabled is off.
+_MSG_PUSH_GETTERS: tuple[tuple[str, str], ...] = (
+    ("getVehicleDetectionSwitch",      "Vehicle"),
+    ("getAudioAnomalyDetectionSwitch", "Audio Anomaly"),
+    ("getLoiterDetectionSwitch",       "Loitering"),
+    ("getSceneChangeDetectionSwitch",  "Scene Change"),
+    ("getAreaEntryDetectionSwitch",    "Area Entry"),
+    ("getAreaLeaveDetectionSwitch",    "Area Exit"),
+    ("getDropAndTakeDetectionSwitch",  "Object Left or Taken"),
 )
-
-
-def _unwrap_switch(result: dict) -> dict:
-    """Return the settings object from a get*DetectionSwitch reply.
-
-    Some firmware returns the fields at the top level, others nest them one level deep
-    under a key whose name varies by method, which is why this searches rather than
-    indexing a known key.
-    """
-    if "enabled" in result:
-        return result
-    for value in result.values():
-        if isinstance(value, dict) and "enabled" in value:
-            return value
-    return result
 
 
 class VIGIOpenAPIEventListener:
     """Persistent subscribeMsg connection for a single VIGI camera."""
 
     def __init__(
-        self, hass: HomeAssistant, openapi: "VIGIOpenAPI", entry_id: str
+        self, hass: HomeAssistant, openapi: "VIGIOpenAPI", entry_id: str, camera_name: str
     ) -> None:
         self._hass = hass
+        self._camera_name = camera_name
         self._openapi = openapi
         self._entry_id = entry_id
         self._task: asyncio.Task | None = None
@@ -117,8 +104,7 @@ class VIGIOpenAPIEventListener:
         while True:
             try:
                 if not self._msg_push_checked:
-                    await self._check_msg_push()
-                    self._msg_push_checked = True
+                    self._msg_push_checked = await self._check_msg_push()
                 await self._connect_and_stream()
                 backoff = 5
             except asyncio.CancelledError:
@@ -133,32 +119,33 @@ class VIGIOpenAPIEventListener:
 
     # ── msg_push check ────────────────────────────────────────────────────────
 
-    async def _check_msg_push(self) -> None:
-        """Log the enabled detection types whose events the camera will not push.
+    async def _check_msg_push(self) -> bool:
+        """Log the enabled detection types the camera won't push. Read-only, never write.
 
-        Read-only. Up to 0.7.5b9 this turned msg_push_enabled on, which reached the
-        camera only from b5 (earlier setters rejected the payload) and coincided with
-        30-minute NVR recordings and Active Defense switching itself on (#95).
+        Returns False if the camera couldn't be read, so the check runs again on the next
+        connection. An auth failure is raised rather than retried per type: seven failed
+        logins in a row is how an account gets locked.
         """
         silent = []
-        for getter in _MSG_PUSH_GETTERS:
+        for getter, label in _MSG_PUSH_GETTERS:
             try:
                 result = await self._openapi.call(getter, raise_on_error=False)
-            except Exception as exc:
-                _LOGGER.debug("OpenAPI: could not read %s: %s", getter, exc)
-                continue
+            except VIGIOpenAPIAuthError:
+                raise
+            except (aiohttp.ClientError, TimeoutError, VIGIOpenAPIError) as exc:
+                _LOGGER.debug("OpenAPI: could not read %s on %s: %r", getter, self._openapi.host, exc)
+                return False
             if self._openapi.err_code(result) != 0:
                 continue  # method not supported on this model (-10030 etc.)
-            switch = _unwrap_switch(result)
-            if switch.get("enabled") == "on" and switch.get("msg_push_enabled") == "off":
-                silent.append(getter.removeprefix("get").removesuffix("Switch"))
+            if push_off(result):
+                silent.append(label)
         if silent:
-            _LOGGER.warning(
-                "%s: %s enabled but notifications off, so Home Assistant will not see "
-                "these events. Turn on notifications for them in the VIGI app or the "
-                "camera's web page.",
-                self._openapi.host, ", ".join(silent),
+            _LOGGER.info(
+                "%s: %s detection is on but its notifications are off, so Home Assistant "
+                "will not receive those events",
+                self._camera_name, ", ".join(silent),
             )
+        return True
 
     # ── Streaming connection ──────────────────────────────────────────────────
 

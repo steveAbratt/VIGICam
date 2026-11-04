@@ -30,6 +30,33 @@ _STOK_TTL = 25 * 60  # 25 min (spec is 30 min — be conservative)
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 
+def unwrap_switch(result: dict) -> dict:
+    """Return the settings object from a get*DetectionSwitch reply.
+
+    Some firmware returns the fields at the top level, others nest them one level deep
+    under a key whose name varies by method, which is why this searches rather than
+    indexing a known key.
+    """
+    if "enabled" in result:
+        return result
+    for value in result.values():
+        if isinstance(value, dict) and "enabled" in value:
+            return value
+    return result
+
+
+def push_off(result: dict) -> bool:
+    """True if a get*DetectionSwitch reply has the detection on but msg_push_enabled off.
+
+    Anything else, including a reply shape we don't recognise, is False: a false alarm
+    would send the user to change a setting for nothing.
+    """
+    switch = unwrap_switch(result)
+    if "enabled" not in switch:
+        _LOGGER.debug("Detection switch reply not recognised. Keys seen: %s", sorted(switch))
+    return switch.get("enabled") == "on" and switch.get("msg_push_enabled") == "off"
+
+
 class VIGIOpenAPIError(Exception):
     pass
 
@@ -165,7 +192,7 @@ class VIGIOpenAPI:
         Two call sites pass raise_on_error=False because a rejection there means "none"
         or "unsupported" rather than "broken". They previously read result["errCode"]
         directly, which treats a reply carrying no status field as a FAILURE — the
-        opposite of the convention below, and enough to silently disable msg_push on
+        opposite of the convention below, and enough to blind the msg_push check on
         firmware whose getters omit the field.
         """
         return VIGIOpenAPI._err_code(result)

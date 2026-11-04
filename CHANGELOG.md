@@ -18,22 +18,24 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ### Fixed
 
-- **VIGICam no longer changes your cameras' notification settings** (#95). With OpenAPI
-  enabled, each time the integration started it switched on push notifications for seven
-  detection types (Vehicle, Audio Anomaly, Loitering, Scene Change, Area Entry, Area Exit,
-  Object Left or Taken), including types you had turned off. The camera rejected this
-  before v0.7.5b5, so it took effect from that release. That coincided with NVR
-  recordings running to 30 minutes and Active Defense switching itself on in the VIGI app.
+- **VIGICam no longer changes your cameras' notification settings.** If you ran v0.7.5b5–b9
+  with OpenAPI enabled, open the VIGI app and check the notification setting for Vehicle,
+  Audio Anomaly, Loitering, Scene Change, Area Entry, Area Exit and Object Left or Taken on
+  each camera. Those betas could switch them on, even for detection types you had turned
+  off, and updating does not switch them back.
 
-  It now only reads these settings. If a detection type is on but its notifications are
-  off, the log says which, because Home Assistant won't receive those events until you
-  turn them on in the VIGI app or the camera's web page. **If you ran b5–b9, check those
-  settings in the VIGI app**: this release does not undo what earlier betas changed.
+  Turning a type's notifications off also stops its Home Assistant sensor, because the
+  camera no longer sends that event. VIGICam now only reads these settings and, when the
+  integration starts, logs any type that is on but has notifications off.
+
+  This came up while investigating #95 (long NVR recordings, Active Defense switching itself
+  on). It is **not known to be the cause**: the reporter's symptoms stopped while VIGICam
+  was disabled, which a setting written once doesn't explain. That investigation continues.
 
 ### Changed
 
-- **Releases now include a `vigicam.zip`**, ready for HACS to install from and count
-  downloads.
+- **Releases now include a `vigicam.zip`.** Nothing changes for you yet. It lets a later
+  release have HACS install from the zip and show a download count.
 
 ### Documentation
 

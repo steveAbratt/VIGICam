@@ -134,8 +134,14 @@ services that are not available over ONVIF.
 2. Go to **Settings → Network → OpenAPI**.
 3. Enable the **OpenAPI** toggle and click **Save**.
 
-That is all — the integration probes port 20443 at startup and activates the additional
-sensors automatically. No further configuration in HA is needed.
+The integration probes port 20443 at startup and activates the additional sensors
+automatically. No further configuration in HA is needed.
+
+The seven OpenAPI detection sensors (Vehicle, Audio Anomaly, Loitering, Scene Change, Object
+Left or Taken, Area Entry, Area Exit) also need that detection type switched on **with its
+notifications on** in the VIGI app or the camera's web page. VIGICam doesn't change these
+settings. When the integration starts, the log lists any type that is on but has
+notifications off.
 
 > **Firmware note:** OpenAPI requires firmware 2.1.x or later. If the Settings → Network
 > menu does not have an OpenAPI section, update the camera firmware via the VIGI app or
@@ -798,7 +804,7 @@ groups all smart event types, this sensor fires only for vehicle events and clea
 independently.
 
 **Requirements:** OpenAPI enabled and vehicle detection active on the camera (Detection
-Vehicle switch on).
+Vehicle switch on), with notifications on for vehicle detection.
 
 #### Example: alert on vehicle detection at night
 
@@ -1845,6 +1851,12 @@ two read as opposites while both being correct. See [Microphone Mute](#microphon
 
 **Known and still open:** the master [Alarm](#alarm) switch on C540S and C350 firmware
 ([#79](https://github.com/steveAbratt/VIGICam/issues/79)).
+
+### Vehicle, Loitering or another OpenAPI sensor never turns on
+
+Check three things on the camera: OpenAPI is enabled, that detection type is on, and its
+notifications are on (VIGI app or the camera's web page). VIGICam logs a line at startup
+naming any detection type that is on but has notifications off.
 
 ### Detection events arrive sometimes and not others
 

@@ -848,7 +848,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     want_detection = _feature(entry, CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS)
     onvif_events = VIGIOnvifEvents(hass, ip, username, password, entry.entry_id)
     openapi_events = (
-        VIGIOpenAPIEventListener(hass, openapi, entry.entry_id)
+        VIGIOpenAPIEventListener(hass, openapi, entry.entry_id, camera_name)
         if (has_openapi and want_detection)
         else None
     )
