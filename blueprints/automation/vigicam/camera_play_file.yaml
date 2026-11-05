@@ -28,7 +28,7 @@ blueprint:
 
     **Requirements:**
 
-    - VIGICam integration 0.3.20+.
+    - VIGICam integration 0.7.5+ (Home Assistant 2024.11+).
 
   domain: automation
   input:

@@ -2,9 +2,11 @@
 
 **Status: started.** The tests cover the parts of `api.py` that run without Home Assistant,
 loaded by `tests/conftest.py`: camera identity (`test_identity.py`), the batched poll read
-(`test_batched_reads.py`) and the login key formats (`test_login_key.py`). Run with
+(`test_batched_reads.py`), the login key formats (`test_login_key.py`), the legacy TLS retry
+(`test_legacy_tls.py`), the ONVIF port probe (`test_onvif_port.py`) and the Push
+Notifications check (`test_push_off.py`). Run with
 `pip install pytest aiohttp cryptography && pytest tests/`. CI runs them on every push and pull
-request (`.github/workflows/tests.yaml`, Python 3.13 and 3.14). Nothing yet covers code that
+request (`.github/workflows/tests.yaml`, Python 3.12, 3.13 and 3.14). Nothing yet covers code that
 needs Home Assistant, the coordinator included. The rest of this page is still a plan.
 
 It was written up from a code review on 2026-10-23 so the work can be picked up later without
@@ -73,13 +75,13 @@ With `aioresponses`, no HA harness needed:
 
 - `test_init.py` — setup → unload is clean; no leaked sessions or tasks
 - `test_config_flow.py` — `invalid_auth`, `cannot_connect`, `already_configured`, and the
-  **missing reauth step** (see below)
+  reauth step
 
 ---
 
 ## Known gaps this plan would expose
 
-Found in review, **not yet fixed** as of 0.7.5b5, listed so a test written against current behaviour does
+Found in review, **not yet fixed** as of 0.7.5, listed so a test written against current behaviour does
 not accidentally enshrine the bug:
 
 - **Username is interpolated into SOAP XML unescaped** (`onvif_events.py`, `onvif_ptz.py`). A
@@ -96,14 +98,8 @@ not accidentally enshrine the bug:
   select and spotlight are gone until the user notices and reloads. (A *whole-camera* outage
   is handled since 0.7.5b5 — entities go unavailable — but a single failed key still reads
   as "off" or "not supported".)
-- **No MAC check at setup or polling.** Two cameras that swap DHCP addresses and share a
-  password silently swap identities; only reauth compares the MAC.
-- **`is_allowed_path` is called in the event loop** (`_fetch_audio_bytes`); HA documents it as
-  blocking I/O.
-- **The SD-card False→True reload can repeat** on a camera whose storage read keeps failing
-  during the first refresh, each reload creating a new ONVIF subscription.
-- **Frigate detection matches the IP as a substring** (`frigate.py`), so `192.168.1.1`
-  matches `.10`–`.19`, and the config shape it reads may not match the real integration.
+- **Frigate detection reads a config shape that may not match the real integration**
+  (`frigate.py`).
 - **`number.py` coerces with bare `int()`** on a field that can be `""`.
 - **Snapshot cache has no staleness limit on the failure path** (`camera.py`), so a dead
   camera serves an hours-old frame instead of going unavailable.
@@ -112,8 +108,8 @@ not accidentally enshrine the bug:
 
 Per [ADR-0004](https://github.com/home-assistant/architecture/blob/master/adr/0004-webscraping.md),
 device communication belongs in a PyPI library, not in the integration. ~1,500 lines of
-protocol live here. That is also *why* there are no tests — and the single biggest blocker to
-Phase 3 is that all 11 service handlers are closures inside `_register_services`, so they
+protocol live here. That is also why the tests stop at `api.py` — and the single biggest
+blocker to Phase 3 is that all 11 service handlers are closures inside `_register_services`, so they
 cannot be imported, so they cannot be exercised without booting HA. Moving them to module
 level taking `(hass, call)` is worth more than any individual test below.
 

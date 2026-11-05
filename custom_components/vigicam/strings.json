@@ -58,7 +58,7 @@
           "feature_camera_stream": "Detected: {capabilities}\n\nDisable if Frigate or another integration already provides the camera stream.",
           "stream_use_main": "When off (default), the sub-stream (stream2) is used for live view — lower resolution but fast startup and smooth playback on Raspberry Pi and other low-powered hardware.\n\nWhen on, the main HD stream (stream1) is used — full resolution but requires more CPU and network headroom to transcode without buffering. Recommended only on more powerful hardware.",
           "feature_detection_events": "{note}Disable if Frigate handles detection — this also stops ONVIF event subscriptions.",
-          "detection_image_audio": "When off (default), a sound doesn't replace the **Last Detection** image: it would show a still of an empty scene, and a camera that hears traffic or wind reports dozens a day. When on, the image updates on every detection, as before 0.7.5b11.\n\nNeeds OpenAPI. Without it the camera reports sounds only inside the Smart Detection catch-all, which VIGICam can't tell apart from vehicles, so sounds still update the image. Only applies when Detection events is on. The **Audio Anomaly** sensor is not affected.",
+          "detection_image_audio": "When off (default), a sound doesn't replace the **Last Detection** image: it would show a still of an empty scene, and a camera that hears traffic or wind reports dozens a day. When on, the image updates on every detection, as in 0.7.4 and earlier.\n\nNeeds OpenAPI. Without it the camera reports sounds only inside the Smart Detection catch-all, which VIGICam can't tell apart from vehicles, so sounds still update the image. Only applies when Detection events is on. The **Audio Anomaly** sensor is not affected.",
           "feature_image_controls": "Adds camera tuning controls to the Configuration section of the device. Entities are disabled by default — enable them individually from the device page. Most users leave this off."
         }
       }
@@ -75,7 +75,7 @@
     },
     "wrong_camera_at_address": {
       "title": "{title} has moved: a different camera is at {host}",
-      "description": "**{title}** is set up at `{host}`, but a different camera is answering there now — most likely your router gave the cameras new addresses, for example after a power cut. To avoid acting on the wrong camera, VIGICam has stopped controlling **{title}** until this is fixed.\n\n1. Find **{title}**'s current address: look for MAC address `{mac}` in your router's client list, or check the VIGI app.\n2. Go to **Settings → Devices & Services → Add Integration → VIGI & InSight Cameras** and enter that address with the camera's username and password. Do **not** delete the existing camera first — Home Assistant recognises it, moves it to the new address and keeps its entities and history.\n3. If more than one camera shows this notice, repeat for each.\n\nThis notice clears itself once the right camera answers. Giving each camera a fixed address (a DHCP reservation in your router) stops it happening again.\n\nIf you **replaced** {title} with a new camera at the same address, delete {title} and add the new camera instead. To get the old entity IDs back, open the new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_main_stream`, use \"Front Door\"), then accept Home Assistant's offer to rename its entity IDs."
+      "description": "**{title}** is set up at `{host}`, but a different camera is answering there now — most likely your router gave the cameras new addresses, for example after a power cut. To avoid acting on the wrong camera, VIGICam has stopped controlling **{title}** until this is fixed.\n\n1. Find **{title}**'s current address: look for MAC address `{mac}` in your router's client list, or check the VIGI app.\n2. Go to **Settings → Devices & Services → Add Integration → VIGI & InSight Cameras** and enter that address with the camera's username and password. Do **not** delete the existing camera first — Home Assistant recognises it, moves it to the new address and keeps its entities and history.\n3. If more than one camera shows this notice, repeat for each.\n\nThis notice clears itself once the right camera answers. Giving each camera a fixed address (a DHCP reservation in your router) stops it happening again.\n\nIf you **replaced** {title} with a new camera at the same address, delete {title} and add the new camera instead. To get the old entity IDs back, open the new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_stream`, use \"Front Door\"), then accept Home Assistant's offer to rename its entity IDs."
     },
     "push_notifications_off": {
       "title": "{camera_name}: some detections won't reach Home Assistant",
@@ -84,7 +84,7 @@
   },
   "exceptions": {
     "alarm_needs_output": {
-      "message": "Turn on Alarm Light or Alarm Sound first. The Alarm switch only arms the camera's alarm; with both off it does nothing."
+      "message": "Turn on Alarm Light or Alarm Sound first. With both off, the Alarm switch has no effect."
     }
   }
 }

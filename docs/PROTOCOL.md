@@ -480,10 +480,10 @@ are streamed rather than buffered.
 Sections 6.4–6.7 were derived from `C540S_1.0_en_2.0.1_Build_240207` — the only image that
 still unpacks. The live cameras run **newer, encrypted firmware**:
 
-| Host | Model | Firmware |
+| Camera | Model | Firmware |
 |------|-------|----------|
-| .190 | VIGI C540S 1.0 | 3.1.0 Build 250625 |
-| .73  | VIGI C440-W 2.0 | 2.1.1 Build 250717 |
+| camera A | VIGI C540S 1.0 | 3.1.0 Build 250625 |
+| camera B | VIGI C440-W 2.0 | 2.1.1 Build 250717 |
 
 Only the 2.0.1 image contains a plain squashfs (`hsqs` at `0x21ae98`). In 2.1.0 (Dec 2024)
 and later — including 2.5.1, 3.1.0 and the C440-W 2.1.1 — the payload is uniformly high
@@ -892,7 +892,7 @@ Facts established:
 - It is a **camera-local stored credential**, not a cloud/account credential. Fetch it after
   local admin login with `get {"user_management":{"name":"root"}}`, then read
   `user_management.root.passwd`.
-- Both tested cameras (`.190` and `.73`) currently return `410Uwg30xlH50yK`. That shows their
+- Both tested cameras (camera A and camera B) currently return the same `<sharepwd>`. That shows their
   local provisioning installed or preserved the same value; it does not require or imply a
   TP-Link account.
 - The same root record separates the credentials clearly: `passwd` is the native-stream
@@ -900,9 +900,9 @@ Facts established:
   `SHA256(admin_pw).upper()`.
 - `do user_management.get_p2p_sharepwd` returns a 32-hex **verifier**, not AES ciphertext:
   `MD5(root.passwd + ":" + decodeURIComponent(root.ciphertext))`. The differing results on
-  `.190` and `.73` are explained by their differing RSA ciphertext fields.
+  camera A and camera B are explained by their differing RSA ciphertext fields.
 - Firmware's `set_password` path stores these fields during local provisioning. The precise
-  historical source of the original `410Uwg30xlH50yK` value (generated, supplied, or copied)
+  historical source of the original `<sharepwd>` value (generated, supplied, or copied)
   has not yet been observed, but it is not derived at runtime from the current admin password.
 
 ### 13.4 Recipe for the card / HA backend

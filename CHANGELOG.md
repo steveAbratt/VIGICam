@@ -12,6 +12,15 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Alarm refusal message no longer says Alarm arms the camera** (#79), and the repair
+  notice for a camera at the wrong address gives the right example entity ID
+  (`camera.front_door_stream`).
+- Docs: the Alarm switch's known issue is stated everywhere, a troubleshooting entry for
+  live video stopping on Home Assistant 2026.11, and corrected entity names, menu names and
+  examples.
+
 ---
 
 ## [0.7.5] - 2026-11-05
@@ -25,23 +34,24 @@ in the beta sections below; this is what matters if you're coming from 0.7.4.
   seconds each time** (b11). Some firmware hangs up on VIGICam's ONVIF poll every ~2 minutes,
   and VIGICam waited 15 seconds before listening again, so a person walking up the drive in
   that window was never reported. It now carries straight on.
-- **Cameras ran out of event subscriptions and stopped reporting** (b4–b6, #95). Every failed
-  poll left a subscription behind on the camera for up to an hour, and these cameras allow only
-  a handful, especially with an NVR or Synology Surveillance Station sharing them. Restarting
-  Home Assistant didn't free them either. **After updating, power-cycle your cameras once** to
-  clear subscriptions the old version left behind; otherwise you may see the old errors for up
-  to an hour.
-- **Older VIGI firmware works** (b12, #110, thanks @denisvmiheev): cameras like the C340 on
-  firmware 3.0.0 can now be added, and cameras that answer ONVIF on port 2020 get events.
+- **Failed polls left event subscriptions behind on the camera** (b4–b6), each for up to an
+  hour, and these cameras allow only a few, especially with an NVR or Synology Surveillance
+  Station sharing them. Restarting Home Assistant didn't free them either. **After updating,
+  power-cycle your cameras once** to clear subscriptions the old version left behind;
+  otherwise you may see the old errors for up to an hour.
+- **Older VIGI firmware** (b12, #110, thanks @denisvmiheev): cameras like the C340 on
+  firmware 3.0.0 should now be addable, and cameras that answer ONVIF on port 2020 should get
+  events. The contributor confirmed this with the same changes on 0.7.4; it hasn't yet been
+  confirmed on this release, so please report how it goes.
 
-### Check this if you ran a beta from b5 to b9
+### Check your Push Notifications settings
 
-- **Those betas could switch on Push Notifications** for Vehicle, Audio Anomaly, Loitering,
-  Scene Change, Area Entry, Area Exit and Object Left or Taken, even for types you had turned
-  off (b10). Coming straight from 0.7.4, this doesn't apply to you. Otherwise, check
-  **Processing Mode → Push Notifications** for those types in the VIGI app. VIGICam no longer
-  changes camera settings, and a Repairs notice tells you about any type that's on with Push
-  Notifications off.
+- **Earlier versions could switch on Push Notifications** for Vehicle, Audio Anomaly,
+  Loitering, Scene Change, Area Entry, Area Exit and Object Left or Taken, even for types you
+  had turned off (b10). Every version since 0.5.0 tried this when it first connected; betas b5
+  to b9 made it work on more cameras. Check **Processing Mode → Push Notifications** for those
+  types in the VIGI app. VIGICam no longer changes camera settings, and a Repairs notice tells
+  you about any type that's on with Push Notifications off.
 
 ### Changes that can affect your automations
 
@@ -65,14 +75,26 @@ in the beta sections below; this is what matters if you're coming from 0.7.4.
 - **HACS installs from a release zip and shows a download count** (b11).
 - Many smaller fixes: see the beta sections below.
 
-### Known issue: Home Assistant 2026.11 and the sub-stream
+### Known issues
 
-- **Live video can die on cameras with a small sub-stream limit** (seen on an InSight S245)
-  after upgrading to Home Assistant 2026.11. Its built-in video server can reconnect to the
-  camera's sub-stream many times a second and use up all of the camera's sub-stream slots, so
-  video stops in Home Assistant and the VIGI app, which reports the streams as oversubscribed.
-  If this happens, turn off **Preload stream** on the camera entity, or turn on **Use main
-  stream (HD, stream1)** in the camera's VIGICam options, then reboot the camera.
+- **Live video stopped on one camera after upgrading to Home Assistant 2026.11** (an InSight
+  S245, which allows three sub-stream connections). Home Assistant's stream server reconnected
+  to the sub-stream many times a second until no connections were left, and video stopped in
+  both Home Assistant and the VIGI app, which said the streams were oversubscribed. What fixed
+  it: turning on **Use main stream (HD, stream1)** in the camera's VIGICam options and turning
+  off **Preload stream** on the camera entity, then rebooting the camera. Snapshots still use
+  the sub-stream.
+- **The Alarm switch doesn't arm the camera** (#79). It changes in Home Assistant, but the
+  camera's own Arm setting doesn't follow. The fix needs the camera's separate arm/disarm
+  command, still being worked on.
+- **Missed detections with an NVR sharing the camera** (#95) are still being investigated.
+  The subscription fix above helps, but the reporter's long-term results aren't in yet.
+
+### Thanks
+
+To @VladimirB78 for the #95 diagnosis and A/B testing, @ILikeSleeping000 and @BruceTheLoon
+for testing the #92 fixes and the logs and captures behind several others, and
+@denisvmiheev for #110.
 
 ---
 

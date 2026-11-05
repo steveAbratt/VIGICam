@@ -39,10 +39,9 @@ instead.
 Common entities to check in automations:
 - `camera.vigi_*_stream` — will be replaced by Frigate's camera entity, **except** in
   `vigicam.*` service calls (`speak`, `play_file`, `ptz`, `goto_preset` and the rest). Those
-  must point at a VIGICam entity such as `sensor.vigi_*_ip_address`, not at Frigate's camera,
-  and a broken one shows no orange warning and no failed trace, only a `cannot find camera`
-  line in the HA log — search your automations and
-  scripts for `vigicam.` to find them.
+  must point at a VIGICam entity such as `sensor.vigi_*_ip_address`, not at Frigate's camera.
+  A call at the wrong entity stops the automation with "is not a VIGICam camera entity" in
+  its trace — search your automations and scripts for `vigicam.` to find them first.
 - `binary_sensor.vigi_*_motion` — will be replaced by Frigate's occupancy sensor
 - `binary_sensor.vigi_*_person_detected` — will be replaced by Frigate's person occupancy sensor
 - `binary_sensor.vigi_*_vehicle_detected` — will be replaced by Frigate's car occupancy sensor
@@ -72,7 +71,8 @@ entity. Frigate creates a camera entity per configured camera.
 **Also repoint `vigicam.*` calls.** `vigicam.speak`, `play_file`, `ptz` and the other
 VIGICam services usually target `camera.vigi_*_stream` too, and that entity disappears when
 Camera Stream is turned off. They accept any entity of the camera, so change them to one
-that always exists, such as `sensor.vigi_*_ip_address`. Otherwise they silently do nothing.
+that always exists, such as `sensor.vigi_*_ip_address`. Otherwise they fail and stop the
+automation.
 
 **Turning off Detection Events also removes** the **Loop Recording** binary sensor and the
 **Last Detection** image entity, not only the detection sensors. Update anything that uses
