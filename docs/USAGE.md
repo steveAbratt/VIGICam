@@ -79,9 +79,14 @@ The integration reloads immediately and the live view will use stream1.
 > **Camera View** to **Live**. This tells HA to render the HLS stream directly
 > in the card rather than polling for a new image every ~10 seconds.
 
-> **Snapshots are always from the sub-stream.** The still image grabbed for notifications
-> and the `camera.snapshot` service always uses stream2, regardless of this setting.
-> This keeps snapshot grabs fast and lightweight on all hardware.
+> **Camera snapshots are always from the sub-stream.** The camera entity's still image, and
+> the `camera.snapshot` action, always use stream2, regardless of this setting. This keeps
+> snapshot grabs fast and lightweight on all hardware. (When the camera has no event image,
+> [Last Detection](#last-detection) grabs its frame from the main stream instead.)
+
+> **Home Assistant 2026.11 and later:** if live video stops in both Home Assistant and the
+> VIGI app, see [Live video stops and the VIGI app says the streams are
+> oversubscribed](#live-video-stops-and-the-vigi-app-says-the-streams-are-oversubscribed).
 
 ### Entity cleanup
 
@@ -121,9 +126,9 @@ services that are not available over ONVIF.
 | Area Entry binary sensor | ✓ |
 | Area Exit binary sensor | ✓ |
 | SD Card Recording Duration sensor | ✓ |
-| Oldest Recording timestamp sensor | ✓ |
-| Record Capacity Remaining sensor | ✓ |
-| Video Space Free sensor | ✓ |
+| SD Card Oldest Recording timestamp sensor | ✓ |
+| SD Card Record Capacity Remaining sensor (diagnostic) | ✓ |
+| SD Card Video Space Free sensor (diagnostic) | ✓ |
 | Uptime diagnostic sensor | ✓ |
 | `vigicam.ptz_move_to` service | ✓ |
 | `vigicam.ptz_save_preset` service | ✓ |
@@ -144,14 +149,14 @@ Left or Taken, Area Entry, Area Exit) also need that detection type switched on 
 VIGICam doesn't change these settings. If a type is on with Push Notifications off, a
 Repairs notice names it.
 
-> **Firmware note:** OpenAPI requires firmware 2.1.x or later. If the Settings → Network
-> menu does not have an OpenAPI section, update the camera firmware via the VIGI app or
-> camera web UI.
+> **Firmware note:** OpenAPI needs firmware that has it, and firmware numbers differ between
+> models (a C340 on 3.0.0 Build 231229 has none). If the Settings → Network menu does not
+> have an OpenAPI section, update the camera firmware via the VIGI app or camera web UI.
 
 ### Verifying it is active
 
 After enabling OpenAPI on the camera, reload the integration (Settings → Devices & Services
-→ VIGICam → three-dot menu → Reload). The additional entities will appear on the device
+→ VIGI & InSight Cameras → three-dot menu → Reload). The additional entities will appear on the device
 page. If they do not appear, check the HA log — a connection failure to port 20443 will be
 logged under `custom_components.vigicam`.
 
@@ -164,25 +169,25 @@ HA restarts and reflect the actual camera configuration.
 
 ### Alarm
 
-The master alarm enable/disable. When **off**, detection events will not trigger any
-alarm response (no flashing light, no sound). When **on**, the camera responds to
-detection events according to the Alarm Light and Alarm Sound switches below.
+The master alarm switch.
 
-> This does **not** prevent detection events from firing binary sensors in HA — it only
-> controls the camera's own on-device response.
+> **Known issue: Alarm doesn't arm the camera**
+> ([#79](https://github.com/steveAbratt/VIGICam/issues/79)). The switch changes in Home
+> Assistant, but the camera's own Arm setting doesn't follow — the camera uses a separate
+> arm/disarm command that VIGICam doesn't send yet. Use **Alarm Light** and **Alarm Sound** to
+> control what the camera does on a detection; turning both off stops the alarm response.
 
-> **Alarm needs an output** ([#79](https://github.com/steveAbratt/VIGICam/issues/79)). Alarm
-> only arms the camera's alarm; Alarm Light and Alarm Sound decide what it does. With both
-> off, turning Alarm on would do nothing, so Home Assistant refuses with "Turn on Alarm Light
-> or Alarm Sound first", and an automation stops at that step. Turning the outputs on in the
-> same action as Alarm, or in an earlier step, works. Turning both outputs off disables the
-> alarm as effectively as turning Alarm off.
+> Home Assistant refuses to turn Alarm on while both Alarm Light and Alarm Sound are off,
+> with "Turn on Alarm Light or Alarm Sound first", and an automation stops at that step. Turn
+> an output on in the same action as Alarm, or in an earlier step.
+
+> Alarm never stops detection events from firing binary sensors in Home Assistant.
 
 ### Alarm Light
 
-When on, the camera's spotlight flashes when an alarm is triggered. Requires Alarm to
-also be on to activate during detection events. Can be turned off independently if you
-want a sound-only alarm.
+When on, the camera's spotlight flashes when an alarm is triggered. Can be turned off
+independently if you want a sound-only alarm. See [Alarm](#alarm) for the known issue with
+the master switch.
 
 ### Alarm Sound
 
@@ -279,6 +284,11 @@ automation:
       target:
         entity_id: switch.vigi_c540v_privacy_mask
 ```
+
+### Target Tracking *(cameras that support it)*
+
+Turns the camera's own target tracking on or off: when on, a PTZ camera follows a detected
+subject. It appears only on cameras that report the setting.
 
 ---
 
@@ -423,26 +433,25 @@ The brightness slider maps the spotlight's 4 intensity levels (1–4) to the HA 
 
 ```yaml
 automation:
-  alias: "Spotlight on at sunset"
-  trigger:
-    - platform: sun
-      event: sunset
-  action:
-    - action: light.turn_on
-      target:
-        entity_id: light.vigi_c540v_spotlight
-      data:
-        brightness: 160   # level 3 of 4
+  - alias: "Spotlight on at sunset"
+    trigger:
+      - platform: sun
+        event: sunset
+    action:
+      - action: light.turn_on
+        target:
+          entity_id: light.vigi_c540v_spotlight
+        data:
+          brightness: 160   # level 3 of 4
 
-automation:
-  alias: "Spotlight off at sunrise"
-  trigger:
-    - platform: sun
-      event: sunrise
-  action:
-    - action: light.turn_off
-      target:
-        entity_id: light.vigi_c540v_spotlight
+  - alias: "Spotlight off at sunrise"
+    trigger:
+      - platform: sun
+        event: sunrise
+    action:
+      - action: light.turn_off
+        target:
+          entity_id: light.vigi_c540v_spotlight
 ```
 
 #### Example: dim spotlight for motion, bright on alarm
@@ -493,10 +502,10 @@ enabled via its settings gear icon.
 | Entity | What it controls |
 |--------|-----------------|
 | **Image Brightness** | Overall image brightness |
-| **Contrast** | Difference between light and dark areas |
-| **Saturation** | Colour intensity — 0 is greyscale, 100 is vivid |
-| **Chroma** | Colour balance adjustment |
-| **Sharpness** | Edge sharpening — higher values increase perceived detail but can introduce noise |
+| **Image Contrast** | Difference between light and dark areas |
+| **Image Saturation** | Colour intensity — 0 is greyscale, 100 is vivid |
+| **Image Chroma** | Colour balance adjustment |
+| **Image Sharpness** | Edge sharpening — higher values increase perceived detail but can introduce noise |
 | **WDR Gain** | Wide Dynamic Range gain — controls how aggressively WDR flattens highlights and shadows |
 | **Exposure Gain** | Manual gain boost for low-light conditions |
 
@@ -572,13 +581,13 @@ automation:
 Total duration of all video recordings stored on the SD card, in hours. Updates on the
 30-second poll cycle.
 
-### Oldest Recording *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### SD Card Oldest Recording *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Timestamp of the oldest video recording on the SD card. As the card fills and loop
 recording overwrites old footage, this value advances forward. Useful for knowing how
 far back your recordings go.
 
-### Record Capacity Remaining *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### SD Card Record Capacity Remaining *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Estimated remaining recording time based on the current video bitrate and available
 space, in hours. Drops as the card fills; resets when loop recording overwrites old
@@ -588,7 +597,7 @@ footage.
 > this sensor reports `0` — this is correct. The camera is continuously overwriting old
 > footage rather than writing to free space.
 
-### Video Space Free *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
+### SD Card Video Space Free *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
 
 Free storage on the SD card allocated specifically for video recordings, in GB. May
 differ from **SD Card Free** if the card is formatted with split storage (separate
@@ -1217,7 +1226,7 @@ the camera allocates space for images but never writes them.
 
 ## Services
 
-Services are called from automations, scripts, or Developer Tools → Services.
+Services are called from automations, scripts, or Developer Tools → Actions.
 All services take an `entity_id`. **Any entity belonging to the camera works** —
 `camera.<name>_stream`, `sensor.<name>_ip_address`, anything — so the services keep working
 when the Camera Stream feature group is turned off. The examples below use the stream entity;
@@ -1889,8 +1898,23 @@ Three different causes produce that same symptom, and they are worth telling apa
 switches: `on` means silent. The VIGI app shows the same setting as an enable toggle, so the
 two read as opposites while both being correct. See [Microphone Mute](#microphone-mute).
 
-**Known and still open:** the master [Alarm](#alarm) switch on C540S and C350 firmware
-([#79](https://github.com/steveAbratt/VIGICam/issues/79)).
+**Known and still open:** the master [Alarm](#alarm) switch doesn't arm the camera
+([#79](https://github.com/steveAbratt/VIGICam/issues/79); reported on the C350, C540 and
+C540S).
+
+### Live video stops and the VIGI app says the streams are oversubscribed
+
+Seen on an InSight S245 after upgrading to Home Assistant 2026.11. The camera allows only
+three sub-stream connections, and Home Assistant's stream server reconnected to the
+sub-stream many times a second until none were left, so video stopped in Home Assistant and
+in the VIGI app. What fixed it:
+
+1. Turn on **Use main stream (HD, stream1)** in the camera's options (see
+   [Stream quality](#stream-quality)).
+2. On the camera entity, open **Settings** and turn off **Preload stream**.
+3. Reboot the camera to drop the connections it is still holding.
+
+Camera snapshots still use the sub-stream, which normally needs only one connection.
 
 ### Vehicle, Loitering or another OpenAPI sensor never turns on
 
@@ -1968,7 +1992,7 @@ VIGICam treats it as a different camera: the entities go unavailable and the rep
 appears. Delete the old camera from **Settings → Devices & Services → VIGI & InSight
 Cameras**, then add the new one. Its entities take their names from the name set on the camera
 itself, not from the name you type when adding it. To get the old entity IDs back, open the
-new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_main_stream`, use "Front Door"), then accept Home Assistant's offer to rename its entity IDs. Entity IDs you had renamed individually won't come back
+new device's page and rename it so its name matches the start of the old entity IDs (for `camera.front_door_stream`, use "Front Door"), then accept Home Assistant's offer to rename its entity IDs. Entity IDs you had renamed individually won't come back
 this way. Alternatively, set the new camera's name in the VIGI app to match the old one before
 adding it, and the IDs come out the same with no renaming.
 
@@ -1985,7 +2009,7 @@ Every model-specific bug in this integration has been solved the same way — by
 the camera actually returns. If something misbehaves, this is the single most useful thing you
 can attach to an issue:
 
-> Settings → **Devices & Services** → **VIGICam** → ⋮ → **Download diagnostics**
+> Settings → **Devices & Services** → **VIGI & InSight Cameras** → ⋮ → **Download diagnostics**
 
 It contains your model, firmware, the detected capabilities and the full raw payload every
 entity is built from. **Credentials, IP and MAC addresses, serial numbers and the camera's own
@@ -1996,7 +2020,7 @@ alias are redacted automatically**, so it is safe to paste into a public issue.
 When a control won't change, the diagnostics report shows the *state* but not the camera's
 *reason* for refusing. For that, capture a log of the failing action:
 
-1. Settings → **Devices & Services** → **VIGICam** → ⋮ → **Enable debug logging**
+1. Settings → **Devices & Services** → **VIGI & InSight Cameras** → ⋮ → **Enable debug logging**
 2. Toggle the entity that misbehaves, once
 3. ⋮ → **Disable debug logging** — Home Assistant downloads the log automatically
 

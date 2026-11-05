@@ -70,7 +70,7 @@ disable those in VIGICam to avoid duplicates:
 > example in these docs targets that entity. `vigicam.*` services accept **any** entity from
 > the camera, so point your `speak`, `play_file` and `ptz` calls at one that always exists —
 > for example `sensor.<camera>_ip_address` — before you change this. Otherwise those calls
-> find no camera, log an error, and do nothing, while the automation trace still looks fine.
+> fail with "is not a VIGICam camera entity" and stop the automation.
 >
 > Frigate auto-detection is best-effort and may not recognise your Frigate setup — set the feature groups yourself rather than relying on it.
 
@@ -106,7 +106,7 @@ Even with both disabled, VIGICam continues to provide:
 
 - **Night Vision Mode** select — switch between IR, spotlight, and colour modes on schedule
 - **Spotlight** light entity — control brightness from any HA automation
-- **Alarm** switches and buttons — arm/disarm the camera's alarm, trigger it from HA
+- **Alarm** switches and buttons — Alarm Light and Alarm Sound, trigger the alarm from HA (the master Alarm switch doesn't arm the camera yet, [#79](https://github.com/steveAbratt/VIGICam/issues/79))
 - **Speaker** services (`vigicam.speak`, `vigicam.play_file`) — play audio through the camera
 - **PTZ** controls (PTZ cameras only) — pan/tilt/zoom, presets, patrol automations
 - **Privacy Mask** switch — blank the camera feed on demand

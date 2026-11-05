@@ -14,9 +14,7 @@ blueprint:
 
     - A configured TTS engine (e.g. Nabu Casa Cloud TTS, Piper local TTS).
 
-    - HA 2024.6+ (for tts.get_tts_audio response support).
-
-    - VIGICam integration 0.3.9+.
+    - VIGICam integration 0.7.5+ (Home Assistant 2024.11+).
 
 
     **Audio length limit:** The camera accepts a maximum of 15 seconds / 256 KB of audio.

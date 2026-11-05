@@ -34,7 +34,7 @@ VIGICam's Configure dialog and it keeps only the hardware controls — see
 | Model | Notes | Confirmed by |
 |-------|-------|--------------|
 | VIGI C540V | Outdoor PTZ, 4MP, spotlight + IR — full feature set including PTZ | maintainer |
-| InSight S245 | Fixed outdoor, 4MP, spotlight + IR, tamper — InSight higher-spec line | maintainer |
+| InSight S245 | Fixed outdoor, 4MP, spotlight + IR, tamper — InSight higher-spec line. On Home Assistant 2026.11, see [live video stops](docs/USAGE.md#live-video-stops-and-the-vigi-app-says-the-streams-are-oversubscribed) | maintainer |
 | VIGI C435 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | VIGI C340S-1 | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
 | InSight S385PI | Working | [@MiAutomations](https://github.com/steveAbratt/VIGICam/discussions/76) |
@@ -78,7 +78,7 @@ own analysis rather than taking detection from the camera keeps the budget free.
 ### Camera controls
 - **Spotlight** — on/off with brightness control
 - **Night vision** — switch between IR auto, IR always on, spotlight, colour, off
-- **Alarm control** — enable/disable alarm, sound and light independently, set repeat
+- **Alarm control** — alarm sound and light switched independently, set repeat
   count, trigger or stop manually
 - **PTZ** — pan/tilt/zoom buttons, named presets, continuous move, absolute positioning,
   save/delete presets *(absolute position and preset management require
@@ -93,7 +93,7 @@ own analysis rather than taking detection from the camera keeps the budget free.
 - **Custom sound management** — upload, play on demand, and delete custom audio slots
 
 ### Monitoring & diagnostics
-- **Live stream** — RTSP HD stream in dashboards and automations
+- **Live stream** — RTSP sub-stream by default, or the main HD stream, in dashboards and automations
 - **Storage monitoring** — SD card used %, free space, total capacity, status, loop
   recording state, recording duration, oldest recording, capacity remaining
   *(extended sensors require [OpenAPI](#openapi--extended-detection--sensors))*
@@ -197,8 +197,9 @@ detection type is on **and** its **Processing Mode → Push Notifications** box 
 type is on with Push Notifications off, a Repairs notice names it. If the detection itself is off, the sensor
 stays quiet and nothing is logged.
 
-> Requires firmware 2.1.x or later. If the OpenAPI menu is missing, update the camera
-> firmware via the VIGI app or camera web UI.
+> Needs firmware with an OpenAPI menu. Firmware numbers differ between models (a C340 on
+> 3.0.0 Build 231229 has none), so if the menu is missing, update the camera firmware via the
+> VIGI app or camera web UI.
 
 ---
 

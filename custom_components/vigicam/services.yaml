@@ -97,7 +97,6 @@ speak:
     Generate a TTS announcement and play it through the camera speaker in one step.
     Handles the full pipeline: TTS generation → convert to camera-compatible WAV
     (8 kHz mono via ffmpeg) → upload to slot → play.
-    Requires HA 2024.6+ for tts.get_tts_audio response support.
   fields:
     entity_id:
       name: Cameras
