@@ -14,6 +14,68 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.5] - 2026-11-05
+
+The first stable release since 0.7.4, collecting betas b1–b12. The details of each change are
+in the beta sections below; this is what matters if you're coming from 0.7.4.
+
+### Detection events you were missing
+
+- **Cameras that dropped the event connection every couple of minutes went deaf for about 30
+  seconds each time** (b11). Some firmware hangs up on VIGICam's ONVIF poll every ~2 minutes,
+  and VIGICam waited 15 seconds before listening again, so a person walking up the drive in
+  that window was never reported. It now carries straight on.
+- **Cameras ran out of event subscriptions and stopped reporting** (b4–b6, #95). Every failed
+  poll left a subscription behind on the camera for up to an hour, and these cameras allow only
+  a handful, especially with an NVR or Synology Surveillance Station sharing them. Restarting
+  Home Assistant didn't free them either. **After updating, power-cycle your cameras once** to
+  clear subscriptions the old version left behind; otherwise you may see the old errors for up
+  to an hour.
+- **Older VIGI firmware works** (b12, #110, thanks @denisvmiheev): cameras like the C340 on
+  firmware 3.0.0 can now be added, and cameras that answer ONVIF on port 2020 get events.
+
+### Check this if you ran a beta from b5 to b9
+
+- **Those betas could switch on Push Notifications** for Vehicle, Audio Anomaly, Loitering,
+  Scene Change, Area Entry, Area Exit and Object Left or Taken, even for types you had turned
+  off (b10). Coming straight from 0.7.4, this doesn't apply to you. Otherwise, check
+  **Processing Mode → Push Notifications** for those types in the VIGI app. VIGICam no longer
+  changes camera settings, and a Repairs notice tells you about any type that's on with Push
+  Notifications off.
+
+### Changes that can affect your automations
+
+- **A camera that can't be reached shows its entities as unavailable** instead of every switch
+  reading "off" (b5). Trigger on `unavailable` if you relied on "off" during an outage.
+- **`vigicam.*` actions now stop the automation when they fail** (b9), instead of reporting
+  success. Add `continue_on_error: true` to a step that should carry on.
+- **The Alarm switch refuses to turn on with neither Alarm Light nor Alarm Sound on** (b9,
+  #79), with a message saying so. An automation doing that stops at that step.
+- **Last Detection no longer updates on sounds** on cameras with OpenAPI (b11). Turn on
+  **Update Last Detection on Audio Anomaly** in the camera's options to keep the old behaviour.
+- **Home Assistant 2024.11 or later is required** (b7).
+
+### Also new
+
+- **Re-authentication:** change a camera's password and Home Assistant asks for the new one
+  (b4). **A camera whose IP address changed** can be recovered by adding it again at the new
+  address, without deleting it first (b5).
+- **Each 30-second poll is one request to the camera instead of about twelve** (b8), and no
+  extra Python package is installed.
+- **HACS installs from a release zip and shows a download count** (b11).
+- Many smaller fixes: see the beta sections below.
+
+### Known issue: Home Assistant 2026.11 and the sub-stream
+
+- **Live video can die on cameras with a small sub-stream limit** (seen on an InSight S245)
+  after upgrading to Home Assistant 2026.11. Its built-in video server can reconnect to the
+  camera's sub-stream many times a second and use up all of the camera's sub-stream slots, so
+  video stops in Home Assistant and the VIGI app, which reports the streams as oversubscribed.
+  If this happens, turn off **Preload stream** on the camera entity, or turn on **Use main
+  stream (HD, stream1)** in the camera's VIGICam options, then reboot the camera.
+
+---
+
 ## [0.7.5b12] - 2026-11-04
 
 ### Fixed

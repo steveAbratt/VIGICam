@@ -218,12 +218,11 @@ entity won't be created).
 > it retries through the other. Some firmware answers the OpenAPI *getter* while rejecting
 > the matching *setter*, which is what made these toggles spring back on earlier versions.
 >
-> **Still unresolved on some firmware.** v0.7.5b1 made the rejection visible in the log and
-> v0.7.5b4 sends the camera's whole settings object back rather than the single field, but
-> neither is confirmed to fix it — a C350 rejects the write with error `-10009`. If a toggle
-> reverts after updating, see
-> [Troubleshooting](#troubleshooting) — a debug log is the only way to see the camera's
-> reason for refusing.
+> **Fixed in v0.7.5** (confirmed on a C350 and a C540, [#92](https://github.com/steveAbratt/VIGICam/issues/92)):
+> VIGICam now sends the camera's whole settings object back rather than the single field,
+> which firmware that rejected the write with error `-10009` accepts. If a toggle still
+> reverts after updating, see [Troubleshooting](#troubleshooting) — a debug log is the only
+> way to see the camera's reason for refusing.
 
 ### Detection Tamper
 
@@ -1845,7 +1844,7 @@ entities:
 ### "Cannot connect to camera" on older firmware, or no detection events at all
 
 Older firmware (seen on a VIGI C340, 3.0.0 Build 231229) does two things differently. From
-**v0.7.5b12** VIGICam handles both on its own:
+**v0.7.5** VIGICam handles both on its own:
 
 - **Adding the camera failed with *Cannot connect to camera*** even though the address and
   password were right. The camera uses an older form of HTTPS security. VIGICam now notices
@@ -1883,9 +1882,8 @@ Three different causes produce that same symptom, and they are worth telling apa
 **First, update.** Several of these have been fixed, and each fix needed a specific version:
 
 - Night vision, spotlight, status LED on C340/C350-class firmware — **v0.7.4b2**
-- Person and Vehicle detection — **v0.7.4b5**, then **v0.7.5b1** (made the refusal visible),
-  then **v0.7.5b4** (sends the full settings object). Still unconfirmed on firmware that
-  rejects the write with `-10009` — see [#92](https://github.com/steveAbratt/VIGICam/issues/92)
+- Person and Vehicle detection — **v0.7.5** (confirmed on firmware that rejected the write
+  with `-10009`, [#92](https://github.com/steveAbratt/VIGICam/issues/92))
 
 **Then check the one case that isn't a bug.** Microphone Mute and Speaker Mute are *mute*
 switches: `on` means silent. The VIGI app shows the same setting as an enable toggle, so the
@@ -1913,7 +1911,7 @@ that budget** — an NVR, Synology Surveillance Station, a second Home Assistant
 re-subscribe gap nothing is listening, so anything that happens in that window is lost. That
 is why the VIGI app still sees everything: it does not use ONVIF.
 
-1. **Update to v0.7.5b4 or later.** Earlier versions abandoned a subscription without
+1. **Update to v0.7.5 or later.** Earlier versions abandoned a subscription without
    releasing it, so each failure left one stranded on the camera for up to an hour and the
    problem fed itself.
 2. **Then restart Home Assistant and power-cycle the cameras.** The subscriptions already
