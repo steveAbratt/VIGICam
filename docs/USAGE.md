@@ -660,14 +660,18 @@ These sensors fire in real time via an ONVIF event subscription that starts auto
 when the integration loads. They do not wait for the 30-second coordinator poll — events
 arrive within a second or two of the camera detecting them.
 
-All sensors auto-clear 15 seconds after the last event if the camera does not send an
-explicit "no longer active" event.
+A sensor turns off as soon as the camera reports the detection has ended. It follows the
+camera exactly. While someone moves about in view, the camera often ends and restarts a
+detection within seconds, so one visit can turn a sensor on several times. To act once per
+visit, give the automation a cooldown, for example a 2-minute `delay` with `mode: single`.
+The camera can't report an end for the sensors fed by the OpenAPI stream (Vehicle, Audio
+Anomaly, Loitering, Scene Change, Object Left or Taken, Area Entry, Area Exit). Those, and
+any event whose end doesn't arrive, turn off 15 seconds after the last event.
 
-When the camera's ONVIF event identifies which detection zone fired (e.g. `Area1`, `Line1`
-as configured in the VIGI app), that name is exposed as a `detection_zone` attribute on
-the sensor. Use this in automation conditions to distinguish between different zones on the
-same camera — for example, triggering a different response for the front gate versus the
-back garden.
+When the camera's ONVIF event names the detection zone that fired, that name is exposed as a
+`detection_zone` attribute on the sensor. The VIGI C540V and InSight S245 send a fixed name
+for each detection type (for example `MyPeopleDetectorRule`) rather than a zone. VIGICam
+ignores those, so on these models the attribute doesn't appear.
 
 ### Motion
 
@@ -1168,7 +1172,7 @@ The `source` attribute on the entity tells you which method was used.
 |---|---|---|
 | `detection_type` | `person`, `vehicle`, `motion` | Event that triggered the grab (from ONVIF or OpenAPI) |
 | `source` | `event_capture`, `rtsp_snapshot` | Which capture method was used |
-| `detection_zone` | `Area1`, `Line2` | Detection zone name from the camera, when available |
+| `detection_zone` | `Area1` | Detection zone name from the camera, when it sends one (the C540V and S245 don't) |
 | `event_label` | `Person`, `Smart Detection` | AI classification label (event capture only) |
 | `file_id` | `00010000000260` | Internal SD card file ID (event capture only) |
 

@@ -46,6 +46,43 @@ def _parse_termination_time(resp: str) -> datetime | None:
     except ValueError:
         return None
 
+_NOTIFICATION = re.compile(r"<(?:\w+:)?NotificationMessage\b.*?</(?:\w+:)?NotificationMessage>", re.DOTALL)
+_TOPIC = re.compile(r"<(?:\w+:)?Topic\b[^>]*>(.*?)</(?:\w+:)?Topic>", re.DOTALL)
+_SIMPLE_ITEM = re.compile(r"<(?:\w+:)?SimpleItem\b([^>]*)>")
+_ATTR = re.compile(r'\b(Name|Value)="([^"]*)"')
+_DEFAULT_RULE = re.compile(r"My\w*Rule")
+
+
+def _simple_items(block: str | None) -> dict[str, str]:
+    # Attribute order is free in XML, and VIGI firmware sends Value before Name.
+    items = {}
+    for attrs in _SIMPLE_ITEM.findall(block or ""):
+        a = dict(_ATTR.findall(attrs))
+        if "Name" in a:
+            items[a["Name"]] = a.get("Value", "")
+    return items
+
+
+def _section(msg: str, name: str) -> str | None:
+    m = re.search(rf"<(?:\w+:)?{name}\b[^>]*>(.*?)</(?:\w+:)?{name}>", msg, re.DOTALL)
+    return m.group(1) if m else None
+
+
+def parse_notifications(resp: str) -> list[dict[str, Any]]:
+    """Topic, Source items and Data items of each NotificationMessage in a pull response."""
+    events = []
+    for msg in _NOTIFICATION.findall(resp):
+        topic_m = _TOPIC.search(msg)
+        if not topic_m:
+            continue
+        events.append({
+            "topic": re.sub(r"\s+", "", topic_m.group(1)),
+            "source": _simple_items(_section(msg, "Source")),
+            "data": _simple_items(_section(msg, "Data")),
+        })
+    return events
+
+
 PULL_TIMEOUT_S = 8          # camera holds connection this long if no events
 SUBSCRIPTION_DURATION = "PT1H"
 RENEW_MARGIN_S = 300        # renew 5 min before expiry
@@ -323,18 +360,7 @@ class VIGIOnvifEvents:
             "</tev:PullMessages>",
             timeout=PULL_TIMEOUT_S + 5,
         )
-        events = []
-        for msg in re.findall(
-            r"<wsnt:NotificationMessage>(.*?)</wsnt:NotificationMessage>",
-            resp, re.DOTALL,
-        ):
-            topic_m = re.search(r"<wsnt:Topic[^>]*>(.*?)</wsnt:Topic>", msg, re.DOTALL)
-            if not topic_m:
-                continue
-            topic = re.sub(r"\s+", "", topic_m.group(1))
-            items = dict(re.findall(r'<tt:SimpleItem Name="([^"]+)" Value="([^"]+)"', msg))
-            events.append({"topic": topic, "data": items})
-        return events
+        return parse_notifications(resp)
 
     async def _poll_loop(self) -> None:
         while True:
@@ -444,17 +470,18 @@ class VIGIOnvifEvents:
             _LOGGER.debug("Unmapped ONVIF topic (add to TOPIC_KEYWORD_MAP if needed): %s", topic)
             return
 
-        # VIGI cameras use Is* boolean fields (IsMotion, IsTamper, IsPeople, etc.)
-        # Scan for the first Is* or Value field to determine active state.
+        # The rule topics carry one Is* field (IsMotion, IsPeople, …); MotionAlarm carries
+        # State. The camera sends false when the detection ends.
         active = True  # default to active if no recognisable field present
         for key, val in data.items():
-            if key.startswith("Is") or key == "Value":
+            if key.startswith("Is") or key in ("State", "Value"):
                 active = str(val).lower() in ("true", "1", "yes")
                 break
 
-        # The ONVIF Source block identifies which detection zone fired.
-        # TP-Link cameras put this in a "Rule" SimpleItem (e.g. "Area1", "Line1").
-        area: str | None = data.get("Rule") or data.get("RuleName") or data.get("RuleRegionID")
+        # The Source block names the rule that fired. The C540V and S245 send one fixed
+        # name per detection type ("MyPeopleDetectorRule"), which says nothing about where.
+        rule = event["source"].get("Rule")
+        area = None if rule is None or _DEFAULT_RULE.fullmatch(rule) else rule
 
         async_dispatcher_send(
             self._hass,

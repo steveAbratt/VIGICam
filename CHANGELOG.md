@@ -10,7 +10,20 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
-## [Unreleased]
+## [0.7.6b1] - 2026-11-06
+
+### Fixed
+
+- **Detection sensors now turn off when the camera says the detection has ended.** VIGICam
+  read every ONVIF event as empty, because the cameras send `Value` before `Name` and the
+  parser only accepted the opposite order. So every "ended" message counted as another
+  detection, and sensors stayed on until 15 seconds after the last one. This affected motion,
+  person, tamper, intrusion, line crossing and smart event on every camera.
+  - A sensor now follows the camera exactly. One visit can turn it on several times, so
+    automations that should act once per visit need a cooldown (see USAGE).
+  - The Last Detection image is no longer grabbed again when a detection ends.
+  - The `detection_zone` attribute ignores the fixed rule names these cameras send
+    (`MyPeopleDetectorRule`) instead of reporting them as a zone.
 
 ### Changed
 
