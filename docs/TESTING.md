@@ -4,7 +4,9 @@
 loaded by `tests/conftest.py`: camera identity (`test_identity.py`), the batched poll read
 (`test_batched_reads.py`), the login key formats (`test_login_key.py`), the legacy TLS retry
 (`test_legacy_tls.py`), the ONVIF port probe (`test_onvif_port.py`) and the Push
-Notifications check (`test_push_off.py`). Run with
+Notifications check (`test_push_off.py`). It also covers ONVIF event parsing
+(`test_onvif_parse.py`), which loads `onvif_events.py` with stand-ins for its Home Assistant
+imports. Run with
 `pip install pytest aiohttp cryptography && pytest tests/`. CI runs them on every push and pull
 request (`.github/workflows/tests.yaml`, Python 3.12, 3.13 and 3.14). Nothing yet covers code that
 needs Home Assistant, the coordinator included. The rest of this page is still a plan.
@@ -53,7 +55,7 @@ pytest tests/test_parsers.py
 | `coordinator.py` | `_detect_sd_card` | `"Normal"`, `"normal"`, `"full"`, `"offline"`, `""`, missing key |
 | `light.py` | `_cam_to_ha`, `_ha_to_cam` | round-trip property: `_ha_to_cam(_cam_to_ha(n)) == n` for n in 1..4. Also pins the documented brightness bands |
 | `openapi.py` | `_err_code` / `err_code` | `errCode` present, `error_code` present, both, **neither** (must be success — this is the convention that was inverted elsewhere) |
-| `onvif_events.py` | `TOPIC_KEYWORD_MAP` ordering via `_dispatch` | first-match-wins: `CellMotion` before `Motion`, `TPSmartEvent` first. **This ordering is load-bearing and currently unverified** — reordering the dict silently misroutes events |
+| `onvif_events.py` | `TOPIC_KEYWORD_MAP` ordering via `_dispatch` | first-match-wins: `CellMotion` before `Motion`, `TPSmartEvent` first. Load-bearing; covered by `test_onvif_parse.py` since 0.7.6 |
 | `openapi_events.py` | `_EVENT_TYPE_MAP` via `_dispatch` | mapped, `None`-mapped (deliberately quiet, handled by ONVIF), unknown (should log) |
 | `onvif_events.py` / `onvif_ptz.py` | `_envelope` | a username containing `&`, `<`, `>` must still produce parseable XML — currently it does not, see "Known gaps" |
 | `event_image.py` | `_ws_encode`, `_ws_recv`, `_parse_multipart`, `_digest_response` | `_ws_recv` takes a `StreamReader` you can feed from bytes; `_parse_multipart` takes bytes. **The hand-rolled WebSocket codec is the highest-risk code in the repo and among the easiest to test** |
@@ -87,8 +89,9 @@ not accidentally enshrine the bug:
 - **Username is interpolated into SOAP XML unescaped** (`onvif_events.py`, `onvif_ptz.py`). A
   username containing `&`, `<` or `>` produces a malformed envelope and an endless
   "ONVIF subscribe failed" loop with no hint as to the cause.
-- **ONVIF XML is parsed by regex with hardcoded namespace prefixes.** Prefixes are arbitrary;
-  a camera binding the same namespaces to different prefixes parses as zero events, silently.
+- **ONVIF XML is parsed by regex with hardcoded namespace prefixes** in the subscribe and
+  renew responses (`Address`, `TerminationTime`). Prefixes are arbitrary; a camera binding
+  them differently fails to subscribe. Pull responses accept any prefix since 0.7.6.
 - **`has_openapi` has two sources of truth.** `coordinator._recheck_openapi` promotes the
   coordinator's copy but leaves `entry_data["openapi"]` as `None` until a reload — which
   re-creates the exact read/write split `_openapi_writable` exists to prevent.

@@ -17,9 +17,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import html
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -45,6 +47,44 @@ def _parse_termination_time(resp: str) -> datetime | None:
         return datetime.fromisoformat(term.group(1).replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+_NOTIFICATION = re.compile(r"<(?:\w+:)?NotificationMessage\b.*?</(?:\w+:)?NotificationMessage>", re.DOTALL)
+_TOPIC = re.compile(r"<(?:\w+:)?Topic\b[^>]*>(.*?)</(?:\w+:)?Topic>", re.DOTALL)
+_OPERATION = re.compile(r"""PropertyOperation\s*=\s*["'](\w+)""")
+_SECTION = re.compile(r"<(?:\w+:)?(Source|Data)\b[^>]*>(.*?)</(?:\w+:)?\1>", re.DOTALL)
+_SIMPLE_ITEM = re.compile(r"<(?:\w+:)?SimpleItem\b([^>]*)>")
+_ATTR = re.compile(r"""\b(Name|Value)\s*=\s*(["'])(.*?)\2""", re.DOTALL)
+_DEFAULT_RULE = re.compile(r"My\w+DetectorRule")
+
+
+def _simple_items(block: str) -> dict[str, str]:
+    # The S245 sends Value before Name; XML allows either order, so neither is assumed.
+    items = {}
+    for attrs in _SIMPLE_ITEM.findall(block):
+        a = {k: html.unescape(v) for k, _q, v in _ATTR.findall(attrs)}
+        if "Name" in a:
+            items[a["Name"]] = a.get("Value", "")
+    return items
+
+
+def parse_notifications(resp: str) -> list[dict[str, Any]]:
+    """Topic, Source items and Data items of each NotificationMessage in a pull response."""
+    events = []
+    for msg in _NOTIFICATION.findall(resp):
+        topic_m = _TOPIC.search(msg)
+        if not topic_m:
+            continue
+        sections = dict(_SECTION.findall(msg))
+        op = _OPERATION.search(msg)
+        events.append({
+            "topic": "".join(topic_m.group(1).split()),
+            "operation": op.group(1) if op else None,
+            "source": _simple_items(sections.get("Source", "")),
+            "data": _simple_items(sections.get("Data", "")),
+        })
+    return events
+
 
 PULL_TIMEOUT_S = 8          # camera holds connection this long if no events
 SUBSCRIPTION_DURATION = "PT1H"
@@ -79,6 +119,12 @@ TOPIC_KEYWORD_MAP: dict[str, str] = {
     "Tamper":       "tamper",
     "Motion":       "motion",  # fallback for non-CellMotion motion topics
 }
+_TOPIC_KEYWORDS = [(k.lower(), v) for k, v in TOPIC_KEYWORD_MAP.items()]
+
+
+def _event_type(topic: str) -> str | None:
+    t = topic.lower()
+    return next((etype for keyword, etype in _TOPIC_KEYWORDS if keyword in t), None)
 
 
 class VIGIOnvifEvents:
@@ -106,6 +152,10 @@ class VIGIOnvifEvents:
         self._task: asyncio.Task | None = None
         self._session: aiohttp.ClientSession | None = None
         self._stop_task: asyncio.Future | None = None
+        # (topic, source items) → (event type, when it last reported true). ONVIF identifies
+        # a property by its topic and Source, so two zones on one topic are tracked apart.
+        self._active_since: dict[tuple, tuple[str, float]] = {}
+        self._skip_warned: set[tuple] = set()
 
     @property
     def is_connected(self) -> bool:
@@ -297,6 +347,7 @@ class VIGIOnvifEvents:
         # immediately tear it down again.
         self._consecutive_timeouts = 0
         self._timeout_warned = False
+        self._active_since.clear()
         if not address or self._session is None or self._session.closed:
             return
         try:
@@ -323,18 +374,7 @@ class VIGIOnvifEvents:
             "</tev:PullMessages>",
             timeout=PULL_TIMEOUT_S + 5,
         )
-        events = []
-        for msg in re.findall(
-            r"<wsnt:NotificationMessage>(.*?)</wsnt:NotificationMessage>",
-            resp, re.DOTALL,
-        ):
-            topic_m = re.search(r"<wsnt:Topic[^>]*>(.*?)</wsnt:Topic>", msg, re.DOTALL)
-            if not topic_m:
-                continue
-            topic = re.sub(r"\s+", "", topic_m.group(1))
-            items = dict(re.findall(r'<tt:SimpleItem Name="([^"]+)" Value="([^"]+)"', msg))
-            events.append({"topic": topic, "data": items})
-        return events
+        return parse_notifications(resp)
 
     async def _poll_loop(self) -> None:
         while True:
@@ -408,8 +448,8 @@ class VIGIOnvifEvents:
 
                 for event in events:
                     _LOGGER.debug(
-                        "ONVIF event %s: topic=%s data=%s",
-                        self._ip, event["topic"], event["data"],
+                        "ONVIF event %s: topic=%s data=%s source=%s",
+                        self._ip, event["topic"], event["data"], event["source"],
                     )
                     self._dispatch(event)
 
@@ -434,30 +474,57 @@ class VIGIOnvifEvents:
         topic = event["topic"]
         data = event["data"]
 
-        event_type = None
-        for keyword, etype in TOPIC_KEYWORD_MAP.items():
-            if keyword.lower() in topic.lower():
-                event_type = etype
-                break
-
+        event_type = _event_type(topic)
         if event_type is None:
             _LOGGER.debug("Unmapped ONVIF topic (add to TOPIC_KEYWORD_MAP if needed): %s", topic)
             return
 
-        # VIGI cameras use Is* boolean fields (IsMotion, IsTamper, IsPeople, etc.)
-        # Scan for the first Is* or Value field to determine active state.
-        active = True  # default to active if no recognisable field present
-        for key, val in data.items():
-            if key.startswith("Is") or key == "Value":
-                active = str(val).lower() in ("true", "1", "yes")
-                break
+        if event["operation"] == "Deleted":
+            return
+        # The rule topics carry one Is* field (IsMotion, IsPeople, …); MotionAlarm carries
+        # State. The camera sends false when the detection ends. A message with data but no
+        # field we know is skipped rather than guessed at, and named once at warning level.
+        # One with no readable data at all still counts as a detection: that is how every
+        # camera worked until 0.7.6, and models nobody has captured may still depend on it.
+        flag = next(
+            (v for k, v in data.items() if k.startswith("Is") or k in ("State", "Value")), None
+        )
+        if flag is None and data:
+            seen = (topic, frozenset(data))
+            if seen not in self._skip_warned:
+                self._skip_warned.add(seen)
+                _LOGGER.warning(
+                    "ONVIF event from %s skipped, no state field: %s %s", self._ip, topic, data
+                )
+            return
+        src = event["source"]
+        key = (topic, frozenset(src.items()))
+        is_true = flag is None or flag.lower() in ("true", "1", "yes")
+        if is_true:
+            self._active_since[key] = (event_type, time.monotonic())
+        else:
+            self._active_since.pop(key, None)
+            # Another zone or topic of this type is still on (CellMotionDetector and
+            # MotionAlarm both mean motion): this end changes nothing, so send nothing.
+            if self._type_active(event_type):
+                return
 
-        # The ONVIF Source block identifies which detection zone fired.
-        # TP-Link cameras put this in a "Rule" SimpleItem (e.g. "Area1", "Line1").
-        area: str | None = data.get("Rule") or data.get("RuleName") or data.get("RuleRegionID")
+        # The Source block names the rule that fired. The S245 sends one fixed name per
+        # detection type ("MyPeopleDetectorRule"), which says nothing about where.
+        rule = src.get("Rule") or src.get("RuleName") or src.get("RuleRegionID")
+        area = None if not rule or _DEFAULT_RULE.fullmatch(rule) else rule
 
         async_dispatcher_send(
             self._hass,
             SIGNAL_VIGICAM_EVENT.format(self._entry_id),
-            {"type": event_type, "active": active, "area": area},
+            {"type": event_type, "active": is_true, "area": area},
+        )
+
+    def _type_active(self, event_type: str) -> bool:
+        # A true whose false never came stops counting after AUTO_CLEAR_S, the same time
+        # the sensor would clear itself.
+        now = time.monotonic()
+        return any(
+            etype == event_type and now - since < AUTO_CLEAR_S
+            for etype, since in self._active_since.values()
         )
