@@ -17,9 +17,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import html
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -46,26 +48,24 @@ def _parse_termination_time(resp: str) -> datetime | None:
     except ValueError:
         return None
 
+
 _NOTIFICATION = re.compile(r"<(?:\w+:)?NotificationMessage\b.*?</(?:\w+:)?NotificationMessage>", re.DOTALL)
 _TOPIC = re.compile(r"<(?:\w+:)?Topic\b[^>]*>(.*?)</(?:\w+:)?Topic>", re.DOTALL)
+_SECTION = re.compile(r"<(?:\w+:)?(Source|Data)\b[^>]*>(.*?)</(?:\w+:)?\1>", re.DOTALL)
 _SIMPLE_ITEM = re.compile(r"<(?:\w+:)?SimpleItem\b([^>]*)>")
-_ATTR = re.compile(r'\b(Name|Value)="([^"]*)"')
-_DEFAULT_RULE = re.compile(r"My\w*Rule")
+_ATTR = re.compile(r"""\b(Name|Value)\s*=\s*(["'])(.*?)\2""", re.DOTALL)
+_DEFAULT_RULE = re.compile(r"My\w+DetectorRule")
 
 
-def _simple_items(block: str | None) -> dict[str, str]:
-    # Attribute order is free in XML, and VIGI firmware sends Value before Name.
+def _simple_items(block: str) -> dict[str, str]:
+    # Attribute order is free in XML. The S245's notifications put Value before Name, while
+    # other items from the same firmware put Name first, so neither order can be assumed.
     items = {}
-    for attrs in _SIMPLE_ITEM.findall(block or ""):
-        a = dict(_ATTR.findall(attrs))
+    for attrs in _SIMPLE_ITEM.findall(block):
+        a = {k: html.unescape(v) for k, _q, v in _ATTR.findall(attrs)}
         if "Name" in a:
             items[a["Name"]] = a.get("Value", "")
     return items
-
-
-def _section(msg: str, name: str) -> str | None:
-    m = re.search(rf"<(?:\w+:)?{name}\b[^>]*>(.*?)</(?:\w+:)?{name}>", msg, re.DOTALL)
-    return m.group(1) if m else None
 
 
 def parse_notifications(resp: str) -> list[dict[str, Any]]:
@@ -75,10 +75,11 @@ def parse_notifications(resp: str) -> list[dict[str, Any]]:
         topic_m = _TOPIC.search(msg)
         if not topic_m:
             continue
+        sections = dict(_SECTION.findall(msg))
         events.append({
-            "topic": re.sub(r"\s+", "", topic_m.group(1)),
-            "source": _simple_items(_section(msg, "Source")),
-            "data": _simple_items(_section(msg, "Data")),
+            "topic": "".join(topic_m.group(1).split()),
+            "source": _simple_items(sections.get("Source", "")),
+            "data": _simple_items(sections.get("Data", "")),
         })
     return events
 
@@ -116,6 +117,12 @@ TOPIC_KEYWORD_MAP: dict[str, str] = {
     "Tamper":       "tamper",
     "Motion":       "motion",  # fallback for non-CellMotion motion topics
 }
+_TOPIC_KEYWORDS = [(k.lower(), v) for k, v in TOPIC_KEYWORD_MAP.items()]
+
+
+def _event_type(topic: str) -> str | None:
+    t = topic.lower()
+    return next((etype for keyword, etype in _TOPIC_KEYWORDS if keyword in t), None)
 
 
 class VIGIOnvifEvents:
@@ -143,6 +150,7 @@ class VIGIOnvifEvents:
         self._task: asyncio.Task | None = None
         self._session: aiohttp.ClientSession | None = None
         self._stop_task: asyncio.Future | None = None
+        self._active_since: dict[str, float] = {}  # topic → when it last reported true
 
     @property
     def is_connected(self) -> bool:
@@ -434,8 +442,8 @@ class VIGIOnvifEvents:
 
                 for event in events:
                     _LOGGER.debug(
-                        "ONVIF event %s: topic=%s data=%s",
-                        self._ip, event["topic"], event["data"],
+                        "ONVIF event %s: topic=%s data=%s source=%s",
+                        self._ip, event["topic"], event["data"], event["source"],
                     )
                     self._dispatch(event)
 
@@ -460,28 +468,39 @@ class VIGIOnvifEvents:
         topic = event["topic"]
         data = event["data"]
 
-        event_type = None
-        for keyword, etype in TOPIC_KEYWORD_MAP.items():
-            if keyword.lower() in topic.lower():
-                event_type = etype
-                break
-
+        event_type = _event_type(topic)
         if event_type is None:
             _LOGGER.debug("Unmapped ONVIF topic (add to TOPIC_KEYWORD_MAP if needed): %s", topic)
             return
 
         # The rule topics carry one Is* field (IsMotion, IsPeople, …); MotionAlarm carries
-        # State. The camera sends false when the detection ends.
-        active = True  # default to active if no recognisable field present
-        for key, val in data.items():
-            if key.startswith("Is") or key in ("State", "Value"):
-                active = str(val).lower() in ("true", "1", "yes")
-                break
+        # State. The camera sends false when the detection ends. A message with data but
+        # no field we know is skipped rather than read as a detection.
+        flag = next(
+            (v for k, v in data.items() if k.startswith("Is") or k in ("State", "Value")), None
+        )
+        if flag is None and data:
+            _LOGGER.debug("ONVIF event with no state field skipped: %s %s", topic, data)
+            return
+        now = time.monotonic()
+        if flag is None or flag.lower() in ("true", "1", "yes"):
+            self._active_since[topic] = now
+        else:
+            self._active_since.pop(topic, None)
+        # Two topics can feed one sensor (CellMotionDetector and MotionAlarm both mean
+        # motion): it stays on while either does. A true whose false never came stops
+        # counting after AUTO_CLEAR_S, the same time the sensor would clear itself.
+        active = any(
+            now - since < AUTO_CLEAR_S
+            for t, since in self._active_since.items()
+            if _event_type(t) == event_type
+        )
 
-        # The Source block names the rule that fired. The C540V and S245 send one fixed
-        # name per detection type ("MyPeopleDetectorRule"), which says nothing about where.
-        rule = event["source"].get("Rule")
-        area = None if rule is None or _DEFAULT_RULE.fullmatch(rule) else rule
+        # The Source block names the rule that fired. The S245 sends one fixed name per
+        # detection type ("MyPeopleDetectorRule"), which says nothing about where.
+        src = event["source"]
+        rule = src.get("Rule") or src.get("RuleName") or src.get("RuleRegionID")
+        area = None if not rule or _DEFAULT_RULE.fullmatch(rule) else rule
 
         async_dispatcher_send(
             self._hass,

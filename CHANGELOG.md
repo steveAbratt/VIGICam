@@ -12,18 +12,33 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ## [0.7.6b1] - 2026-11-06
 
+> **After updating, automations triggered by a detection sensor may run several times per
+> visit.** Sensors now turn off when the camera ends a detection, and the camera often ends
+> and restarts one while someone moves about. Give notification, siren and recording
+> automations a cooldown. See *Binary Sensors — Detection Events* in USAGE for a
+> ready-made example. Your history graph and logbook will also show several short detections
+> where they used to show one.
+
 ### Fixed
 
-- **Detection sensors now turn off when the camera says the detection has ended.** VIGICam
-  read every ONVIF event as empty, because the cameras send `Value` before `Name` and the
-  parser only accepted the opposite order. So every "ended" message counted as another
-  detection, and sensors stayed on until 15 seconds after the last one. This affected motion,
-  person, tamper, intrusion, line crossing and smart event on every camera.
-  - A sensor now follows the camera exactly. One visit can turn it on several times, so
-    automations that should act once per visit need a cooldown (see USAGE).
-  - The Last Detection image is no longer grabbed again when a detection ends.
-  - The `detection_zone` attribute ignores the fixed rule names these cameras send
-    (`MyPeopleDetectorRule`) instead of reporting them as a zone.
+- **Motion, Person, Tamper, Intrusion, Line Crossing and Smart Detection now turn off when
+  the camera says the detection has ended.** VIGICam read every ONVIF event as empty. The
+  InSight S245 sends each field `Value` first, and the parser only accepted `Name` first.
+  As a result:
+  - Every "ended" message counted as another detection.
+  - Sensors stayed on until 15 seconds after the last message.
+
+  The C540V's firmware describes its events the same way but hasn't been checked live yet.
+  The parser now accepts either order.
+- **The Last Detection image is no longer grabbed again when a detection ends.**
+- **Motion now stays on while either of the camera's two motion events is on.** Before, one
+  of them ending could turn it off.
+- **`detection_zone` ignores the camera's fixed rule names** (`MyPeopleDetectorRule`) rather
+  than reporting them as a zone.
+
+**Testing this beta:** please report your camera model, and whether the detection sensors turn
+on and off as you'd expect. Tell us especially if one turns off while someone is still in
+view.
 
 ### Changed
 

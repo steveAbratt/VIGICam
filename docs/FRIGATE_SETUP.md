@@ -158,6 +158,8 @@ Pair them with Frigate's camera entity for a notification with a current picture
 ```yaml
 automation:
   alias: "Intrusion detected — notify with Frigate picture"
+  mode: single
+  max_exceeded: silent      # one notification per visit; see USAGE → Detection Events
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_intrusion
@@ -170,6 +172,7 @@ automation:
         message: "Zone intrusion detected"
         data:
           image: /api/camera_proxy/camera.front_gate   # your Frigate camera entity
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ---

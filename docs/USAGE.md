@@ -459,6 +459,8 @@ automation:
 ```yaml
 automation:
   alias: "Dim spotlight on person detection, then brighten on alarm trigger"
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_person_detected
@@ -475,6 +477,7 @@ automation:
         entity_id: light.vigi_c540v_spotlight
       data:
         brightness: 255   # level 4 — full brightness
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ---
@@ -660,18 +663,42 @@ These sensors fire in real time via an ONVIF event subscription that starts auto
 when the integration loads. They do not wait for the 30-second coordinator poll — events
 arrive within a second or two of the camera detecting them.
 
-A sensor turns off as soon as the camera reports the detection has ended. It follows the
-camera exactly. While someone moves about in view, the camera often ends and restarts a
-detection within seconds, so one visit can turn a sensor on several times. To act once per
-visit, give the automation a cooldown, for example a 2-minute `delay` with `mode: single`.
-The camera can't report an end for the sensors fed by the OpenAPI stream (Vehicle, Audio
-Anomaly, Loitering, Scene Change, Object Left or Taken, Area Entry, Area Exit). Those, and
-any event whose end doesn't arrive, turn off 15 seconds after the last event.
+A sensor turns off as soon as the camera reports the detection has ended (since 0.7.6). While
+someone moves about in view, the camera often ends and restarts a detection within seconds,
+so **one visit can turn a sensor on several times**, and the history graph shows several short
+detections where it used to show one. While a detection lasts, the camera repeats it about
+once a second. If neither a repeat nor an end arrives for 15 seconds, the sensor turns off
+anyway. The sensors fed by the OpenAPI stream (Vehicle, Audio Anomaly, Loitering, Scene
+Change, Object Left or Taken, Area Entry, Area Exit) never get an end from the camera. They
+always turn off 15 seconds after the last event.
+
+**To act once per visit** (a notification, the siren, a recording), end the automation with a
+cooldown. `mode: single` ignores triggers while it runs, and `max_exceeded: silent` stops
+each ignored trigger from writing a warning to the log:
+
+```yaml
+automation:
+  mode: single
+  max_exceeded: silent      # don't log a warning for the ignored triggers
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.vigi_c540v_person_detected
+      to: "on"
+  action:
+    - action: notify.mobile_app_your_phone
+      data:
+        message: "Someone is at the front door"
+    - delay: "00:02:00"     # cooldown: ignore re-triggers for 2 minutes
+```
+
+**To keep something on for the whole visit** (a light, say), turn it off when the sensor has
+been off for a while, not the moment it turns off:
+`trigger: [{platform: state, entity_id: binary_sensor.vigi_c540v_person_detected, to: "off", for: "00:01:00"}]`.
 
 When the camera's ONVIF event names the detection zone that fired, that name is exposed as a
-`detection_zone` attribute on the sensor. The VIGI C540V and InSight S245 send a fixed name
-for each detection type (for example `MyPeopleDetectorRule`) rather than a zone. VIGICam
-ignores those, so on these models the attribute doesn't appear.
+`detection_zone` attribute on the sensor. The InSight S245 sends a fixed name for each
+detection type (for example `MyPeopleDetectorRule`) rather than a zone. VIGICam ignores
+those, so on that model the attribute doesn't appear. Other models are unconfirmed.
 
 ### Motion
 
@@ -682,6 +709,8 @@ switch and Motion Sensitivity number entity.
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_motion
@@ -693,6 +722,7 @@ automation:
       data:
         filename: /config/www/clips/motion_{{ now().strftime('%Y%m%d_%H%M%S') }}.mp4
         duration: 10
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ### Person Detected
@@ -704,6 +734,8 @@ animals and vehicles do not trigger this. Controlled by Detection Person.
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_person_detected
@@ -715,6 +747,7 @@ automation:
         message: "Someone is at the front door"
         data:
           image: /api/camera_proxy/camera.vigi_c540v_stream
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ### Tamper
@@ -727,6 +760,8 @@ when someone tries to block the camera.
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_tamper
@@ -736,6 +771,7 @@ automation:
       data:
         title: "Camera Tamper Alert"
         message: "Front Gate camera has been covered or moved"
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ### Intrusion
@@ -748,6 +784,8 @@ until a zone is configured it simply stays Clear.
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_intrusion
@@ -760,6 +798,7 @@ automation:
     - action: switch.turn_off
       target:
         entity_id: switch.vigi_c540v_alarm_light
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ### Line Crossing
@@ -772,6 +811,8 @@ configured, this sensor will never fire — it is not the same as generic motion
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_line_crossing
@@ -782,6 +823,7 @@ automation:
         entity_id: camera.vigi_c540v_stream
         message: "Someone has crossed the driveway boundary"
         tts_engine: tts.cloud
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ### Smart Detection
@@ -801,6 +843,8 @@ level.
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_smart_detection
@@ -809,6 +853,7 @@ automation:
     - action: button.press
       target:
         entity_id: button.vigi_c540v_alarm_trigger
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ### Vehicle Detected *(requires [OpenAPI](#openapi--unlocking-additional-sensors))*
@@ -1053,6 +1098,8 @@ automation:
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_person_detected
@@ -1077,6 +1124,7 @@ automation:
             message: "Snapshot available"
             data:
               image: /api/image_proxy/image.vigi_c540v_last_detection
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ---
@@ -1131,6 +1179,8 @@ for this purpose.
 ```yaml
 automation:
   alias: "Save detection snapshot to gallery"
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_motion
@@ -1141,6 +1191,7 @@ automation:
         entity_id: camera.vigi_c540v_stream
       data:
         filename: /config/www/cameras/front_gate/{{ now().strftime('%Y%m%d_%H%M%S') }}.jpg
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 Point the Gallery Card at `/local/cameras/front_gate/` to browse the saved images on
@@ -1172,7 +1223,7 @@ The `source` attribute on the entity tells you which method was used.
 |---|---|---|
 | `detection_type` | `person`, `vehicle`, `motion` | Event that triggered the grab (from ONVIF or OpenAPI) |
 | `source` | `event_capture`, `rtsp_snapshot` | Which capture method was used |
-| `detection_zone` | `Area1` | Detection zone name from the camera, when it sends one (the C540V and S245 don't) |
+| `detection_zone` | | Detection zone name from the camera, when it sends one (the S245 doesn't) |
 | `event_label` | `Person`, `Smart Detection` | AI classification label (event capture only) |
 | `file_id` | `00010000000260` | Internal SD card file ID (event capture only) |
 
@@ -1360,6 +1411,8 @@ the previous upload is replaced. Use different slots if you need both at the sam
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_person_detected
@@ -1371,6 +1424,7 @@ automation:
         url: http://192.168.1.x:8123/media/local/there_you_are.wav
         times: 2
         pause: 1.0
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ---
@@ -1452,6 +1506,8 @@ trigger it cheaply on every event without re-uploading:
 
 ```yaml
 automation:
+  mode: single
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_motion
@@ -1462,6 +1518,7 @@ automation:
         entity_id: camera.vigi_c540v_stream
         slot: 102
         times: 1
+    - delay: "00:02:00"   # cooldown: ignore re-triggers for 2 minutes
 ```
 
 ---
