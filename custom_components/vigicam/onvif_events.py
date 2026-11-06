@@ -51,6 +51,7 @@ def _parse_termination_time(resp: str) -> datetime | None:
 
 _NOTIFICATION = re.compile(r"<(?:\w+:)?NotificationMessage\b.*?</(?:\w+:)?NotificationMessage>", re.DOTALL)
 _TOPIC = re.compile(r"<(?:\w+:)?Topic\b[^>]*>(.*?)</(?:\w+:)?Topic>", re.DOTALL)
+_OPERATION = re.compile(r"""PropertyOperation\s*=\s*["'](\w+)""")
 _SECTION = re.compile(r"<(?:\w+:)?(Source|Data)\b[^>]*>(.*?)</(?:\w+:)?\1>", re.DOTALL)
 _SIMPLE_ITEM = re.compile(r"<(?:\w+:)?SimpleItem\b([^>]*)>")
 _ATTR = re.compile(r"""\b(Name|Value)\s*=\s*(["'])(.*?)\2""", re.DOTALL)
@@ -58,8 +59,7 @@ _DEFAULT_RULE = re.compile(r"My\w+DetectorRule")
 
 
 def _simple_items(block: str) -> dict[str, str]:
-    # Attribute order is free in XML. The S245's notifications put Value before Name, while
-    # other items from the same firmware put Name first, so neither order can be assumed.
+    # The S245 sends Value before Name; XML allows either order, so neither is assumed.
     items = {}
     for attrs in _SIMPLE_ITEM.findall(block):
         a = {k: html.unescape(v) for k, _q, v in _ATTR.findall(attrs)}
@@ -76,8 +76,10 @@ def parse_notifications(resp: str) -> list[dict[str, Any]]:
         if not topic_m:
             continue
         sections = dict(_SECTION.findall(msg))
+        op = _OPERATION.search(msg)
         events.append({
             "topic": "".join(topic_m.group(1).split()),
+            "operation": op.group(1) if op else None,
             "source": _simple_items(sections.get("Source", "")),
             "data": _simple_items(sections.get("Data", "")),
         })
@@ -150,7 +152,10 @@ class VIGIOnvifEvents:
         self._task: asyncio.Task | None = None
         self._session: aiohttp.ClientSession | None = None
         self._stop_task: asyncio.Future | None = None
-        self._active_since: dict[str, float] = {}  # topic → when it last reported true
+        # (topic, source items) → (event type, when it last reported true). ONVIF identifies
+        # a property by its topic and Source, so two zones on one topic are tracked apart.
+        self._active_since: dict[tuple, tuple[str, float]] = {}
+        self._skip_warned: set[tuple] = set()
 
     @property
     def is_connected(self) -> bool:
@@ -342,6 +347,7 @@ class VIGIOnvifEvents:
         # immediately tear it down again.
         self._consecutive_timeouts = 0
         self._timeout_warned = False
+        self._active_since.clear()
         if not address or self._session is None or self._session.closed:
             return
         try:
@@ -473,37 +479,52 @@ class VIGIOnvifEvents:
             _LOGGER.debug("Unmapped ONVIF topic (add to TOPIC_KEYWORD_MAP if needed): %s", topic)
             return
 
+        if event["operation"] == "Deleted":
+            return
         # The rule topics carry one Is* field (IsMotion, IsPeople, …); MotionAlarm carries
-        # State. The camera sends false when the detection ends. A message with data but
-        # no field we know is skipped rather than read as a detection.
+        # State. The camera sends false when the detection ends. A message with data but no
+        # field we know is skipped rather than guessed at, and named once at warning level.
+        # One with no readable data at all still counts as a detection: that is how every
+        # camera worked until 0.7.6, and models nobody has captured may still depend on it.
         flag = next(
             (v for k, v in data.items() if k.startswith("Is") or k in ("State", "Value")), None
         )
         if flag is None and data:
-            _LOGGER.debug("ONVIF event with no state field skipped: %s %s", topic, data)
+            seen = (topic, frozenset(data))
+            if seen not in self._skip_warned:
+                self._skip_warned.add(seen)
+                _LOGGER.warning(
+                    "ONVIF event from %s skipped, no state field: %s %s", self._ip, topic, data
+                )
             return
-        now = time.monotonic()
-        if flag is None or flag.lower() in ("true", "1", "yes"):
-            self._active_since[topic] = now
+        src = event["source"]
+        key = (topic, frozenset(src.items()))
+        is_true = flag is None or flag.lower() in ("true", "1", "yes")
+        if is_true:
+            self._active_since[key] = (event_type, time.monotonic())
         else:
-            self._active_since.pop(topic, None)
-        # Two topics can feed one sensor (CellMotionDetector and MotionAlarm both mean
-        # motion): it stays on while either does. A true whose false never came stops
-        # counting after AUTO_CLEAR_S, the same time the sensor would clear itself.
-        active = any(
-            now - since < AUTO_CLEAR_S
-            for t, since in self._active_since.items()
-            if _event_type(t) == event_type
-        )
+            self._active_since.pop(key, None)
+            # Another zone or topic of this type is still on (CellMotionDetector and
+            # MotionAlarm both mean motion): this end changes nothing, so send nothing.
+            if self._type_active(event_type):
+                return
 
         # The Source block names the rule that fired. The S245 sends one fixed name per
         # detection type ("MyPeopleDetectorRule"), which says nothing about where.
-        src = event["source"]
         rule = src.get("Rule") or src.get("RuleName") or src.get("RuleRegionID")
         area = None if not rule or _DEFAULT_RULE.fullmatch(rule) else rule
 
         async_dispatcher_send(
             self._hass,
             SIGNAL_VIGICAM_EVENT.format(self._entry_id),
-            {"type": event_type, "active": active, "area": area},
+            {"type": event_type, "active": is_true, "area": area},
+        )
+
+    def _type_active(self, event_type: str) -> bool:
+        # A true whose false never came stops counting after AUTO_CLEAR_S, the same time
+        # the sensor would clear itself.
+        now = time.monotonic()
+        return any(
+            etype == event_type and now - since < AUTO_CLEAR_S
+            for etype, since in self._active_since.values()
         )

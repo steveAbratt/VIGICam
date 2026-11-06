@@ -667,7 +667,7 @@ A sensor turns off as soon as the camera reports the detection has ended (since 
 someone moves about in view, the camera often ends and restarts a detection within seconds,
 so **one visit can turn a sensor on several times**, and the history graph shows several short
 detections where it used to show one. While a detection lasts, the camera repeats it about
-once a second. If neither a repeat nor an end arrives for 15 seconds, the sensor turns off
+once a second (seen on the InSight S245). If neither a repeat nor an end arrives for 15 seconds, the sensor turns off
 anyway. The sensors fed by the OpenAPI stream (Vehicle, Audio Anomaly, Loitering, Scene
 Change, Object Left or Taken, Area Entry, Area Exit) never get an end from the camera. They
 always turn off 15 seconds after the last event.
@@ -1761,7 +1761,8 @@ TTS engine: `tts.cloud`
 Language: `en-GB`
 
 This creates a spoken alert with the time of detection, played immediately through the
-camera's speaker every time motion is detected.
+camera's speaker every time motion is detected. The blueprint has no cooldown: since 0.7.6 a
+detection can start several times in one visit, so the announcement can repeat.
 
 > **Tip:** Add a condition to the automation (after importing the blueprint) to prevent
 > announcements at night or when you are home — use the HA automation editor to add
@@ -1833,7 +1834,8 @@ Audio file URL: `http://192.168.1.x:8123/media/local/there_you_are.wav`
 Repeat count: `2`
 Pause: `1`
 
-This plays the clip twice every time a person is detected.
+This plays the clip twice every time a person is detected. The blueprint has no cooldown, and
+since 0.7.6 a detection can start several times in one visit, so the clip can repeat.
 
 ---
 

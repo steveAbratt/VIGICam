@@ -16,23 +16,23 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 > visit.** Sensors now turn off when the camera ends a detection, and the camera often ends
 > and restarts one while someone moves about. Give notification, siren and recording
 > automations a cooldown. See *Binary Sensors — Detection Events* in USAGE for a
-> ready-made example. Your history graph and logbook will also show several short detections
+> ready-made example. The Speak and Play File blueprints have no cooldown of their own yet: on a
+> detection trigger they can repeat within a visit. Your history graph and logbook will also show several short detections
 > where they used to show one.
 
 ### Fixed
 
 - **Motion, Person, Tamper, Intrusion, Line Crossing and Smart Detection now turn off when
-  the camera says the detection has ended.** VIGICam read every ONVIF event as empty. The
-  InSight S245 sends each field `Value` first, and the parser only accepted `Name` first.
+  the camera says the detection has ended.** On the InSight S245, VIGICam read every ONVIF
+  event as empty, because the camera sends each field `Value` first and the parser only
+  accepted `Name` first.
   As a result:
   - Every "ended" message counted as another detection.
   - Sensors stayed on until 15 seconds after the last message.
 
-  The C540V's firmware describes its events the same way but hasn't been checked live yet.
-  The parser now accepts either order.
+  The C540V hasn't been checked yet. The parser now accepts either order.
 - **The Last Detection image is no longer grabbed again when a detection ends.**
-- **Motion now stays on while either of the camera's two motion events is on.** Before, one
-  of them ending could turn it off.
+- **Motion follows both of the camera's motion events** and stays on while either is on.
 - **`detection_zone` ignores the camera's fixed rule names** (`MyPeopleDetectorRule`) rather
   than reporting them as a zone.
 

@@ -103,19 +103,45 @@ def test_unknown_data_field_is_not_a_detection(monkeypatch):
     assert _dispatched(_response(_message(_PEOPLE, "r", "Confidence", "90")), monkeypatch) == []
 
 
-def test_no_data_still_counts_as_a_detection(monkeypatch):
+def test_no_readable_data_still_counts_as_a_detection(monkeypatch):
     sent = _dispatched(_response(_message(_PEOPLE, "r", "", "")), monkeypatch)
     assert [(p["type"], p["active"]) for p in sent] == [("person", True)]
+
+
+def test_deleted_property_is_ignored(monkeypatch):
+    msg = _message(_PEOPLE, "r", "IsPeople", "true").replace('"Initialized"', '"Deleted"')
+    assert _dispatched(_response(msg), monkeypatch) == []
 
 
 def test_motion_stays_on_while_either_motion_topic_is(monkeypatch):
     resp = _response(
         _message(_CELL, "MyCellMotionDetectorRule", "IsMotion", "true"),
         _message(_ALARM, "vsconf", "State", "true", rule_item="Source"),
-        _message(_ALARM, "vsconf", "State", "false", rule_item="Source"),
+        _message(_ALARM, "vsconf", "State", "false", rule_item="Source"),  # changes nothing
         _message(_CELL, "MyCellMotionDetectorRule", "IsMotion", "false"),
     )
-    assert [p["active"] for p in _dispatched(resp, monkeypatch)] == [True, True, True, False]
+    assert [p["active"] for p in _dispatched(resp, monkeypatch)] == [True, True, False]
+
+
+def test_two_zones_on_one_topic_are_tracked_apart(monkeypatch):
+    intrusion = "tns1:RuleEngine/IntrusionDetector/Intrusion"
+    resp = _response(
+        _message(intrusion, "Area1", "IsIntrusion", "true"),
+        _message(intrusion, "Area2", "IsIntrusion", "true"),
+        _message(intrusion, "Area1", "IsIntrusion", "false"),  # Area2 still occupied
+        _message(intrusion, "Area2", "IsIntrusion", "false"),
+    )
+    assert [p["active"] for p in _dispatched(resp, monkeypatch)] == [True, True, False]
+
+
+def test_a_true_whose_end_never_came_stops_counting(monkeypatch):
+    clock = iter([0.0, 20.0])  # the true is stamped, then the end checks 20 s later
+    monkeypatch.setattr(onvif_events.time, "monotonic", lambda: next(clock))
+    resp = _response(
+        _message(_CELL, "MyCellMotionDetectorRule", "IsMotion", "true"),
+        _message(_ALARM, "vsconf", "State", "false", rule_item="Source"),  # 20 s later
+    )
+    assert [p["active"] for p in _dispatched(resp, monkeypatch)] == [True, False]
 
 
 def test_default_rule_name_is_not_a_zone_but_a_named_one_is(monkeypatch):

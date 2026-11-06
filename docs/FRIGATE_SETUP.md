@@ -159,7 +159,7 @@ Pair them with Frigate's camera entity for a notification with a current picture
 automation:
   alias: "Intrusion detected — notify with Frigate picture"
   mode: single
-  max_exceeded: silent      # one notification per visit; see USAGE → Detection Events
+  max_exceeded: silent      # at most one notification every 2 minutes; see USAGE → Detection Events
   trigger:
     - platform: state
       entity_id: binary_sensor.vigi_c540v_intrusion
