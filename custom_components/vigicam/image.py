@@ -154,6 +154,9 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             password=self._entry_data["password"],
             camera=self._entry_data["api"],
             ffmpeg_bin=ffmpeg_bin,
+            # Events that save no capture (sounds, some smart events) would otherwise
+            # re-show the previous detection's image as new.
+            known_file_id=self._attr_extra_state_attributes.get("file_id"),
         )
         if result:
             self._cached_image = result["jpeg"]
@@ -174,7 +177,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             )
         else:
             _LOGGER.debug(
-                "No event image for %s — Upload Capture enabled in camera event settings?",
+                "No new event image for %s — the event saved no capture, or Upload "
+                "Capture is off in the camera's event settings",
                 event_type,
             )
 

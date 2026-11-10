@@ -10,6 +10,25 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.6b2] - 2026-11-10
+
+### Fixed
+
+- **Turning off the Spotlight no longer changes your Night Vision Mode.** Before, turning
+  the spotlight off always set the camera to Auto IR (IR Always On on older firmware), even
+  when the spotlight was already off. An automation that turned the spotlight off "just in
+  case" switched night vision back on every time it ran, even if you'd set it to Off.
+  - Turning off a spotlight that's already off now does nothing.
+  - Turning off a spotlight that's on puts back the IR or Off mode you had before. Auto IR
+    (or IR Always On) is used only if that isn't known, for example after a restart while
+    the spotlight was on.
+- **Last Detection no longer re-shows an old image as a new detection.** On cameras with
+  event image capture, an event that saved no capture (a sound, or some smart events) made
+  Last Detection fetch the camera's newest saved image, the previous detection's, and show
+  it again with a new time. A dashboard or automation that reacts to the image changing saw
+  a detection that wasn't there. Last Detection now changes only when the camera has saved
+  a new image.
+
 ## [0.7.6b1] - 2026-11-06
 
 > **After updating, automations triggered by a detection sensor may run several times per

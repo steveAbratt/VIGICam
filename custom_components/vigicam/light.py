@@ -3,7 +3,11 @@
 Replaces the separate spotlight_intensity number entity. The camera's 1–4
 intensity scale is mapped linearly to HA's 1–255 brightness range.
 
-Turn on  → white light on; turn off → back to IR.
+Turn on  → white light on; turn off → back to the last IR or off mode the camera
+was set to (Auto IR if that isn't known, e.g. after a restart). Colour modes are
+never put back, since they would leave the white light in use. Turning off a
+spotlight that is already off writes nothing, so it can't override the
+night-vision mode chosen on the camera or in the select.
 
 Which field carries that depends on firmware. Older cameras take it on the
 writable `night_vision_mode` ("wtl_night_vision" / "inf_night_vision"). Newer
@@ -29,6 +33,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    PRE_NIGHT_VISION_WHITE_LED_MODES,
     PRE_SPOTLIGHT_OFF_MODE,
     PRE_SPOTLIGHT_ON_MODE,
 )
@@ -38,6 +43,8 @@ _LOGGER = logging.getLogger(__name__)
 
 _SPOTLIGHT_MODE = "wtl_night_vision"
 _FALLBACK_MODE = "inf_night_vision"
+# Legacy modes that use the white light; turn off never puts these back.
+_WHITE_MODES = frozenset({_SPOTLIGHT_MODE, "human_triggered_color"})
 
 # Camera intensity scale: 1 (dim) – 4 (full)
 _CAM_MIN = 1
@@ -76,6 +83,10 @@ class VIGISpotlight(VIGIEntity, LightEntity):
         super().__init__(coordinator, entry_data)
         self._optimistic_on: bool | None = None
         self._optimistic_brightness: int | None = None
+        # The last non-white night-vision setting, put back by turn off.
+        self._prev_mode: str | None = None
+        self._prev_pre_mode: str | None = None
+        self._remember_mode()
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -108,6 +119,15 @@ class VIGISpotlight(VIGIEntity, LightEntity):
         else:
             await api.set_night_vision_mode(legacy_mode)
 
+    def _remember_mode(self) -> None:
+        image_switch = (self.coordinator.data or {}).get("image_switch", {})
+        mode = image_switch.get("night_vision_mode")
+        pre_mode = image_switch.get("pre_night_vision_mode")
+        if mode and mode not in _WHITE_MODES:
+            self._prev_mode = mode
+        if pre_mode and pre_mode not in PRE_NIGHT_VISION_WHITE_LED_MODES:
+            self._prev_pre_mode = pre_mode
+
     def _clear_optimistic(self) -> None:
         self._optimistic_on = None
         self._optimistic_brightness = None
@@ -136,12 +156,16 @@ class VIGISpotlight(VIGIEntity, LightEntity):
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
+        if not self.is_on:
+            return
         self._optimistic_on = False
         self.async_write_ha_state()
 
         try:
             await self._set_mode(
-                self._entry_data["api"], _FALLBACK_MODE, PRE_SPOTLIGHT_OFF_MODE
+                self._entry_data["api"],
+                self._prev_mode or _FALLBACK_MODE,
+                self._prev_pre_mode or PRE_SPOTLIGHT_OFF_MODE,
             )
         except Exception as exc:
             self._clear_optimistic()
@@ -152,4 +176,5 @@ class VIGISpotlight(VIGIEntity, LightEntity):
     def _handle_coordinator_update(self) -> None:
         """Clear optimistic state on coordinator update."""
         self._clear_optimistic()
+        self._remember_mode()
         super()._handle_coordinator_update()

@@ -309,19 +309,23 @@ async def fetch_latest_event_image(
     password: str,
     camera: VIGICamera,
     ffmpeg_bin: str = "ffmpeg",
+    known_file_id: str | None = None,
 ) -> dict | None:
     """Fetch the most recent event image and return a result dict, or None.
 
     Returns:
         {"jpeg": bytes, "event_type": int, "label": str, "file_id": str, "timestamp": str}
     Returns None if event image capture is disabled, the SD card is absent,
-    or any network/decode step fails.
+    any network/decode step fails, or the newest image is still known_file_id
+    (the event saved no capture, so there is nothing new to show).
     """
     frames = await camera.get_event_images(days_back=1, max_items=5)
     if not frames:
         return None
 
     frame = frames[0]
+    if known_file_id is not None and frame["file_id"] == known_file_id:
+        return None
     ssl_ctx = _make_ssl_ctx(camera.legacy_tls)
     h264 = await _ws_download_h264(
         ip, username, password, ssl_ctx,
