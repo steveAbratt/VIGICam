@@ -3,11 +3,11 @@
 Replaces the separate spotlight_intensity number entity. The camera's 1–4
 intensity scale is mapped linearly to HA's 1–255 brightness range.
 
-Turn on  → white light on; turn off → back to the last IR or off mode the camera
-was set to (Auto IR if that isn't known, e.g. after a restart). Colour modes are
-never put back, since they would leave the white light in use. Turning off a
-spotlight that is already off writes nothing, so it can't override the
-night-vision mode chosen on the camera or in the select.
+Turn on  → white light on; turn off → back to the last night-vision mode the
+camera was set to that doesn't use the white light (Auto IR / IR Always On if that
+isn't known, e.g. after a restart while it was on). Off always writes, but when the
+spotlight is already off the remembered mode is the current one, so nothing changes
+and the mode chosen on the camera or in the select is kept.
 
 Which field carries that depends on firmware. Older cameras take it on the
 writable `night_vision_mode` ("wtl_night_vision" / "inf_night_vision"). Newer
@@ -156,8 +156,8 @@ class VIGISpotlight(VIGIEntity, LightEntity):
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
-        if not self.is_on:
-            return
+        # No "already off" shortcut: is_on can be up to a poll stale, and on newer
+        # firmware night_vision_mode doesn't show a white mode that isn't lit right now.
         self._optimistic_on = False
         self.async_write_ha_state()
 
@@ -174,7 +174,7 @@ class VIGISpotlight(VIGIEntity, LightEntity):
             await self.coordinator.async_request_refresh()
 
     def _handle_coordinator_update(self) -> None:
-        """Clear optimistic state on coordinator update."""
+        """Clear optimistic state and remember the mode turn off puts back."""
         self._clear_optimistic()
         self._remember_mode()
         super()._handle_coordinator_update()

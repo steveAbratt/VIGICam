@@ -23,6 +23,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 import os
 import ssl
 import struct
@@ -33,6 +34,8 @@ from .api import make_ssl_context
 
 if TYPE_CHECKING:
     from .api import VIGICamera
+
+_LOGGER = logging.getLogger(__name__)
 
 # event_type integers returned by get_media_list for media_type=2 (event images).
 # Confirmed on S245 firmware 3.1.1: 2=Person, 27=Smart Detection (catch-all).
@@ -325,6 +328,10 @@ async def fetch_latest_event_image(
 
     frame = frames[0]
     if known_file_id is not None and frame["file_id"] == known_file_id:
+        _LOGGER.debug(
+            "Newest event image is still %s (type %s, start %s); no new capture",
+            frame["file_id"], frame.get("event_type"), frame["start_time"],
+        )
         return None
     ssl_ctx = _make_ssl_ctx(camera.legacy_tls)
     h264 = await _ws_download_h264(

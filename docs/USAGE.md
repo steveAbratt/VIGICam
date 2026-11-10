@@ -416,18 +416,20 @@ two always move together.
 | | Older firmware | Newer firmware (C340 / C350 class) |
 |---|---|---|
 | Spotlight **on** | Spotlight Always On | White LED Always On |
-| Spotlight **off** | the last IR or off mode, else IR Always On | the last IR or off mode, else **Auto IR** |
+| Spotlight **off** | your previous mode, else IR Always On | your previous mode, else **Auto IR** |
 
-Off puts back the night vision mode the camera was on before, as long as it was an IR mode or
-Off. If you had *Off* selected, the camera goes back to *Off*. Colour modes are never put back,
-since they would keep the white light in use. When the earlier mode isn't known, for example
-after Home Assistant restarts while the spotlight is on, off falls back to an IR mode, so you
-keep a working camera in the dark instead of a blind one. On newer firmware that's *Auto IR*,
-not *IR Always On*.
+Off puts back the Night Vision Mode you had before, unless that mode uses the white light
+(Spotlight Always On, Colour, White LED Always On, Auto Color, Human/Vehicle-Triggered
+Full-Color). In that case, or when the earlier mode isn't known (for example after Home
+Assistant restarts while the spotlight is on), off falls back to an IR mode, so you keep a
+working camera in the dark instead of a blind one. On newer firmware that's *Auto IR*, not
+*IR Always On*.
 
-Since 0.7.6b2, turning off a spotlight that's already off does nothing. Before that, it
-switched the camera to the IR mode in the table, so an automation that turned the spotlight
-off "just in case" kept overriding the mode you had chosen.
+Since 0.7.6b2, turning off a spotlight that's already off keeps the mode you chose, *Off*
+included. Before that, it always switched the camera to the IR mode in the table, so an
+automation that turned the spotlight off "just in case" kept overriding your choice. If you
+change the mode on the camera or in the VIGI app, Home Assistant sees it within 30 seconds;
+a spotlight off sent sooner than that puts back the mode from before your change.
 
 The brightness slider maps the spotlight's 4 intensity levels (1–4) to the HA range
 (1–255) so standard HA light controls work as expected. Brightness 1–63 is level 1, 64–127 level 2, 128–191 level 3 and
@@ -1159,7 +1161,8 @@ those cameras Last Detection still updates on sounds, and the option has no effe
 
 **On cameras with event image capture, an event that saves no capture leaves the image as
 it is.** Since 0.7.6b2 the image updates only when the camera has saved a new one; before,
-such an event showed the previous detection's image again, with a new time.
+such an event showed the previous detection's image again, with a new time. The first event
+after Home Assistant restarts can still show the last saved image once.
 
 The image's `detection_type` attribute says what caused it (`person`, `vehicle`,
 `smart_event`…). It describes the image as it is, so it can't bring back an earlier

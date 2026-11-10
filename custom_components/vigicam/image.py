@@ -148,16 +148,22 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
         except Exception:
             ffmpeg_bin = "ffmpeg"
-        result = await fetch_latest_event_image(
-            ip=self._entry_data["ip"],
-            username=self._entry_data["username"],
-            password=self._entry_data["password"],
-            camera=self._entry_data["api"],
-            ffmpeg_bin=ffmpeg_bin,
-            # Events that save no capture (sounds, some smart events) would otherwise
-            # re-show the previous detection's image as new.
-            known_file_id=self._attr_extra_state_attributes.get("file_id"),
-        )
+        # Some events save no capture; without known_file_id they re-showed the
+        # previous detection's image as new. One retry covers a capture that is
+        # slow to reach the card.
+        for attempt in range(2):
+            if attempt:
+                await asyncio.sleep(_POST_EVENT_DELAY_SF)
+            result = await fetch_latest_event_image(
+                ip=self._entry_data["ip"],
+                username=self._entry_data["username"],
+                password=self._entry_data["password"],
+                camera=self._entry_data["api"],
+                ffmpeg_bin=ffmpeg_bin,
+                known_file_id=self._attr_extra_state_attributes.get("file_id"),
+            )
+            if result:
+                break
         if result:
             self._cached_image = result["jpeg"]
             self._image_last_updated = datetime.now(timezone.utc)
