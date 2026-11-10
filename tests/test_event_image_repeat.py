@@ -30,7 +30,7 @@ def _fetch(known_file_id, monkeypatch):
 
 
 def test_same_file_as_last_time_is_not_fetched(monkeypatch):
-    assert _fetch("00010000201735", monkeypatch) == (None, 0)
+    assert _fetch("00010000201735", monkeypatch) == (event_image.NO_NEW_IMAGE, 0)
 
 
 def test_new_file_is_fetched(monkeypatch):

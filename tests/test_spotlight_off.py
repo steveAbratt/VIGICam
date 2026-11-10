@@ -106,9 +106,9 @@ def test_newer_firmware_unknown_previous_mode_falls_back_to_auto_ir():
     assert api.writes == [("pre", "auto_ir")]
 
 
-def test_legacy_colour_mode_is_left_for_the_previous_ir_mode():
+def test_legacy_spotlight_on_goes_back_to_the_previous_mode():
     spot, coordinator, api = _spotlight({"night_vision_mode": "md_night_vision"})
-    _poll(spot, coordinator, {"night_vision_mode": "human_triggered_color"})
+    _poll(spot, coordinator, {"night_vision_mode": "wtl_night_vision"})
     asyncio.run(spot.async_turn_off())
     assert api.writes == [("legacy", "md_night_vision")]
 
@@ -117,3 +117,23 @@ def test_legacy_unknown_previous_mode_falls_back_to_ir_always_on():
     spot, _, api = _spotlight({"night_vision_mode": "wtl_night_vision"})
     asyncio.run(spot.async_turn_off())
     assert api.writes == [("legacy", "inf_night_vision")]
+
+
+def test_newer_firmware_triggered_colour_mode_not_lit_is_kept():
+    # Human/Vehicle-Triggered Full-Color reports md_night_vision, so the spotlight shows off.
+    spot, _, api = _spotlight({"pre_night_vision_mode": "human_triggered_color", "night_vision_mode": "md_night_vision"})
+    asyncio.run(spot.async_turn_off())
+    assert api.writes == []
+
+
+def test_legacy_triggered_colour_mode_is_kept():
+    spot, _, api = _spotlight({"night_vision_mode": "human_triggered_color"})
+    asyncio.run(spot.async_turn_off())
+    assert api.writes == []
+
+
+def test_newer_firmware_auto_colour_lit_is_turned_off():
+    spot, coordinator, api = _spotlight({"pre_night_vision_mode": "auto_ir", "night_vision_mode": "inf_night_vision"})
+    _poll(spot, coordinator, {"pre_night_vision_mode": "auto_color", "night_vision_mode": "wtl_night_vision"})
+    asyncio.run(spot.async_turn_off())
+    assert api.writes == [("pre", "auto_ir")]

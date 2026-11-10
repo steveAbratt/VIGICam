@@ -5,9 +5,10 @@ intensity scale is mapped linearly to HA's 1–255 brightness range.
 
 Turn on  → white light on; turn off → back to the last night-vision mode the
 camera was set to that doesn't use the white light (Auto IR / IR Always On if that
-isn't known, e.g. after a restart while it was on). Off always writes, but when the
-spotlight is already off the remembered mode is the current one, so nothing changes
-and the mode chosen on the camera or in the select is kept.
+isn't known, e.g. after a restart while it was on). When the spotlight is already
+off the remembered mode is the current one, so nothing changes. A motion-triggered
+or auto colour mode that isn't lit is a standing choice, not "the light is on", so
+off leaves it alone.
 
 Which field carries that depends on firmware. Older cameras take it on the
 writable `night_vision_mode` ("wtl_night_vision" / "inf_night_vision"). Newer
@@ -45,6 +46,9 @@ _SPOTLIGHT_MODE = "wtl_night_vision"
 _FALLBACK_MODE = "inf_night_vision"
 # Legacy modes that use the white light; turn off never puts these back.
 _WHITE_MODES = frozenset({_SPOTLIGHT_MODE, "human_triggered_color"})
+# Colour modes, legacy or newer, that light up only when triggered; turn off keeps
+# them while the light isn't lit.
+_TRIGGERED_COLOUR_MODES = frozenset({"human_triggered_color", "auto_color"})
 
 # Camera intensity scale: 1 (dim) – 4 (full)
 _CAM_MIN = 1
@@ -156,8 +160,13 @@ class VIGISpotlight(VIGIEntity, LightEntity):
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
-        # No "already off" shortcut: is_on can be up to a poll stale, and on newer
-        # firmware night_vision_mode doesn't show a white mode that isn't lit right now.
+        # No general "already off" shortcut: is_on can be up to a poll stale, and on
+        # newer firmware night_vision_mode doesn't show an always-on white mode that
+        # isn't lit right now (daylight). Only a triggered colour mode is kept.
+        image_switch = (self.coordinator.data or {}).get("image_switch", {})
+        chosen = image_switch.get("pre_night_vision_mode", image_switch.get("night_vision_mode"))
+        if not self.is_on and chosen in _TRIGGERED_COLOUR_MODES:
+            return
         self._optimistic_on = False
         self.async_write_ha_state()
 

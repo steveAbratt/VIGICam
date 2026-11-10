@@ -16,22 +16,27 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ### Fixed
 
-- **Turning off the Spotlight no longer changes your Night Vision Mode.** Before, turning
+- **Turning off the Spotlight no longer resets your Night Vision Mode.** Before, turning
   the spotlight off always set the camera to Auto IR (IR Always On on older firmware), even
   when the spotlight was already off. An automation that turned the spotlight off "just in
   case" switched night vision back on every time it ran, even if you'd set it to Off.
-  - Turning off now puts back the mode you had before, *Off* included, so a spotlight
-    that's already off keeps its mode.
-  - Modes that use the white light, such as Human/Vehicle-Triggered Full-Color, are never
-    put back. Auto IR (or IR Always On) is used instead, and also when the earlier mode
-    isn't known, for example after a restart while the spotlight was on.
+  - Turning off now puts back the mode you had before, so a spotlight that's already off
+    keeps its mode (*Off* included, on newer firmware).
+  - Colour modes that light up only when triggered (Colour (motion-triggered), Auto Color,
+    Human/Vehicle-Triggered Full-Color) are kept while the light isn't lit.
+  - Modes that keep the white light on are never put back. Auto IR (or IR Always On) is used
+    instead, and also when the earlier mode isn't known, for example after a restart while
+    the spotlight was on.
+  - If an automation used Spotlight off to switch night vision back to IR, it now restores
+    your previous mode instead, which may be Off. Set Night Vision Mode in the automation if
+    you want a fixed mode.
 - **Last Detection no longer re-shows an old image as a new detection.** On cameras with
   event image capture, an event that saved no capture made Last Detection fetch the
   camera's newest saved image, the previous detection's, and show it again with a new time.
   A dashboard or automation that reacts to the image changing saw a detection that wasn't
   there. Last Detection now changes only when the camera has saved a new image; it checks
   once more a few seconds later in case the capture is slow to save. The first event after
-  a restart can still show the last saved image once.
+  a restart can still show the last saved image once, with a new time.
 
 ## [0.7.6b1] - 2026-11-06
 

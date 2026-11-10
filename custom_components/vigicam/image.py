@@ -39,7 +39,7 @@ from .const import (
 from . import communicate_or_kill
 from .entity import VIGIEntity
 from .onvif_events import SIGNAL_VIGICAM_EVENT
-from .event_image import fetch_latest_event_image
+from .event_image import NO_NEW_IMAGE, fetch_latest_event_image
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,6 +73,9 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._cached_image: bytes | None = None
         self._image_last_updated: datetime | None = None
         self._grabbing = False
+        # The newest event, so a grab still running when a later one arrives labels
+        # the image with the event that most likely saved it.
+        self._latest_event: dict | None = None
         self._unsub_dispatcher: object = None
         self._attr_extra_state_attributes: dict = {}
         self._has_event_capture: bool = entry_data.get("has_event_capture", False)
@@ -124,6 +127,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             self._start_grab(event)
 
     def _start_grab(self, event: dict) -> None:
+        self._latest_event = event
         if self._grabbing:
             return
         self._grabbing = True
@@ -141,8 +145,6 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             self._grabbing = False
 
     async def _grab_event_image(self, event: dict) -> None:
-        event_type = event["type"]
-        area = event.get("area")
         await asyncio.sleep(_POST_EVENT_DELAY_SF)
         try:
             ffmpeg_bin = get_ffmpeg_manager(self.hass).binary
@@ -162,9 +164,14 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
                 ffmpeg_bin=ffmpeg_bin,
                 known_file_id=self._attr_extra_state_attributes.get("file_id"),
             )
-            if result:
+            if result is not NO_NEW_IMAGE:
                 break
-        if result:
+        event = self._latest_event or event
+        event_type = event["type"]
+        area = event.get("area")
+        if result is NO_NEW_IMAGE:
+            _LOGGER.debug("No new event image for %s; the event saved no capture", event_type)
+        elif result:
             self._cached_image = result["jpeg"]
             self._image_last_updated = datetime.now(timezone.utc)
             attrs: dict = {
@@ -183,8 +190,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             )
         else:
             _LOGGER.debug(
-                "No new event image for %s — the event saved no capture, or Upload "
-                "Capture is off in the camera's event settings",
+                "No event image for %s — Upload Capture enabled in camera event "
+                "settings, and the image download working?",
                 event_type,
             )
 
