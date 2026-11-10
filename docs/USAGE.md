@@ -359,7 +359,7 @@ Switches how the camera handles low-light conditions. **The options you see depe
 camera's firmware** — there are two generations, and VIGICam builds the list from what your
 camera actually reports.
 
-**Older firmware** (C540V, S245 and similar — a single writable `night_vision_mode`):
+**Older firmware** (a single writable `night_vision_mode`):
 
 | Option | What it does |
 |--------|-------------|
@@ -369,8 +369,8 @@ camera actually reports.
 | Spotlight Always On | White-light spotlight always on — colour image in the dark |
 | Auto Switch | Camera switches automatically between day and night profiles |
 
-**Newer firmware** (C340, C340i, C350 and similar — a writable `pre_night_vision_mode`
-alongside a read-only status field):
+**Newer firmware** (C340, C340i, C350, and current C540V and S245 firmware — a writable
+`pre_night_vision_mode` alongside a read-only status field):
 
 | Option | What it does |
 |--------|-------------|
@@ -426,14 +426,14 @@ one of those, or isn't known (for example after Home Assistant restarts while th
 on), off falls back to an IR mode, so you keep a working camera in the dark instead of a blind
 one. On newer firmware that's *Auto IR*, not *IR Always On*.
 
-The colour modes that light up only when triggered (Colour (motion-triggered), Auto Color,
-Human/Vehicle-Triggered Full-Color) are kept when the spotlight shows as off, so a "spotlight
-off" automation doesn't knock the camera out of them. While the white light is actually lit,
-off switches it to an IR mode as above.
+The colour modes the camera lights on its own (Colour (motion-triggered), Auto Color,
+Human/Vehicle-Triggered Full-Color) are kept: turning the spotlight off leaves them as they
+are, so a "spotlight off" automation doesn't knock the camera out of them. To leave one of
+those modes, use the Night Vision Mode select.
 
-On newer firmware the Spotlight shows as on only while the white light is actually lit. Turn
-it on in daylight and it shows *Off* again at the next update, even though Night Vision Mode
-is now *White LED Always On*. Turning it off then still sets the IR mode.
+On newer firmware the Spotlight may show as on only while the white light is lit, so after
+turning it on in daylight it can show *Off* again at the next update, even though Night
+Vision Mode is now *White LED Always On*. Turning it off still sets the IR mode.
 
 Since 0.7.6b2, turning off a spotlight that's already off keeps the mode you chose. Before
 that, it always switched the camera to the IR mode in the table, so an automation that turned
@@ -1173,10 +1173,10 @@ those cameras Last Detection still updates on sounds, and the option has no effe
 
 **On cameras with event image capture, an event that saves no capture leaves the image as
 it is.** Since 0.7.6b2 the image updates only when the camera has saved a new one; before,
-such an event showed the previous detection's image again, with a new time. The first event
-after Home Assistant restarts can still show the last saved image once, with a new time.
-When a later detection arrives while an image is still being fetched, the image is labelled
-with the later one; `event_label`, read from the saved file, is the most reliable field.
+such an event showed the previous detection's image again, with a new time. If the camera
+hasn't saved the image after a few seconds, VIGICam checks once more; an image found then
+may belong to a detection that came in meanwhile, and is labelled with that one.
+`event_label`, read from the saved file, is the most reliable field.
 
 The image's `detection_type` attribute says what caused it (`person`, `vehicle`,
 `smart_event`…). It describes the image as it is, so it can't bring back an earlier

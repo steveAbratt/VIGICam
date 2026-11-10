@@ -22,8 +22,8 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   case" switched night vision back on every time it ran, even if you'd set it to Off.
   - Turning off now puts back the mode you had before, so a spotlight that's already off
     keeps its mode (*Off* included, on newer firmware).
-  - Colour modes that light up only when triggered (Colour (motion-triggered), Auto Color,
-    Human/Vehicle-Triggered Full-Color) are kept while the light isn't lit.
+  - Colour modes the camera lights on its own (Colour (motion-triggered), Auto Color,
+    Human/Vehicle-Triggered Full-Color) are kept; change them with Night Vision Mode.
   - Modes that keep the white light on are never put back. Auto IR (or IR Always On) is used
     instead, and also when the earlier mode isn't known, for example after a restart while
     the spotlight was on.
@@ -35,8 +35,9 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
   camera's newest saved image, the previous detection's, and show it again with a new time.
   A dashboard or automation that reacts to the image changing saw a detection that wasn't
   there. Last Detection now changes only when the camera has saved a new image; it checks
-  once more a few seconds later in case the capture is slow to save. The first event after
-  a restart can still show the last saved image once, with a new time.
+  once more a few seconds later in case the capture is slow to save, and fetches again for
+  a detection that arrived while an image was being fetched. It also notes the newest saved
+  image at startup, so the first event after a restart doesn't re-show it.
 
 ## [0.7.6b1] - 2026-11-06
 

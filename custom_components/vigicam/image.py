@@ -73,9 +73,11 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._cached_image: bytes | None = None
         self._image_last_updated: datetime | None = None
         self._grabbing = False
-        # The newest event, so a grab still running when a later one arrives labels
-        # the image with the event that most likely saved it.
+        # The newest event; one that arrives during a grab gets a grab of its own after.
         self._latest_event: dict | None = None
+        # The newest event image already seen on the card, so an event that saved no
+        # capture can't re-show it as new. Seeded at startup without publishing.
+        self._seen_file_id: str | None = None
         self._unsub_dispatcher: object = None
         self._attr_extra_state_attributes: dict = {}
         self._has_event_capture: bool = entry_data.get("has_event_capture", False)
@@ -97,6 +99,17 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             SIGNAL_VIGICAM_EVENT.format(self._entry_data["entry_id"]),
             self._handle_event,
         )
+        if self._has_event_capture:
+            self.hass.async_create_task(self._seed_seen_file_id())
+
+    async def _seed_seen_file_id(self) -> None:
+        try:
+            frames = await self._entry_data["api"].get_event_images(days_back=1, max_items=1)
+        except Exception as exc:
+            _LOGGER.debug("Could not read the newest event image at startup: %s", exc)
+            return
+        if frames and self._seen_file_id is None:
+            self._seen_file_id = frames[0]["file_id"]
 
     async def async_will_remove_from_hass(self) -> None:
         if self._unsub_dispatcher:
@@ -143,6 +156,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             _LOGGER.debug("Detection image grab failed: %s", exc)
         finally:
             self._grabbing = False
+        if self._latest_event is not event and self._unsub_dispatcher:
+            self._start_grab(self._latest_event)
 
     async def _grab_event_image(self, event: dict) -> None:
         await asyncio.sleep(_POST_EVENT_DELAY_SF)
@@ -156,22 +171,24 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         for attempt in range(2):
             if attempt:
                 await asyncio.sleep(_POST_EVENT_DELAY_SF)
+                # A file found now may be a later event's; label it with that one.
+                event = self._latest_event or event
             result = await fetch_latest_event_image(
                 ip=self._entry_data["ip"],
                 username=self._entry_data["username"],
                 password=self._entry_data["password"],
                 camera=self._entry_data["api"],
                 ffmpeg_bin=ffmpeg_bin,
-                known_file_id=self._attr_extra_state_attributes.get("file_id"),
+                known_file_id=self._seen_file_id,
             )
             if result is not NO_NEW_IMAGE:
                 break
-        event = self._latest_event or event
         event_type = event["type"]
         area = event.get("area")
         if result is NO_NEW_IMAGE:
             _LOGGER.debug("No new event image for %s; the event saved no capture", event_type)
         elif result:
+            self._seen_file_id = result["file_id"]
             self._cached_image = result["jpeg"]
             self._image_last_updated = datetime.now(timezone.utc)
             attrs: dict = {

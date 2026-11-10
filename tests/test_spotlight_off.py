@@ -132,8 +132,8 @@ def test_legacy_triggered_colour_mode_is_kept():
     assert api.writes == []
 
 
-def test_newer_firmware_auto_colour_lit_is_turned_off():
+def test_newer_firmware_auto_colour_is_kept_even_when_lit():
     spot, coordinator, api = _spotlight({"pre_night_vision_mode": "auto_ir", "night_vision_mode": "inf_night_vision"})
     _poll(spot, coordinator, {"pre_night_vision_mode": "auto_color", "night_vision_mode": "wtl_night_vision"})
     asyncio.run(spot.async_turn_off())
-    assert api.writes == [("pre", "auto_ir")]
+    assert api.writes == []
