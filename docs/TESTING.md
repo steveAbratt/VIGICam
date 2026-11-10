@@ -5,7 +5,7 @@ loaded by `tests/conftest.py`: camera identity (`test_identity.py`), the batched
 (`test_batched_reads.py`), the login key formats (`test_login_key.py`), the legacy TLS retry
 (`test_legacy_tls.py`), the ONVIF port probe (`test_onvif_port.py`) and the Push
 Notifications check (`test_push_off.py`). It also covers ONVIF event parsing
-(`test_onvif_parse.py`), the Last Detection repeat check (`test_event_image_repeat.py`) and Spotlight
+(`test_onvif_parse.py`, including which kind a Smart Detection names), the Last Detection repeat check (`test_event_image_repeat.py`) and Spotlight
 turn-off (`test_spotlight_off.py`, with stand-ins for the Home Assistant names `light.py` imports).
 The ONVIF tests load `onvif_events.py` with stand-ins for its Home Assistant
 imports. Run with

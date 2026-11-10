@@ -123,7 +123,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         if not event.get("active"):
             return
         if not self._include_audio:
-            if event["type"] == "audio_anomaly":
+            if "audio_anomaly" in (event["type"], event.get("kind")):
                 return  # a still of a sound shows an empty scene
             if event["type"] == "smart_event":
                 # The ONVIF catch-all also fires for sounds. Let OpenAPI's named event
@@ -140,6 +140,9 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             self._start_grab(event)
 
     def _start_grab(self, event: dict) -> None:
+        if "kind" in event:
+            # Label it Vehicle or Loitering, as the camera named it, not Smart Detection.
+            event = {**event, "type": event["kind"]}
         self._latest_event = event
         if self._grabbing:
             return

@@ -10,6 +10,28 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.6b3] - 2026-11-10
+
+> Restart Home Assistant after updating.
+
+### Changed
+
+- **Last Detection now says Vehicle, Loitering or Sound instead of Smart Detection.** The
+  camera's Smart Detection event names which kind of detection it was, and VIGICam now
+  reads that name. Before, an image whose named event didn't come through (or a camera
+  without OpenAPI) was labelled `smart_event` in its `detection_type`.
+  - Seen on a C540V and an InSight S245 for vehicles, loitering and sounds. Other kinds
+    (scene change, object left or taken, area entry or exit) still show `smart_event`.
+  - Sounds named this way are also left out of Last Detection when **Update Last
+    Detection on Audio Anomaly** is off, on cameras without OpenAPI too.
+  - The Smart Detection sensor is unchanged: it still turns on for every kind.
+
+### Fixed
+
+- **Smart Detection no longer turns off while another smart detection is still going on.**
+  When two kinds overlapped, a car still in view and someone loitering, say, the end of
+  one turned the sensor off.
+
 ## [0.7.6b2] - 2026-11-10
 
 > Restart Home Assistant after updating.

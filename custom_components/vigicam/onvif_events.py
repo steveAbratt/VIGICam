@@ -121,6 +121,15 @@ TOPIC_KEYWORD_MAP: dict[str, str] = {
 }
 _TOPIC_KEYWORDS = [(k.lower(), v) for k, v in TOPIC_KEYWORD_MAP.items()]
 
+# A TPSmartEvent names its detection in its one Is* field, not in IsTPSmartEvent as
+# GetEventProperties lists. Seen live on an S245 and a C540V (2026-11-10); other kinds
+# (scene change, object left or taken, area entry/exit) not yet captured stay unnamed.
+SMART_EVENT_KINDS: dict[str, str] = {
+    "IsVehicle":         "vehicle",
+    "IsLoiteringPeople": "loitering",
+    "IsAudioAbnormal":   "audio_anomaly",
+}
+
 
 def _event_type(topic: str) -> str | None:
     t = topic.lower()
@@ -486,8 +495,9 @@ class VIGIOnvifEvents:
         # field we know is skipped rather than guessed at, and named once at warning level.
         # One with no readable data at all still counts as a detection: that is how every
         # camera worked until 0.7.6, and models nobody has captured may still depend on it.
-        flag = next(
-            (v for k, v in data.items() if k.startswith("Is") or k in ("State", "Value")), None
+        field, flag = next(
+            ((k, v) for k, v in data.items() if k.startswith("Is") or k in ("State", "Value")),
+            (None, None),
         )
         if flag is None and data:
             seen = (topic, frozenset(data))
@@ -498,7 +508,9 @@ class VIGIOnvifEvents:
                 )
             return
         src = event["source"]
-        key = (topic, frozenset(src.items()))
+        # The field is part of the key: every smart event kind shares one topic and rule,
+        # so a loitering end would otherwise end a vehicle detection still in progress.
+        key = (topic, field, frozenset(src.items()))
         is_true = flag is None or flag.lower() in ("true", "1", "yes")
         if is_true:
             self._active_since[key] = (event_type, time.monotonic())
@@ -514,11 +526,10 @@ class VIGIOnvifEvents:
         rule = src.get("Rule") or src.get("RuleName") or src.get("RuleRegionID")
         area = None if not rule or _DEFAULT_RULE.fullmatch(rule) else rule
 
-        async_dispatcher_send(
-            self._hass,
-            SIGNAL_VIGICAM_EVENT.format(self._entry_id),
-            {"type": event_type, "active": is_true, "area": area},
-        )
+        payload = {"type": event_type, "active": is_true, "area": area}
+        if kind := SMART_EVENT_KINDS.get(field):
+            payload["kind"] = kind
+        async_dispatcher_send(self._hass, SIGNAL_VIGICAM_EVENT.format(self._entry_id), payload)
 
     def _type_active(self, event_type: str) -> bool:
         # A true whose false never came stops counting after AUTO_CLEAR_S, the same time

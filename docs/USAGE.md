@@ -47,7 +47,7 @@ integration reloads and creates or removes entities accordingly.
 | **Camera Stream** | The RTSP live stream entity used in dashboards and `camera.*` services | On |
 | **Use main stream (HD, stream1)** | Which RTSP stream is used for live view — see [Stream quality](#stream-quality) below | Off (sub-stream) |
 | **Detection Events** | All binary sensors — motion, person, intrusion, line crossing, smart detection, vehicle, audio anomaly, and all OpenAPI detection sensors. Also controls the ONVIF event subscription. | On |
-| **Update Last Detection on Audio Anomaly** | Whether a sound replaces the Last Detection image. Needs OpenAPI; only applies when Detection Events is on. See [Last Detection](#last-detection). | Off |
+| **Update Last Detection on Audio Anomaly** | Whether a sound replaces the Last Detection image. Only applies when Detection Events is on. See [Last Detection](#last-detection). | Off |
 | **Image Controls** | Camera tuning entities (brightness, contrast, WDR, flip, etc.) in the Configuration category | Off |
 
 > **Frigate users:** If Frigate is already providing the stream and object detection,
@@ -851,8 +851,11 @@ automation:
 
 A catch-all sensor that fires for: vehicle detection, sound detection, loitering,
 abandoned objects, and scene change events. These five types all share a single ONVIF
-event topic (`IsTPSmartEvent`) on VIGI cameras and cannot be separated at the ONVIF
-level.
+event topic on VIGI cameras, so this one sensor turns on for any of them.
+
+Since 0.7.6b3, Last Detection reads which kind it was from the event itself for
+vehicles, loitering and sounds (seen on a C540V and an S245) and labels its image with
+that, even without OpenAPI. The other kinds stay `smart_event`.
 
 > **Want individual sensors?** When [OpenAPI is enabled](#openapi--unlocking-additional-sensors),
 > separate binary sensors are created for each type — Vehicle Detected, Audio Anomaly,
@@ -1160,16 +1163,16 @@ motion, person, vehicle and the other smart detections. It uses the same real-ti
 event connections as the binary sensors, so it refreshes within seconds of a detection,
 not on the 30-second poll cycle.
 
-**On cameras with [OpenAPI](#openapi--unlocking-additional-sensors), sounds don't
-update it by default.** A sound gives a still of an empty scene, and a camera near a
+**Sounds don't update it by default.** A sound gives a still of an empty scene, and a camera near a
 road can report dozens a day, each one replacing the last real detection. To include
 sounds, turn on **Update Last Detection on Audio Anomaly** in the camera's options
 (**Settings → Devices & Services → VIGI & InSight Cameras → Configure**). The **Audio
 Anomaly** sensor fires either way.
 
-Without OpenAPI the camera reports sounds only inside the **Smart Detection** catch-all,
-together with vehicles, loitering and the rest, and VIGICam can't tell them apart. On
-those cameras Last Detection still updates on sounds, and the option has no effect.
+VIGICam recognises a sound from the event itself (since 0.7.6b3), or from
+[OpenAPI](#openapi--unlocking-additional-sensors)'s named event. A camera whose events
+don't name the sound and that has no OpenAPI reports it only as a **Smart Detection**;
+on that camera Last Detection still updates on sounds.
 
 **On cameras with event image capture, an event that saves no capture leaves the image as
 it is.** Since 0.7.6b2 the image updates only when the camera has saved a new one; before,
@@ -1179,7 +1182,7 @@ may belong to a detection that came in meanwhile, and is labelled with that one.
 `event_label`, read from the saved file, is the most reliable field.
 
 The image's `detection_type` attribute says what caused it (`person`, `vehicle`,
-`smart_event`…). It describes the image as it is, so it can't bring back an earlier
+`loitering`, `smart_event`…). It describes the image as it is, so it can't bring back an earlier
 picture; for an alert that only shows people and vehicles, trigger on those sensors and
 take your own snapshot.
 
