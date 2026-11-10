@@ -13,24 +13,32 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 ## [0.7.6b3] - 2026-11-10
 
 > Restart Home Assistant after updating.
+>
+> **If an automation or template checks Last Detection's `detection_type` for
+> `smart_event`, add `vehicle`, `loitering` and `audio_anomaly`.** On cameras that name the
+> kind, those detections no longer say `smart_event`.
 
 ### Changed
 
-- **Last Detection now says Vehicle, Loitering or Sound instead of Smart Detection.** The
-  camera's Smart Detection event names which kind of detection it was, and VIGICam now
-  reads that name. Before, an image whose named event didn't come through (or a camera
-  without OpenAPI) was labelled `smart_event` in its `detection_type`.
-  - Seen on a C540V and an InSight S245 for vehicles, loitering and sounds. Other kinds
-    (scene change, object left or taken, area entry or exit) still show `smart_event`.
-  - Sounds named this way are also left out of Last Detection when **Update Last
-    Detection on Audio Anomaly** is off, on cameras without OpenAPI too.
+- **Last Detection's `detection_type` now names the smart detection: `vehicle`,
+  `loitering` or `audio_anomaly` instead of `smart_event`.** The camera's Smart Detection
+  event says which kind it was, and VIGICam now reads that. Before, an image whose OpenAPI
+  named event didn't come through (or any image on a camera without OpenAPI) said
+  `smart_event`.
+  - Seen for vehicles and loitering on an InSight S245, and sounds on a C540V. Other kinds
+    (scene change, object left or taken, area entry or exit), and cameras whose events
+    don't name the kind, still say `smart_event`.
+  - `event_label`, read from the camera's saved file, is unchanged and may still say Smart
+    Detection.
+  - Sounds named this way are also left out of Last Detection when **Update Last Detection
+    on Audio Anomaly** is off, on cameras without OpenAPI too.
   - The Smart Detection sensor is unchanged: it still turns on for every kind.
 
 ### Fixed
 
-- **Smart Detection no longer turns off while another smart detection is still going on.**
-  When two kinds overlapped, a car still in view and someone loitering, say, the end of
-  one turned the sensor off.
+- **Smart Detection no longer turns off early when two kinds overlap** (0.7.6b1 and b2
+  only). The end of one kind, say loitering, turned the sensor off while another was still
+  being detected.
 
 ## [0.7.6b2] - 2026-11-10
 

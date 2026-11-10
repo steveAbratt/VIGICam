@@ -122,8 +122,9 @@ TOPIC_KEYWORD_MAP: dict[str, str] = {
 _TOPIC_KEYWORDS = [(k.lower(), v) for k, v in TOPIC_KEYWORD_MAP.items()]
 
 # A TPSmartEvent names its detection in its one Is* field, not in IsTPSmartEvent as
-# GetEventProperties lists. Seen live on an S245 and a C540V (2026-11-10); other kinds
-# (scene change, object left or taken, area entry/exit) not yet captured stay unnamed.
+# GetEventProperties lists. Seen live 2026-11-10: vehicle and loitering on an S245, sound
+# on a C540V, each kind ending with a false in its own field. Kinds not yet captured
+# (scene change, object left or taken, area entry/exit) stay unnamed.
 SMART_EVENT_KINDS: dict[str, str] = {
     "IsVehicle":         "vehicle",
     "IsLoiteringPeople": "loitering",
@@ -527,7 +528,7 @@ class VIGIOnvifEvents:
         area = None if not rule or _DEFAULT_RULE.fullmatch(rule) else rule
 
         payload = {"type": event_type, "active": is_true, "area": area}
-        if kind := SMART_EVENT_KINDS.get(field):
+        if event_type == "smart_event" and (kind := SMART_EVENT_KINDS.get(field)):
             payload["kind"] = kind
         async_dispatcher_send(self._hass, SIGNAL_VIGICAM_EVENT.format(self._entry_id), payload)
 

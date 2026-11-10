@@ -853,15 +853,16 @@ A catch-all sensor that fires for: vehicle detection, sound detection, loitering
 abandoned objects, and scene change events. These five types all share a single ONVIF
 event topic on VIGI cameras, so this one sensor turns on for any of them.
 
-Since 0.7.6b3, Last Detection reads which kind it was from the event itself for
-vehicles, loitering and sounds (seen on a C540V and an S245) and labels its image with
-that, even without OpenAPI. The other kinds stay `smart_event`.
+Since 0.7.6b3, Last Detection reads which kind it was from the event itself and sets its
+`detection_type` to `vehicle`, `loitering` or `audio_anomaly`, even without OpenAPI (seen
+for vehicles and loitering on an S245 and sounds on a C540V). Other kinds, and cameras
+whose events don't name the kind, stay `smart_event`.
 
 > **Want individual sensors?** When [OpenAPI is enabled](#openapi--unlocking-additional-sensors),
 > separate binary sensors are created for each type — Vehicle Detected, Audio Anomaly,
 > Loitering, Scene Change, Object Left or Taken, Area Entry, and Area Exit. The Smart
-> Detection sensor continues to fire alongside them, but Last Detection follows the named
-> event instead, so a sound doesn't replace the picture.
+> Detection sensor continues to fire alongside them. When the camera's own event doesn't
+> name the kind, Last Detection uses OpenAPI's named event instead.
 
 #### Example: trigger the alarm on any smart detection event
 
@@ -1172,7 +1173,8 @@ Anomaly** sensor fires either way.
 VIGICam recognises a sound from the event itself (since 0.7.6b3), or from
 [OpenAPI](#openapi--unlocking-additional-sensors)'s named event. A camera whose events
 don't name the sound and that has no OpenAPI reports it only as a **Smart Detection**;
-on that camera Last Detection still updates on sounds.
+on that camera Last Detection still updates on sounds. To check yours, look at Last
+Detection's `detection_type` after a sound: `smart_event` means the camera didn't name it.
 
 **On cameras with event image capture, an event that saves no capture leaves the image as
 it is.** Since 0.7.6b2 the image updates only when the camera has saved a new one; before,
@@ -1252,7 +1254,7 @@ The `source` attribute on the entity tells you which method was used.
 
 | Attribute | Example | Description |
 |---|---|---|
-| `detection_type` | `person`, `vehicle`, `motion` | Event that triggered the grab (from ONVIF or OpenAPI) |
+| `detection_type` | `person`, `vehicle`, `loitering`, `audio_anomaly`, `smart_event`, `motion` | Event that triggered the grab (from ONVIF or OpenAPI). `smart_event` means the camera didn't say which kind of smart detection it was |
 | `source` | `event_capture`, `rtsp_snapshot` | Which capture method was used |
 | `detection_zone` | | Detection zone name from the camera, when it sends one (the S245 doesn't) |
 | `event_label` | `Person`, `Smart Detection` | AI classification label (event capture only) |

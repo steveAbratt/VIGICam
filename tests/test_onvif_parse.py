@@ -187,3 +187,8 @@ def test_one_smart_event_kind_ending_leaves_another_on(monkeypatch):
         _message(_SMART, _SMART_RULE, "IsVehicle", "false"),
     )
     assert [p["active"] for p in _dispatched(resp, monkeypatch)] == [True, True, False]
+
+
+def test_only_a_smart_event_gets_a_kind(monkeypatch):
+    (payload,) = _dispatched(_response(_message(_PEOPLE, "r", "IsVehicle", "true")), monkeypatch)
+    assert payload["type"] == "person" and "kind" not in payload
