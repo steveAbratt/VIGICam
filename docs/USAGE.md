@@ -359,7 +359,7 @@ Switches how the camera handles low-light conditions. **The options you see depe
 camera's firmware** — there are two generations, and VIGICam builds the list from what your
 camera actually reports.
 
-**Older firmware** (C540V, S245 and similar — a single writable `night_vision_mode`):
+**Older firmware** (a single writable `night_vision_mode`):
 
 | Option | What it does |
 |--------|-------------|
@@ -369,8 +369,8 @@ camera actually reports.
 | Spotlight Always On | White-light spotlight always on — colour image in the dark |
 | Auto Switch | Camera switches automatically between day and night profiles |
 
-**Newer firmware** (C340, C340i, C350 and similar — a writable `pre_night_vision_mode`
-alongside a read-only status field):
+**Newer firmware** (C340, C340i, C350, and current C540V and S245 firmware — a writable
+`pre_night_vision_mode` alongside a read-only status field):
 
 | Option | What it does |
 |--------|-------------|
@@ -416,11 +416,32 @@ two always move together.
 | | Older firmware | Newer firmware (C340 / C350 class) |
 |---|---|---|
 | Spotlight **on** | Spotlight Always On | White LED Always On |
-| Spotlight **off** | IR Always On | **Auto IR** |
+| Spotlight **off** | your previous mode, else IR Always On | your previous mode, else **Auto IR** |
 
-Off deliberately returns to an IR mode rather than disabling night vision, so you keep a
-working camera in the dark instead of a blind one. Note the difference between the two
-columns: on newer firmware, off lands on *Auto IR*, not *IR Always On*.
+Off puts back the Night Vision Mode you had before. If the spotlight is already off, that's
+the mode the camera is on now, so nothing changes; *Off* (newer firmware) stays *Off*. Modes
+that use the white light (Spotlight Always On, Colour (motion-triggered), White LED Always On,
+Auto Color, Human/Vehicle-Triggered Full-Color) are never put back. When the earlier mode is
+one of those, or isn't known (for example after Home Assistant restarts while the spotlight is
+on), off falls back to an IR mode, so you keep a working camera in the dark instead of a blind
+one. On newer firmware that's *Auto IR*, not *IR Always On*.
+
+The colour modes the camera lights on its own (Colour (motion-triggered), Auto Color,
+Human/Vehicle-Triggered Full-Color) are kept: turning the spotlight off leaves them as they
+are, so a "spotlight off" automation doesn't knock the camera out of them. To leave one of
+those modes, use the Night Vision Mode select.
+
+On newer firmware the Spotlight may show as on only while the white light is lit, so after
+turning it on in daylight it can show *Off* again at the next update, even though Night
+Vision Mode is now *White LED Always On*. Turning it off still sets the IR mode.
+
+Since 0.7.6b2, turning off a spotlight that's already off keeps the mode you chose. Before
+that, it always switched the camera to the IR mode in the table, so an automation that turned
+the spotlight off "just in case" kept overriding your choice. If an automation relied on that
+to switch night vision back on, set **Night Vision Mode** in the automation instead. If you
+change the mode on the camera's web page or in the VIGI app, Home Assistant sees it within 30
+seconds; a spotlight off sent sooner than that puts back the mode from before your change.
+Changes made with the Night Vision Mode select apply straight away.
 
 The brightness slider maps the spotlight's 4 intensity levels (1–4) to the HA range
 (1–255) so standard HA light controls work as expected. Brightness 1–63 is level 1, 64–127 level 2, 128–191 level 3 and
@@ -1149,6 +1170,13 @@ Anomaly** sensor fires either way.
 Without OpenAPI the camera reports sounds only inside the **Smart Detection** catch-all,
 together with vehicles, loitering and the rest, and VIGICam can't tell them apart. On
 those cameras Last Detection still updates on sounds, and the option has no effect.
+
+**On cameras with event image capture, an event that saves no capture leaves the image as
+it is.** Since 0.7.6b2 the image updates only when the camera has saved a new one; before,
+such an event showed the previous detection's image again, with a new time. If the camera
+hasn't saved the image after a few seconds, VIGICam checks once more; an image found then
+may belong to a detection that came in meanwhile, and is labelled with that one.
+`event_label`, read from the saved file, is the most reliable field.
 
 The image's `detection_type` attribute says what caused it (`person`, `vehicle`,
 `smart_event`…). It describes the image as it is, so it can't bring back an earlier

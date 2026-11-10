@@ -3,7 +3,11 @@
 Replaces the separate spotlight_intensity number entity. The camera's 1–4
 intensity scale is mapped linearly to HA's 1–255 brightness range.
 
-Turn on  → white light on; turn off → back to IR.
+Turn on  → white light on; turn off → back to the last night-vision mode the
+camera was set to that doesn't use the white light (Auto IR / IR Always On if that
+isn't known, e.g. after a restart while it was on). When the spotlight is already
+off the remembered mode is the current one, so nothing changes. A triggered or auto
+colour mode is a standing choice, not "the light is on", so off leaves it alone.
 
 Which field carries that depends on firmware. Older cameras take it on the
 writable `night_vision_mode` ("wtl_night_vision" / "inf_night_vision"). Newer
@@ -29,6 +33,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    PRE_NIGHT_VISION_WHITE_LED_MODES,
     PRE_SPOTLIGHT_OFF_MODE,
     PRE_SPOTLIGHT_ON_MODE,
 )
@@ -38,6 +43,10 @@ _LOGGER = logging.getLogger(__name__)
 
 _SPOTLIGHT_MODE = "wtl_night_vision"
 _FALLBACK_MODE = "inf_night_vision"
+# Legacy modes that use the white light; turn off never puts these back.
+_WHITE_MODES = frozenset({_SPOTLIGHT_MODE, "human_triggered_color"})
+# Colour modes, legacy or newer, that the camera lights on its own; turn off keeps them.
+_TRIGGERED_COLOUR_MODES = frozenset({"human_triggered_color", "auto_color"})
 
 # Camera intensity scale: 1 (dim) – 4 (full)
 _CAM_MIN = 1
@@ -76,6 +85,10 @@ class VIGISpotlight(VIGIEntity, LightEntity):
         super().__init__(coordinator, entry_data)
         self._optimistic_on: bool | None = None
         self._optimistic_brightness: int | None = None
+        # The last non-white night-vision setting, put back by turn off.
+        self._prev_mode: str | None = None
+        self._prev_pre_mode: str | None = None
+        self._remember_mode()
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -108,6 +121,15 @@ class VIGISpotlight(VIGIEntity, LightEntity):
         else:
             await api.set_night_vision_mode(legacy_mode)
 
+    def _remember_mode(self) -> None:
+        image_switch = (self.coordinator.data or {}).get("image_switch", {})
+        mode = image_switch.get("night_vision_mode")
+        pre_mode = image_switch.get("pre_night_vision_mode")
+        if mode and mode not in _WHITE_MODES:
+            self._prev_mode = mode
+        if pre_mode and pre_mode not in PRE_NIGHT_VISION_WHITE_LED_MODES:
+            self._prev_pre_mode = pre_mode
+
     def _clear_optimistic(self) -> None:
         self._optimistic_on = None
         self._optimistic_brightness = None
@@ -136,12 +158,21 @@ class VIGISpotlight(VIGIEntity, LightEntity):
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
+        # No "already off" shortcut: is_on can be up to a poll stale, and the newer
+        # firmware's night_vision_mode status may not show White LED Always On as lit
+        # (unverified). Writing the remembered mode when already off changes nothing.
+        image_switch = (self.coordinator.data or {}).get("image_switch", {})
+        chosen = image_switch.get("pre_night_vision_mode", image_switch.get("night_vision_mode"))
+        if chosen in _TRIGGERED_COLOUR_MODES and not self._optimistic_on:
+            return
         self._optimistic_on = False
         self.async_write_ha_state()
 
         try:
             await self._set_mode(
-                self._entry_data["api"], _FALLBACK_MODE, PRE_SPOTLIGHT_OFF_MODE
+                self._entry_data["api"],
+                self._prev_mode or _FALLBACK_MODE,
+                self._prev_pre_mode or PRE_SPOTLIGHT_OFF_MODE,
             )
         except Exception as exc:
             self._clear_optimistic()
@@ -150,6 +181,7 @@ class VIGISpotlight(VIGIEntity, LightEntity):
             await self.coordinator.async_request_refresh()
 
     def _handle_coordinator_update(self) -> None:
-        """Clear optimistic state on coordinator update."""
+        """Clear optimistic state and remember the mode turn off puts back."""
         self._clear_optimistic()
+        self._remember_mode()
         super()._handle_coordinator_update()

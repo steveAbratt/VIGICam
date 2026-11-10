@@ -5,7 +5,9 @@ loaded by `tests/conftest.py`: camera identity (`test_identity.py`), the batched
 (`test_batched_reads.py`), the login key formats (`test_login_key.py`), the legacy TLS retry
 (`test_legacy_tls.py`), the ONVIF port probe (`test_onvif_port.py`) and the Push
 Notifications check (`test_push_off.py`). It also covers ONVIF event parsing
-(`test_onvif_parse.py`), which loads `onvif_events.py` with stand-ins for its Home Assistant
+(`test_onvif_parse.py`), the Last Detection repeat check (`test_event_image_repeat.py`) and Spotlight
+turn-off (`test_spotlight_off.py`, with stand-ins for the Home Assistant names `light.py` imports).
+The ONVIF tests load `onvif_events.py` with stand-ins for its Home Assistant
 imports. Run with
 `pip install pytest aiohttp cryptography && pytest tests/`. CI runs them on every push and pull
 request (`.github/workflows/tests.yaml`, Python 3.12, 3.13 and 3.14). Nothing yet covers code that

@@ -23,6 +23,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 import os
 import ssl
 import struct
@@ -33,6 +34,11 @@ from .api import make_ssl_context
 
 if TYPE_CHECKING:
     from .api import VIGICamera
+
+_LOGGER = logging.getLogger(__name__)
+
+# Returned by fetch_latest_event_image when the newest image is the one already shown.
+NO_NEW_IMAGE = object()
 
 # event_type integers returned by get_media_list for media_type=2 (event images).
 # Confirmed on S245 firmware 3.1.1: 2=Person, 27=Smart Detection (catch-all).
@@ -309,19 +315,27 @@ async def fetch_latest_event_image(
     password: str,
     camera: VIGICamera,
     ffmpeg_bin: str = "ffmpeg",
-) -> dict | None:
+    known_file_id: str | None = None,
+) -> dict | object | None:
     """Fetch the most recent event image and return a result dict, or None.
 
     Returns:
         {"jpeg": bytes, "event_type": int, "label": str, "file_id": str, "timestamp": str}
     Returns None if event image capture is disabled, the SD card is absent,
-    or any network/decode step fails.
+    or any network/decode step fails. Returns NO_NEW_IMAGE if the newest image is
+    still known_file_id (the event saved no capture, or hasn't yet).
     """
     frames = await camera.get_event_images(days_back=1, max_items=5)
     if not frames:
         return None
 
     frame = frames[0]
+    if known_file_id is not None and frame["file_id"] == known_file_id:
+        _LOGGER.debug(
+            "Newest event image is still %s (type %s, start %s); no new capture",
+            frame["file_id"], frame.get("event_type"), frame["start_time"],
+        )
+        return NO_NEW_IMAGE
     ssl_ctx = _make_ssl_ctx(camera.legacy_tls)
     h264 = await _ws_download_h264(
         ip, username, password, ssl_ctx,
