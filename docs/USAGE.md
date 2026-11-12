@@ -861,8 +861,9 @@ whose events don't name the kind, stay `smart_event`.
 > **Want individual sensors?** When [OpenAPI is enabled](#openapi--unlocking-additional-sensors),
 > separate binary sensors are created for each type — Vehicle Detected, Audio Anomaly,
 > Loitering, Scene Change, Object Left or Taken, Area Entry, and Area Exit. The Smart
-> Detection sensor continues to fire alongside them. Last Detection uses OpenAPI's named
-> event; the camera's own name covers the times OpenAPI says nothing.
+> Detection sensor continues to fire alongside them. With sounds left out of Last Detection
+> (the default), it waits briefly for OpenAPI's named event; the camera's own name covers
+> the times OpenAPI says nothing.
 
 #### Example: trigger the alarm on any smart detection event
 
@@ -1173,9 +1174,10 @@ the **Audio Anomaly** sensor turns on either way; without it, sounds turn on **S
 VIGICam recognises a sound from the event itself (since 0.7.6b3), or from
 [OpenAPI](#openapi--unlocking-additional-sensors)'s named event. A camera whose events
 don't name the sound and that has no OpenAPI reports it only as a **Smart Detection**;
-on that camera Last Detection still updates on sounds. To check yours, make a sound with the
-option off: if Last Detection doesn't change, VIGICam recognises its sounds; if it changes to
-`smart_event`, it doesn't.
+on that camera Last Detection still updates on sounds. To check yours, turn the option off and
+make a sound near the camera. When **Smart Detection** (or **Audio Anomaly**) turns on, look at
+Last Detection: if its time didn't change, VIGICam recognises the camera's sounds; if it updated
+with `detection_type` `smart_event`, it doesn't.
 
 **On cameras with event image capture, an event that saves no capture leaves the image as
 it is.** Since 0.7.6b2 the image updates only when the camera has saved a new one; before,
@@ -1185,7 +1187,7 @@ may belong to a detection that came in meanwhile, and is labelled with that one.
 `event_label`, read from the saved file, is the most reliable field.
 
 The image's `detection_type` attribute says what caused it (`person`, `vehicle`,
-`loitering`, `smart_event`…). It describes the image as it is, so it can't bring back an earlier
+`loitering`, `audio_anomaly`, `smart_event`…). It describes the image as it is, so it can't bring back an earlier
 picture; for an alert that only shows people and vehicles, trigger on those sensors and
 take your own snapshot.
 
@@ -1208,7 +1210,7 @@ for reviewing overnight events and is far more capable than anything you can bui
 for this purpose.
 
 **For a HA-based history of RTSP snapshots**, the [Gallery Card](https://github.com/TarheelGrad1998/gallery-card)
-(available via HACS) combined with an automation is the most practical approach:
+(available via Marketplace, HACS before 2026.11) combined with an automation is the most practical approach:
 
 ```yaml
 automation:

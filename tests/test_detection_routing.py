@@ -3,6 +3,7 @@
 image.py needs Home Assistant, so the few names it imports are stood in for here, as in
 test_spotlight_off.py. The grab itself is replaced; only the routing is under test.
 """
+import ast
 import asyncio
 import importlib.util
 import pathlib
@@ -10,6 +11,7 @@ import sys
 import types
 
 import vigicam_pure  # noqa: F401  (conftest loads onvif_events.py and event_image.py)
+from vigicam_pure import onvif_events
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "vigicam"
 
@@ -72,7 +74,12 @@ def _image(include_audio=False):
     img = image.VIGILastDetectionImage(types.SimpleNamespace(hass=hass), {}, include_audio)
     img._unsub_dispatcher = object()  # as if added to hass
     img.grabbed = []
-    img._grab_frame = img.grabbed.append  # record the event a grab would label
+
+    def grab(event):  # record the event a grab would label, and finish at once
+        img.grabbed.append(event)
+        img._grabbing = False
+
+    img._grab_frame = grab
     return img, hass
 
 
@@ -100,6 +107,16 @@ def test_a_named_kind_labels_the_image_and_is_the_event_kept():
     img._start_grab(_smart("vehicle"))
     (event,) = img.grabbed
     assert event["type"] == "vehicle" and img._latest_event is event
+
+
+def test_camera_kinds_use_openapi_type_names():
+    # A named kind gives way to OpenAPI's event by type name, so the two must match or
+    # every named detection is grabbed twice. openapi_events.py needs more of Home
+    # Assistant than is stood in for, so its map is read from the source.
+    tree = ast.parse((_SRC / "openapi_events.py").read_text())
+    (node,) = [n for n in ast.walk(tree) if isinstance(n, ast.AnnAssign) and getattr(n.target, "id", None) == "_EVENT_TYPE_MAP"]
+    openapi_types = set(ast.literal_eval(node.value).values())
+    assert set(onvif_events.SMART_EVENT_KINDS.values()) <= openapi_types
 
 
 def test_a_smart_event_waits_for_openapi_first():
@@ -132,6 +149,12 @@ def test_without_openapi_the_named_kind_is_used(monkeypatch):
 def test_openapi_naming_the_same_kind_grabs_once(monkeypatch):
     img, _ = _image()
     assert _fallback(img, _smart("vehicle"), "vehicle", monkeypatch) == [("vehicle", "openapi")]
+
+
+def test_a_removed_image_does_not_grab(monkeypatch):
+    img, _ = _image()
+    img._unsub_dispatcher = None
+    assert _fallback(img, _smart("vehicle"), None, monkeypatch) == []
 
 
 def test_an_openapi_sound_does_not_cancel_a_named_vehicle(monkeypatch):

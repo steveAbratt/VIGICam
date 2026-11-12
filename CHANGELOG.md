@@ -10,7 +10,7 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
-## [0.7.6b3] - 2026-11-10
+## [0.7.6b3] - 2026-11-12
 
 > **If an automation or template checks Last Detection's `detection_type` for
 > `smart_event`, add `vehicle`, `loitering` and `audio_anomaly`.** On cameras that name the

@@ -125,6 +125,7 @@ _TOPIC_KEYWORDS = [(k.lower(), v) for k, v in TOPIC_KEYWORD_MAP.items()]
 # GetEventProperties lists. Seen live 2026-11-10: vehicle and loitering on an S245, sound
 # on a C540V, each kind ending with a false in its own field. Kinds not yet captured
 # (scene change, object left or taken, area entry/exit) stay unnamed.
+# The names are OpenAPI's (openapi_events._EVENT_TYPE_MAP): Last Detection matches the two.
 SMART_EVENT_KINDS: dict[str, str] = {
     "IsVehicle":         "vehicle",
     "IsLoiteringPeople": "loitering",

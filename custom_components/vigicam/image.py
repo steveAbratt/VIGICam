@@ -82,7 +82,7 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._attr_extra_state_attributes: dict = {}
         self._has_event_capture: bool = entry_data.get("has_event_capture", False)
         self._include_audio = include_audio
-        # When OpenAPI last reported each event type.
+        # Monotonic time OpenAPI last reported each event type.
         self._openapi_seen: dict[str, float] = {}
 
     @property
@@ -127,9 +127,9 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
             if "audio_anomaly" in (event["type"], event.get("kind")):
                 return  # a still of a sound shows an empty scene
             if event["type"] == "smart_event":
-                # A smart event that doesn't name its kind may be a sound. Let OpenAPI's
-                # named event decide; fall back to this one if OpenAPI says nothing (no
-                # OpenAPI, the type's Push Notifications off, or the stream down).
+                # Wait for OpenAPI: an unnamed smart event may be a sound, and a named one
+                # may come again from OpenAPI. Fall back to this one if OpenAPI says nothing
+                # (no OpenAPI, the type's Push Notifications off, or the stream down).
                 self.hass.async_create_task(self._smart_event_fallback(event))
                 return
         self._start_grab(event)
