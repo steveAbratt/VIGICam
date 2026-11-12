@@ -54,7 +54,8 @@ BINARY_SENSORS: tuple[VIGIBinarySensorDescription, ...] = (
     # ── Event-based (ONVIF) ──────────────────────────────────────────────────
     # Topics confirmed from GetEventProperties on both cameras.
     # TPSmartEvent is a TP-Link catch-all covering vehicle, sound, loitering,
-    # abandoned object, scene change — indistinguishable at the ONVIF level.
+    # abandoned object, scene change. Its data field names some kinds
+    # (onvif_events.SMART_EVENT_KINDS); this sensor still turns on for all of them.
     VIGIBinarySensorDescription(
         key="motion",
         name="Motion",

@@ -71,7 +71,7 @@ own analysis rather than taking detection from the camera keeps the budget free.
   loitering, scene change, object left/taken, area entry, area exit
   *(requires [OpenAPI](#openapi--extended-detection--sensors))*
 - **Last detection image** — snapshot entity per camera updated on each detection event
-  (with OpenAPI, sounds are left out by default);
+  (sounds are left out by default on cameras that report them by name);
   uses the camera's own event-captured image when SD card capture is configured,
   otherwise falls back to a live RTSP grab
 

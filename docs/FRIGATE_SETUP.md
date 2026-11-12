@@ -50,7 +50,7 @@ Confirm Frigate is receiving the stream and detection is working before proceedi
 
 ### 2. Install VIGICam
 
-If you have not already, install VIGICam via HACS and add the camera:
+If you have not already, install VIGICam via Marketplace (HACS before 2026.11) and add the camera:
 
 1. In HA go to **Settings → Devices & Services → Add Integration → VIGI & InSight Cameras**
 2. Enter the camera's local IP address and admin credentials

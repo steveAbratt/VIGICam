@@ -155,3 +155,40 @@ def test_default_rule_name_is_not_a_zone_but_a_named_one_is(monkeypatch):
 
 def test_no_messages_on_an_empty_pull():
     assert onvif_events.parse_notifications(_response()) == []
+
+
+_SMART = "tns1:RuleEngine/TPSmartEventDetector/TPSmartEvent"
+_SMART_RULE = "MyTPSmartEventDetectorRule"
+
+
+@pytest.mark.parametrize(("field", "kind"), [
+    ("IsVehicle", "vehicle"),
+    ("IsLoiteringPeople", "loitering"),
+    ("IsAudioAbnormal", "audio_anomaly"),
+])
+def test_smart_event_names_its_kind(field, kind, monkeypatch):
+    # The fields an S245 and a C540V sent live (2026-11-10).
+    resp = _response(_message(_SMART, _SMART_RULE, field, "true"), _message(_SMART, _SMART_RULE, field, "false"))
+    assert [(p["type"], p["active"], p["kind"]) for p in _dispatched(resp, monkeypatch)] == [
+        ("smart_event", True, kind), ("smart_event", False, kind),
+    ]
+
+
+def test_smart_event_of_an_unknown_kind_has_none(monkeypatch):
+    (payload,) = _dispatched(_response(_message(_SMART, _SMART_RULE, "IsSceneChange", "true")), monkeypatch)
+    assert payload["type"] == "smart_event" and "kind" not in payload
+
+
+def test_one_smart_event_kind_ending_leaves_another_on(monkeypatch):
+    resp = _response(
+        _message(_SMART, _SMART_RULE, "IsVehicle", "true"),
+        _message(_SMART, _SMART_RULE, "IsLoiteringPeople", "true"),
+        _message(_SMART, _SMART_RULE, "IsLoiteringPeople", "false"),  # the vehicle is still there
+        _message(_SMART, _SMART_RULE, "IsVehicle", "false"),
+    )
+    assert [p["active"] for p in _dispatched(resp, monkeypatch)] == [True, True, False]
+
+
+def test_only_a_smart_event_gets_a_kind(monkeypatch):
+    (payload,) = _dispatched(_response(_message(_PEOPLE, "r", "IsVehicle", "true")), monkeypatch)
+    assert payload["type"] == "person" and "kind" not in payload

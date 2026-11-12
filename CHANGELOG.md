@@ -10,6 +10,39 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [0.7.6b3] - 2026-11-12
+
+> **If an automation or template checks Last Detection's `detection_type` for
+> `smart_event`, add `vehicle`, `loitering` and `audio_anomaly`.** On cameras that name the
+> kind, those detections no longer say `smart_event`.
+>
+> Restart Home Assistant after updating.
+
+### Changed
+
+- **Last Detection's `detection_type` now names the smart detection: `vehicle`,
+  `loitering` or `audio_anomaly` instead of `smart_event`.** The camera's Smart Detection
+  event says which kind it was, and VIGICam now reads that. Before, an image said `smart_event`
+  when OpenAPI didn't report the event by name, and always on a camera without OpenAPI.
+  - Seen for vehicles and loitering on an InSight S245, and sounds on a C540V. Other kinds
+    (scene change, object left or taken, area entry or exit), and cameras whose events
+    don't name the kind, still say `smart_event`.
+  - `event_label`, read from the camera's saved file, is unchanged and may still say Smart
+    Detection.
+  - Sounds named this way are also left out of Last Detection when **Update Last Detection
+    on Audio Anomaly** is off, on cameras without OpenAPI too.
+  - The Smart Detection sensor is unchanged: it still turns on for every kind.
+
+### Fixed
+
+- **Smart Detection no longer turns off early when two kinds overlap** (0.7.6b1 and b2
+  only). The end of one kind, say loitering, turned the sensor off while another was still
+  being detected.
+- **With OpenAPI, a sound no longer stops a vehicle or loitering image.** An OpenAPI sound
+  event at the same moment cancelled Last Detection's update for the camera's vehicle or
+  loitering event when OpenAPI hadn't reported that kind itself (its Push Notifications
+  off, say). Now only OpenAPI's event of the same kind takes its place.
+
 ## [0.7.6b2] - 2026-11-10
 
 > Restart Home Assistant after updating.
