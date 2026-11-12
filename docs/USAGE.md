@@ -861,8 +861,8 @@ whose events don't name the kind, stay `smart_event`.
 > **Want individual sensors?** When [OpenAPI is enabled](#openapi--unlocking-additional-sensors),
 > separate binary sensors are created for each type — Vehicle Detected, Audio Anomaly,
 > Loitering, Scene Change, Object Left or Taken, Area Entry, and Area Exit. The Smart
-> Detection sensor continues to fire alongside them. When the camera's own event doesn't
-> name the kind, Last Detection uses OpenAPI's named event instead.
+> Detection sensor continues to fire alongside them. Last Detection uses OpenAPI's named
+> event; the camera's own name covers the times OpenAPI says nothing.
 
 #### Example: trigger the alarm on any smart detection event
 
@@ -1167,14 +1167,15 @@ not on the 30-second poll cycle.
 **Sounds don't update it by default.** A sound gives a still of an empty scene, and a camera near a
 road can report dozens a day, each one replacing the last real detection. To include
 sounds, turn on **Update Last Detection on Audio Anomaly** in the camera's options
-(**Settings → Devices & Services → VIGI & InSight Cameras → Configure**). The **Audio
-Anomaly** sensor fires either way.
+(**Settings → Devices & Services → VIGI & InSight Cameras → Configure**). With OpenAPI,
+the **Audio Anomaly** sensor turns on either way; without it, sounds turn on **Smart Detection**.
 
 VIGICam recognises a sound from the event itself (since 0.7.6b3), or from
 [OpenAPI](#openapi--unlocking-additional-sensors)'s named event. A camera whose events
 don't name the sound and that has no OpenAPI reports it only as a **Smart Detection**;
-on that camera Last Detection still updates on sounds. To check yours, look at Last
-Detection's `detection_type` after a sound: `smart_event` means the camera didn't name it.
+on that camera Last Detection still updates on sounds. To check yours, make a sound with the
+option off: if Last Detection doesn't change, VIGICam recognises its sounds; if it changes to
+`smart_event`, it doesn't.
 
 **On cameras with event image capture, an event that saves no capture leaves the image as
 it is.** Since 0.7.6b2 the image updates only when the camera has saved a new one; before,
