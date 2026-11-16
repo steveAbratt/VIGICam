@@ -10,6 +10,24 @@ Versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH.
 
 ---
 
+## [Unreleased] - VIGI NVR support
+
+### Added
+
+- **VIGI NVR support.** Add an NVR (Add Integration > VIGI & InSight Cameras > NVR) and
+  every camera on it appears as its own device behind the NVR: live view and snapshots
+  through the NVR, an online sensor, detection sensors (motion, person, vehicle, line
+  crossing, intrusion, plus disabled-by-default tamper, area entry/exit, loitering,
+  crowd, alarm input) and an Active Defense switch. The NVR itself gets an alarm mode
+  switch, disk sensors, a cameras-online count, PoE power on PoE models, and a reboot
+  button. Uses TP-Link's NVR OpenAPI (port 20443). See [docs/NVR.md](docs/NVR.md).
+- Detection events are pushed by the NVR to a local Home Assistant webhook. The
+  integration takes one free event-server slot on the NVR and never overwrites a slot
+  it didn't create. Every push is also fired as a `vigicam_nvr_event` bus event.
+- Adding a camera now starts with a choice of **Camera** or **NVR**.
+
+---
+
 ## [0.7.6b2] - 2026-11-10
 
 > Restart Home Assistant after updating.

@@ -109,3 +109,23 @@ REPAIRS_PUSH_OFF = "push_notifications_off"
 DEPRECATED_SUFFIXES: frozenset[str] = frozenset({
     "spotlight_intensity",  # replaced by the spotlight light entity brightness
 })
+
+# ── VIGI NVR entries ───────────────────────────────────────────────────────────
+# A config entry is an NVR when data[CONF_DEVICE_TYPE] == DEVICE_TYPE_NVR. Camera
+# entries predate the key and never carry it.
+
+CONF_DEVICE_TYPE = "device_type"
+DEVICE_TYPE_NVR = "nvr"
+CONF_WEBHOOK_ID = "webhook_id"
+
+CONF_NVR_EVENT_PUSH = "nvr_event_push"        # point an NVR event server at HA
+CONF_NVR_EVENT_HOST = "nvr_event_host"        # override for the address the NVR posts to
+CONF_NVR_EVENT_HOLD = "nvr_event_hold"        # seconds a pushed event keeps its sensor on
+
+DEFAULT_NVR_EVENT_PUSH = True
+DEFAULT_NVR_EVENT_HOST = ""
+DEFAULT_NVR_EVENT_HOLD = 15
+
+EVENT_NVR = "vigicam_nvr_event"               # HA bus event for every pushed NVR message
+SIGNAL_NVR_EVENT = "vigicam_nvr_event_{}"     # dispatcher signal, formatted with entry_id
+REPAIRS_NVR_EVENT_SERVER = "nvr_event_server"

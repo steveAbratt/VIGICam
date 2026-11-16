@@ -28,6 +28,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession, asy
 
 from .api import VIGIAuthError, VIGICamera, VIGIError
 from .const import (
+    DEVICE_TYPE_NVR,
     CAMERA_STREAM_SUFFIXES,
     CONF_FEATURE_CAMERA_STREAM,
     CONF_FEATURE_DETECTION_EVENTS,
@@ -53,6 +54,12 @@ from .onvif_events import VIGIOnvifEvents
 from .onvif_port import DEFAULT_ONVIF_PORT, discover_onvif_port
 from .onvif_ptz import DEFAULT_SPEED, VIGIOnvifPtz
 from .openapi import VIGIOpenAPI, try_openapi
+from .nvr import (
+    async_remove_nvr_entry,
+    async_setup_nvr_entry,
+    async_unload_nvr_entry,
+    is_nvr_entry,
+)
 from .openapi_events import VIGIOpenAPIEventListener
 
 _LOGGER = logging.getLogger(__name__)
@@ -394,7 +401,11 @@ def _entry_data_for_entity(hass: HomeAssistant, entity_id: str) -> dict | None:
     ent_reg = er.async_get(hass)
     entry = ent_reg.async_get(entity_id)
     if entry and entry.config_entry_id:
-        return hass.data[DOMAIN].get(entry.config_entry_id)
+        data = hass.data[DOMAIN].get(entry.config_entry_id)
+        # NVR entries have none of the camera services' clients.
+        if data and data.get("device_type") == DEVICE_TYPE_NVR:
+            return None
+        return data
     return None
 
 
@@ -761,6 +772,9 @@ def _register_services(hass: HomeAssistant) -> None:
 # ── Setup / teardown ──────────────────────────────────────────────────────────
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if is_nvr_entry(entry):
+        return await async_setup_nvr_entry(hass, entry)
+
     # Remove entities that belong to disabled feature groups before creating
     # new ones — prevents unavailable stubs accumulating after options changes.
     _cleanup_stale_entities(hass, entry)
@@ -964,6 +978,8 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if is_nvr_entry(entry):
+        return await async_unload_nvr_entry(hass, entry)
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         data = hass.data[DOMAIN].pop(entry.entry_id)
@@ -980,6 +996,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Clear this camera's repair notices when it is deleted, so none are left behind."""
+    if is_nvr_entry(entry):
+        await async_remove_nvr_entry(hass, entry)
+        return
     from homeassistant.helpers import issue_registry as ir
 
     for issue in (REPAIRS_WRONG_CAMERA, REPAIRS_SD_CARD_MISSING, REPAIRS_FRIGATE_GONE, REPAIRS_PUSH_OFF):

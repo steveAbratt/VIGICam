@@ -8,7 +8,8 @@ import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.components import webhook
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -26,7 +27,16 @@ from .const import (
     CONF_FEATURE_DETECTION_EVENTS,
     CONF_FEATURE_IMAGE_CONTROLS,
     CONF_DETECTION_IMAGE_AUDIO,
+    CONF_DEVICE_TYPE,
     CONF_LEGACY_TLS,
+    CONF_NVR_EVENT_HOLD,
+    CONF_NVR_EVENT_HOST,
+    CONF_NVR_EVENT_PUSH,
+    CONF_WEBHOOK_ID,
+    DEFAULT_NVR_EVENT_HOLD,
+    DEFAULT_NVR_EVENT_HOST,
+    DEFAULT_NVR_EVENT_PUSH,
+    DEVICE_TYPE_NVR,
     CONF_STREAM_USE_MAIN,
     CONF_VERIFY_SSL,
     DEFAULT_FEATURE_CAMERA_STREAM,
@@ -40,6 +50,7 @@ from .const import (
     IMAGE_CONTROL_SUFFIXES,
 )
 from .frigate import detect_frigate_camera
+from .nvr_api import VIGINVR, VIGINVRAuthError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -264,6 +275,60 @@ class VIGIOptionsFlow(config_entries.OptionsFlow):
         )
 
 
+NVR_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_HOST): str,
+        vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): str,
+        vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_NAME): str,
+    }
+)
+
+
+async def _test_nvr(host: str, username: str, password: str) -> int:
+    """Log in to the NVR's OpenAPI and count its channels. Raises on failure."""
+    api = VIGINVR(host, username, password)
+    try:
+        await api.login()
+        return len(await api.added_devices())
+    finally:
+        await api.close()
+
+
+class VIGINVROptionsFlow(config_entries.OptionsFlow):
+    """Options for an NVR entry: stream quality and event push."""
+
+    async def async_step_init(self, user_input=None):
+        # Its own step id: the camera options flow owns the "init" strings.
+        return await self.async_step_nvr_options()
+
+    async def async_step_nvr_options(self, user_input=None):
+        if user_input is not None:
+            user_input[CONF_NVR_EVENT_HOST] = user_input.get(CONF_NVR_EVENT_HOST, "").strip()
+            return self.async_create_entry(title="", data=user_input)
+
+        opts = self.config_entry.options
+        schema = vol.Schema({
+            vol.Optional(
+                CONF_STREAM_USE_MAIN,
+                default=opts.get(CONF_STREAM_USE_MAIN, DEFAULT_STREAM_USE_MAIN),
+            ): bool,
+            vol.Optional(
+                CONF_NVR_EVENT_PUSH,
+                default=opts.get(CONF_NVR_EVENT_PUSH, DEFAULT_NVR_EVENT_PUSH),
+            ): bool,
+            vol.Optional(
+                CONF_NVR_EVENT_HOLD,
+                default=opts.get(CONF_NVR_EVENT_HOLD, DEFAULT_NVR_EVENT_HOLD),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=600)),
+            vol.Optional(
+                CONF_NVR_EVENT_HOST,
+                description={"suggested_value": opts.get(CONF_NVR_EVENT_HOST, DEFAULT_NVR_EVENT_HOST)},
+            ): str,
+        })
+        return self.async_show_form(step_id="nvr_options", data_schema=schema)
+
+
 class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow to add a VIGI or InSight camera."""
 
@@ -271,6 +336,8 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def async_get_options_flow(config_entry):
+        if config_entry.data.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_NVR:
+            return VIGINVROptionsFlow()
         return VIGIOptionsFlow()
 
     def __init__(self) -> None:
@@ -283,6 +350,10 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._suggested_name: str = ""
 
     async def async_step_user(self, user_input=None):
+        """Choose what to add: a camera on its own, or an NVR and its channels."""
+        return self.async_show_menu(step_id="user", menu_options=["camera", "nvr"])
+
+    async def async_step_camera(self, user_input=None):
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -351,8 +422,49 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_name()
 
         return self.async_show_form(
-            step_id="user",
+            step_id="camera",
             data_schema=STEP_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_nvr(self, user_input=None):
+        """Add a VIGI NVR through its OpenAPI (port 20443)."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            username = user_input.get(CONF_USERNAME, DEFAULT_USERNAME).strip()
+            password = user_input[CONF_PASSWORD]
+            name = user_input.get(CONF_NAME, "").strip()
+            try:
+                channels = await _test_nvr(host, username, password)
+            except VIGINVRAuthError as exc:
+                _LOGGER.debug("NVR authentication failed for %s: %s", host, exc)
+                errors["base"] = "invalid_auth"
+            except Exception as exc:  # noqa: BLE001 - see async_step_camera
+                _LOGGER.debug("NVR connection failed for %s: %s", host, exc, exc_info=True)
+                errors["base"] = "nvr_cannot_connect"
+            else:
+                await self.async_set_unique_id(f"nvr_{host}")
+                self._abort_if_unique_id_configured(
+                    updates={CONF_USERNAME: username, CONF_PASSWORD: password}
+                )
+                title = name or f"VIGI NVR ({host})"
+                _LOGGER.debug("NVR %s: %d channels found", host, channels)
+                return self.async_create_entry(
+                    title=title,
+                    data={
+                        CONF_DEVICE_TYPE: DEVICE_TYPE_NVR,
+                        CONF_HOST: host,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                        CONF_NAME: title,
+                        CONF_WEBHOOK_ID: webhook.async_generate_id(),
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="nvr",
+            data_schema=self.add_suggested_values_to_schema(NVR_SCHEMA, user_input or {}),
             errors=errors,
         )
 
@@ -380,7 +492,25 @@ class VIGIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # raising AttributeError inside the flow.
             return self.async_abort(reason="reauth_entry_gone")
 
-        if user_input is not None:
+        if user_input is not None and entry.data.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_NVR:
+            username = user_input.get(CONF_USERNAME, self._username).strip()
+            password = user_input[CONF_PASSWORD]
+            try:
+                await _test_nvr(self._host, username, password)
+            except VIGINVRAuthError:
+                errors["base"] = "invalid_auth"
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("NVR reauth failed for %s: %s", self._host, exc, exc_info=True)
+                errors["base"] = "nvr_cannot_connect"
+            else:
+                changed = self.hass.config_entries.async_update_entry(
+                    entry,
+                    data={**entry.data, CONF_USERNAME: username, CONF_PASSWORD: password},
+                )
+                if not changed or entry.state is not ConfigEntryState.LOADED:
+                    self.hass.config_entries.async_schedule_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+        elif user_input is not None:
             username = user_input.get(CONF_USERNAME, self._username).strip()
             password = user_input[CONF_PASSWORD]
             try:

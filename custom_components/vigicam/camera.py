@@ -22,6 +22,8 @@ from .const import (
 from .coordinator import VIGICoordinator
 from . import communicate_or_kill
 from .entity import VIGIEntity
+from . import nvr_entities
+from .nvr import is_nvr_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +37,9 @@ _SNAPSHOT_CACHE_SECONDS = 10
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if is_nvr_entry(entry):
+        await nvr_entities.async_setup_camera(hass, entry, async_add_entities)
+        return
     if not entry.options.get(CONF_FEATURE_CAMERA_STREAM, DEFAULT_FEATURE_CAMERA_STREAM):
         return
     data = hass.data[DOMAIN][entry.entry_id]

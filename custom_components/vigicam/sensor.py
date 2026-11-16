@@ -18,6 +18,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .entity import VIGIEntity, _clean_firmware
+from . import nvr_entities
+from .nvr import is_nvr_entry
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -205,6 +207,9 @@ OPENAPI_DEVICE_SENSORS: tuple[VIGISensorDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if is_nvr_entry(entry):
+        await nvr_entities.async_setup_sensor(hass, entry, async_add_entities)
+        return
     data = hass.data[DOMAIN][entry.entry_id]
     has_sd_card = data.get("has_sd_card", True)  # default True preserves behaviour on upgrade
     has_openapi = data.get("has_openapi", False)

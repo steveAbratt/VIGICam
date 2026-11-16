@@ -12,6 +12,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .entity import VIGIEntity
 from .onvif_ptz import BUTTON_MOVE_S, DEFAULT_SPEED
+from . import nvr_entities
+from .nvr import is_nvr_entry
 
 
 # ── PTZ jog buttons ───────────────────────────────────────────────────────────
@@ -64,6 +66,9 @@ _ALARM_BUTTONS: tuple[AlarmButtonDesc, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if is_nvr_entry(entry):
+        await nvr_entities.async_setup_button(hass, entry, async_add_entities)
+        return
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     coord_data = coordinator.data or {}

@@ -27,7 +27,7 @@ except ImportError:
         sys.modules[_name].__dict__.update(_attrs)
 
 sys.modules.setdefault(_PKG, types.ModuleType(_PKG)).__path__ = [str(_SRC)]
-for _name in ("const", "api", "openapi", "onvif_port", "onvif_events", "event_image"):
+for _name in ("const", "api", "openapi", "onvif_port", "onvif_events", "event_image", "nvr_api"):
     _spec = importlib.util.spec_from_file_location(f"{_PKG}.{_name}", _SRC / f"{_name}.py")
     _mod = importlib.util.module_from_spec(_spec)
     sys.modules[f"{_PKG}.{_name}"] = _mod

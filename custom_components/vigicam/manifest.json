@@ -3,7 +3,7 @@
   "name": "VIGI & InSight Cameras",
   "codeowners": ["@steveAbratt"],
   "config_flow": true,
-  "dependencies": ["ffmpeg", "stream"],
+  "dependencies": ["ffmpeg", "stream", "webhook"],
   "documentation": "https://github.com/steveAbratt/VIGICam",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/steveAbratt/VIGICam/issues",

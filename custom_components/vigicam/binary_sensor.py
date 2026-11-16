@@ -29,6 +29,8 @@ from homeassistant.helpers.event import async_call_later
 from .const import CONF_FEATURE_DETECTION_EVENTS, DEFAULT_FEATURE_DETECTION_EVENTS, DOMAIN
 from .entity import VIGIEntity
 from .onvif_events import AUTO_CLEAR_S, SIGNAL_VIGICAM_EVENT
+from . import nvr_entities
+from .nvr import is_nvr_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -178,6 +180,9 @@ _STATIC_CAPABILITY_KEYS: dict[str, str] = {
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if is_nvr_entry(entry):
+        await nvr_entities.async_setup_binary_sensor(hass, entry, async_add_entities)
+        return
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     entities: list[BinarySensorEntity] = []

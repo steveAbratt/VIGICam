@@ -22,6 +22,8 @@ from .const import (
 )
 from .entity import VIGIEntity
 from .openapi import VIGIOpenAPIError
+from . import nvr_entities
+from .nvr import is_nvr_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -290,6 +292,9 @@ PRIVACY_SWITCHES: tuple[VIGISwitchDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if is_nvr_entry(entry):
+        await nvr_entities.async_setup_switch(hass, entry, async_add_entities)
+        return
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     coord_data = coordinator.data or {}

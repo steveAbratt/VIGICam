@@ -177,6 +177,15 @@ Repeat for each camera. Each appears as a separate HA device.
 
 ---
 
+## VIGI NVR
+
+Have a VIGI NVR? Add the NVR instead of each camera: **Add Integration > VIGI & InSight
+Cameras > NVR**. Every channel comes in as its own device with live view, snapshots,
+pushed detection sensors and arm/disarm, all through the NVR's OpenAPI. That includes
+cameras on the NVR's built-in PoE ports, which Home Assistant can't reach directly.
+Enable OpenAPI on the NVR first (Settings > Network > OpenAPI). Full details:
+[docs/NVR.md](docs/NVR.md).
+
 ## OpenAPI — extended detection & sensors
 
 Several features require the camera's local OpenAPI (HTTPS port 20443) to be enabled:

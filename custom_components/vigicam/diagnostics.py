@@ -76,6 +76,21 @@ async def async_get_config_entry_diagnostics(
     """Return what is needed to diagnose a model-specific problem."""
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinator = data.get("coordinator")
+    if data.get("device_type") == "nvr":
+        return async_redact_data(
+            {
+                "device_type": "nvr",
+                "modules": data.get("modules"),
+                "events": data.get("events"),
+                "options": dict(entry.options),
+                # Channel-keyed maps have int keys; JSON wants strings.
+                "coordinator_data": {
+                    key: {str(k): v for k, v in val.items()} if key in ("devices", "arm") and isinstance(val, dict) else val
+                    for key, val in ((coordinator.data or {}) if coordinator else {}).items()
+                },
+            },
+            TO_REDACT | {"mac", "ip", "ip_or_domain", "webhook_id"},
+        )
     device_info = data.get("device_info") or {}
 
     return async_redact_data(
