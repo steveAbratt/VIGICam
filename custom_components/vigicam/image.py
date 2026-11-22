@@ -82,7 +82,8 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
         self._attr_extra_state_attributes: dict = {}
         self._has_event_capture: bool = entry_data.get("has_event_capture", False)
         self._include_audio = include_audio
-        self._last_openapi_event = float("-inf")
+        # Monotonic time OpenAPI last reported each event type.
+        self._openapi_seen: dict[str, float] = {}
 
     @property
     def _unique_id_suffix(self) -> str:
@@ -119,16 +120,16 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
     @callback
     def _handle_event(self, event: dict) -> None:
         if event.get("source") == "openapi":
-            self._last_openapi_event = time.monotonic()
+            self._openapi_seen[event["type"]] = time.monotonic()
         if not event.get("active"):
             return
         if not self._include_audio:
-            if event["type"] == "audio_anomaly":
+            if "audio_anomaly" in (event["type"], event.get("kind")):
                 return  # a still of a sound shows an empty scene
             if event["type"] == "smart_event":
-                # The ONVIF catch-all also fires for sounds. Let OpenAPI's named event
-                # decide; fall back to this one if OpenAPI says nothing (no OpenAPI, the
-                # type's Push Notifications off, or the stream down).
+                # Wait for OpenAPI: an unnamed smart event may be a sound, and a named one
+                # may come again from OpenAPI. Fall back to this one if OpenAPI says nothing
+                # (no OpenAPI, the type's Push Notifications off, or the stream down).
                 self.hass.async_create_task(self._smart_event_fallback(event))
                 return
         self._start_grab(event)
@@ -136,10 +137,17 @@ class VIGILastDetectionImage(VIGIEntity, ImageEntity):
     async def _smart_event_fallback(self, event: dict) -> None:
         seen = time.monotonic()
         await asyncio.sleep(_OPENAPI_WAIT_S)
-        if self._last_openapi_event < seen - _OPENAPI_WAIT_S and self._unsub_dispatcher:
+        # A named kind gives way only to OpenAPI's event of that kind: an OpenAPI sound
+        # must not cancel the vehicle it happened to coincide with.
+        kind = event.get("kind")
+        times = [self._openapi_seen.get(kind, float("-inf"))] if kind else self._openapi_seen.values()
+        if max(times, default=float("-inf")) < seen - _OPENAPI_WAIT_S and self._unsub_dispatcher:
             self._start_grab(event)
 
     def _start_grab(self, event: dict) -> None:
+        if "kind" in event:
+            # The camera named the kind; prefer it to smart_event.
+            event = {**event, "type": event["kind"]}
         self._latest_event = event
         if self._grabbing:
             return
